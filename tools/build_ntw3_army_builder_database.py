@@ -37,11 +37,11 @@ OUTPUT_COLUMNS = [
     "unit_key", "faction_key", "army_corps_name", "unit_name", "unit_class", "men_raw",
     "men_display", "speed_code", "speed_entity_key", "division_brigade_code",
     "division_id", "brigade_id", "base_mp_cost", "unit_cap", "range",
-    "weapon_key", "projectile_key", "range_selection_method", "command_stars",
+    "weapon_key", "firearm", "projectile_key", "range_selection_method", "command_stars",
     "command_star_icon_path", "command_star_strip_path", "command_star_layout",
     "is_general", "is_commander_variant", "is_tow_variant", "icon_name",
     "icon_filename", "icon_path", "icon_match_method",
-    "accuracy", "reload_skill", "morale", "melee_attack", "melee_defense",
+    "accuracy", "reload_skill", "ammo", "morale", "melee_attack", "melee_defense",
     "charge_bonus", "can_form_square", "has_stamina", "is_shock_resistant",
     "can_inspire", "has_guerrilla_deployment", "guerrilla_badge_path",
     "guerrilla_badge_layout", "can_place_stakes",
@@ -86,7 +86,19 @@ SPEED_MAP = {
 
 DIVISION_RE = re.compile(r"ACDV(\d+)B(\d+)")
 COMMANDER_SUFFIX_RE = re.compile(r"_com_\d+$")
-ABILITY_LINE_RE = re.compile(r"^\s*Abilit(?:y|ies):\s*([^\\\r\n]+)", re.IGNORECASE)
+ABILITY_LINE_RE = re.compile(r"^\s*Abilit(?:y|ies):\s*(.+)", re.IGNORECASE)
+# Card descriptions encode line breaks as escaped "\\n" text (not real newlines).
+DESCRIPTION_LINE_BREAK_RE = re.compile(r"\\+n|\r\n|\r|\n")
+FIREARM_LINE_RE = re.compile(r"^\s*Firearms?:\s*(.+?)\s*$", re.IGNORECASE)
+# Small-arms weapon keys whose cards never carry a "Firearm:" description line.
+# Named from the projectile keys (ntw3_land_projectiles.tsv) they fire.
+FIREARM_FALLBACK_NAMES = {
+    "musket_flintlock": "Flintlock musket",
+    "musket_heavy_flintlock": "Heavy flintlock musket",
+    "musket_light_infantry_flintlock": "Light infantry flintlock",
+    "musket_rifle": "Rifle",
+    "musket_carbine": "Carbine",
+}
 ICON_EXTENSIONS = {".tga", ".png", ".jpg", ".jpeg", ".webp"}
 SAPPER_RE = re.compile(
     r"sappers?|sapeurs?|sappeurs?|sap[eé]ri|saper|pioniere|pionier|pioneers?|"
@@ -507,9 +519,77 @@ def localisation_value(
     return "", ""
 
 
+def description_header_lines(description: str) -> list[str]:
+    """The card header: description lines before the first blank line."""
+    lines: list[str] = []
+    for line in DESCRIPTION_LINE_BREAK_RE.split(description):
+        if not line.strip():
+            break
+        lines.append(line)
+    return lines
+
+
+def parse_firearm_line(description: str) -> str:
+    """The display name from a card header's "Firearm: <name>" line, if any."""
+    for line in description_header_lines(description):
+        match = FIREARM_LINE_RE.match(line)
+        if match:
+            return match.group(1)
+    return ""
+
+
+def is_small_arm(weapon_key: str) -> bool:
+    return weapon_key.startswith("musket_") or weapon_key == "bow"
+
+
+def build_firearm_names(
+    firearm_lines: dict[str, tuple[str, str]], warnings: list[dict[str, str]],
+) -> dict[str, str]:
+    """Map each small-arms weapon key to one display name.
+
+    ``firearm_lines`` maps unit_key -> (weapon_key, "Firearm:" line name). The name
+    comes from what the descriptions call that weapon; a key the descriptions never
+    name falls back to FIREARM_FALLBACK_NAMES. Conflicting names for one weapon key
+    and unit lines that disagree with their weapon's name are logged, not guessed.
+    """
+    names_by_weapon: dict[str, Counter] = defaultdict(Counter)
+    for weapon_key, name in firearm_lines.values():
+        if is_small_arm(weapon_key) and name:
+            names_by_weapon[weapon_key][name] += 1
+    firearm_names = dict(FIREARM_FALLBACK_NAMES)
+    for weapon_key, counts in sorted(names_by_weapon.items()):
+        # Most common name wins; ties break alphabetically for determinism.
+        name = sorted(counts.items(), key=lambda item: (-item[1], item[0]))[0][0]
+        if len(counts) > 1:
+            add_warning(warnings, "firearm_name_conflict", source_file="localisation.loc.tsv",
+                        reference_value=weapon_key,
+                        details="Firearm lines disagree: " + " | ".join(
+                            f"{other}={count}" for other, count in sorted(counts.items())))
+        firearm_names[weapon_key] = name[:1].upper() + name[1:]
+    for unit_key, (weapon_key, name) in sorted(firearm_lines.items()):
+        if not name or not is_small_arm(weapon_key):
+            continue
+        expected = firearm_names.get(weapon_key, "")
+        if name[:1].upper() + name[1:] != expected:
+            add_warning(warnings, "firearm_line_disagrees_with_weapon", unit_key=unit_key,
+                        source_file="localisation.loc.tsv", reference_value=weapon_key,
+                        details=f"Card says Firearm: {name}; weapon is named {expected}.")
+    return firearm_names
+
+
 def parse_displayed_abilities(description: str) -> dict[str, str]:
-    """Parse only the structured Ability/Abilities declaration at the start."""
-    match = ABILITY_LINE_RE.match(description)
+    """Parse only the structured Ability/Abilities declaration in the card header.
+
+    The declaration is normally the first line, but staff-general cards lead with an
+    "N-star commander" line and declare their abilities on the next one. Only the
+    header block (the lines before the first blank line) is searched, so biography
+    free text can never be mistaken for a declaration.
+    """
+    match = None
+    for line in description_header_lines(description):
+        match = ABILITY_LINE_RE.match(line)
+        if match:
+            break
     tokens: set[str] = set()
     if match:
         tokens = {
@@ -860,7 +940,6 @@ def main() -> None:
 
     unique_specs = {
         "localisation.loc.tsv": (["key"], "key"),
-        "mp_general_command_ratings.tsv": (["unit_key"], "unit_key"),
         "ntw3_battle_entities.tsv": (["key"], "key"),
         "ntw3_land_projectiles.tsv": (["key"], "key"),
         "ntw3_unit_stats_land.tsv": (["key"], "key"),
@@ -872,10 +951,20 @@ def main() -> None:
             frames[filename], keys, filename, warnings, unit_column
         )
     # ntw3_land_units ships duplicate primary keys (balance-edited rows that the game
-    # ignores). Keep the first declared row instead of dropping the unit entirely. This
-    # rule is intentionally scoped to land_units; other tables keep the strict treatment.
+    # ignores). Keep the first declared row instead of dropping the unit entirely.
     clean["ntw3_land_units.tsv"], conflicts["ntw3_land_units.tsv"], exact_duplicates["ntw3_land_units.tsv"] = (
         resolve_first_occurrence(frames["ntw3_land_units.tsv"], "key", "ntw3_land_units.tsv", warnings)
+    )
+    # The command-ratings table also repeats a few keys with different star counts.
+    # The game loads the first occurrence, so keep it (and log the superseded rows)
+    # rather than dropping both and leaving the general with no command stars.
+    (
+        clean["mp_general_command_ratings.tsv"],
+        conflicts["mp_general_command_ratings.tsv"],
+        exact_duplicates["mp_general_command_ratings.tsv"],
+    ) = resolve_first_occurrence(
+        frames["mp_general_command_ratings.tsv"], "unit_key",
+        "mp_general_command_ratings.tsv", warnings,
     )
     clean["gun_type_to_projectiles.tsv"], exact_duplicates["gun_type_to_projectiles.tsv"] = dedupe_exact(
         frames["gun_type_to_projectiles.tsv"]
@@ -918,6 +1007,7 @@ def main() -> None:
     assert permissions["allowed"].fillna("").astype(str).str.casefold().eq("true").all()
 
     unit_cache: dict[str, dict[str, str]] = {}
+    firearm_lines: dict[str, tuple[str, str]] = {}
     output_rows: list[dict[str, str]] = []
     missing_army_corps_warned: set[str] = set()
     for _, permission in permissions.iterrows():
@@ -968,6 +1058,7 @@ def main() -> None:
             weapon_key, projectile_key, range_value, range_method = select_projectile(
                 unit_key, stats, projectile_lookup, gun_map, warnings
             )
+            firearm_lines[unit_key] = (weapon_key, parse_firearm_line(description))
 
             icon_name = text_value(unit.get("icon_name"))
             icon_filename, icon_path, icon_method = resolve_icon(
@@ -1019,6 +1110,7 @@ def main() -> None:
                 "unit_cap": text_value(unit.get("total_cap_mp")),
                 "range": range_value,
                 "weapon_key": weapon_key,
+                "firearm": "",
                 "projectile_key": projectile_key,
                 "range_selection_method": range_method,
                 "command_stars": text_value(rating.get("command_stars")) if rating is not None else "",
@@ -1041,6 +1133,7 @@ def main() -> None:
                 "icon_match_method": icon_method,
                 "accuracy": text_value(stats.get("core_marksmanship")) if stats is not None else "",
                 "reload_skill": text_value(stats.get("core_loading_skill")) if stats is not None else "",
+                "ammo": text_value(stats.get("ammo")) if stats is not None else "",
                 "morale": text_value(stats.get("morale")) if stats is not None else "",
                 "melee_attack": text_value(stats.get("melee_attack")) if stats is not None else "",
                 "melee_defense": text_value(stats.get("melee_defense")) if stats is not None else "",
@@ -1084,6 +1177,20 @@ def main() -> None:
         output = pd.DataFrame(
             columns=OUTPUT_COLUMNS + ["__gun_type", "__placement_source", "__stats_source"]
         )
+
+    # Name the firearm from the weapon the unit actually fires (artillery gets none).
+    firearm_names = build_firearm_names(firearm_lines, warnings)
+    output["firearm"] = [
+        firearm_names.get(text_value(weapon_key), "") if is_small_arm(text_value(weapon_key)) else ""
+        for weapon_key in output["weapon_key"]
+    ]
+    for weapon_key in sorted({
+        text_value(key) for key in output["weapon_key"]
+        if is_small_arm(text_value(key)) and text_value(key) not in firearm_names
+    }):
+        add_warning(warnings, "missing_firearm_name", source_file="localisation.loc.tsv",
+                    reference_value=weapon_key,
+                    details="Small-arms weapon has no Firearm line and no fallback name.")
 
     placement_report = infer_final_division_placements(output)
     inheritance_report = inherit_commander_placements(output)
@@ -1266,7 +1373,10 @@ def main() -> None:
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     warning_path = REPORT_DIR / "ntw3_merge_warnings.csv"
     summary_path = REPORT_DIR / "ntw3_merge_summary.txt"
-    output.loc[:, OUTPUT_COLUMNS].to_csv(csv_path, index=False, encoding="utf-8-sig")
+    # Pin CRLF (what is committed) so regenerating on any platform is byte-stable.
+    output.loc[:, OUTPUT_COLUMNS].to_csv(
+        csv_path, index=False, encoding="utf-8-sig", lineterminator="\r\n"
+    )
     pd.DataFrame(warnings, columns=WARNING_COLUMNS).to_csv(warning_path, index=False, encoding="utf-8-sig")
     write_summary(
         summary_path, frames, exact_duplicates, conflicts, metadata_counts,

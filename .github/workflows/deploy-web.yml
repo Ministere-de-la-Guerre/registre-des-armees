@@ -14,10 +14,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Least privilege: the build job (which runs npm ci + third-party code) only reads;
+# the Pages write + OIDC token are granted to the deploy job alone.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # One deploy at a time; let a newer push supersede an in-flight run.
 concurrency:
@@ -27,6 +27,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read # actions/configure-pages reads the site config
     steps:
       - uses: actions/checkout@v7
 
@@ -48,6 +51,10 @@ jobs:
       - name: Install deps
         run: npm ci
         working-directory: web
+        env:
+          # electron is a devDependency for the desktop build only; the web build
+          # and tests never run it, so skip its ~100 MB binary download.
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
       - name: Verify (typecheck + lint + tests)
         run: npm run typecheck && npm run lint && npm test
         working-directory: web
@@ -63,6 +70,9 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}

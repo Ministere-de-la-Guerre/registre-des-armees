@@ -36,6 +36,13 @@ export interface MedallionHandlers {
   /** Grid secondary. Desktop: right-click → full details. Touch: long-press →
    *  remove one copy from the bar (deselect). */
   onDetails: (card: UnitCard) => void;
+  /** Keyboard "i": full details, on every device. */
+  onKeyDetails: (card: UnitCard) => void;
+  /** Keyboard Delete: drop one selected copy (or clear the commander). */
+  onKeyRemove: (card: UnitCard) => void;
+  /** True when a click on this staff general would be refused — for whichever of
+   *  "set commander" / "recruit" the click would do. */
+  isStaffBlocked: (card: UnitCard) => boolean;
   onHover: (card: UnitCard, anchor: DOMRect) => void;
   onHoverEnd: () => void;
   /** True when this unit is the touch-"primed" one: the next tap runs its action
@@ -67,6 +74,44 @@ function UnitMedallion({ card, h }: { card: UnitCard; h: MedallionHandlers }) {
       atCap={h.atCapOf(card)}
       onClick={(anchor) => h.onAdd(card, anchor)}
       onContextMenu={() => h.onDetails(card)}
+      onDetails={() => h.onKeyDetails(card)}
+      onRemove={h.isSelected(card.unitKey) ? () => h.onKeyRemove(card) : undefined}
+      onHover={h.onHover}
+      onHoverEnd={h.onHoverEnd}
+      pickRate={h.pickRateOf?.(card)}
+    />
+  );
+}
+
+/** A staff general: its click sets/clears the commander (or recruits him, see
+ *  Builder's staffClick) rather than adding a copy. */
+function StaffMedallion({
+  card,
+  h,
+  onToggle,
+}: {
+  card: UnitCard;
+  h: MedallionHandlers;
+  onToggle: (card: UnitCard, anchor?: DOMRect) => void;
+}) {
+  return (
+    <Medallion
+      card={card}
+      qty={h.qtyOf(card.unitKey)}
+      capCount={h.groupQtyOf(card)}
+      selected={h.inStaffSlot(card.unitKey) || h.isSelected(card.unitKey)}
+      inStaffSlot={h.inStaffSlot(card.unitKey)}
+      primed={h.isPrimed(card.unitKey)}
+      dimmed={h.isDimmed(card)}
+      blocked={h.isStaffBlocked(card)}
+      atCap={h.atCapOf(card)}
+      overBudget={h.isOverBudget(card)}
+      overCorps={h.isOverCorps(card)}
+      onClick={(anchor) => onToggle(card, anchor)}
+      activateLabel="select"
+      onContextMenu={() => h.onDetails(card)}
+      onDetails={() => h.onKeyDetails(card)}
+      onRemove={h.isSelected(card.unitKey) ? () => h.onKeyRemove(card) : undefined}
       onHover={h.onHover}
       onHoverEnd={h.onHoverEnd}
       pickRate={h.pickRateOf?.(card)}
@@ -82,6 +127,8 @@ export function BuilderGrid({
   divisionNames,
   handlers,
   onStaffToggle,
+  fillCounts = null,
+  onTakeDivision,
 }: {
   /** Army-corps staff generals rendered as a top "Staff" row (left-click sets the
    *  corps commander). Empty for Theatres-of-War, where staff generals instead sit
@@ -95,6 +142,10 @@ export function BuilderGrid({
   divisionNames?: Map<number, string>;
   handlers: MedallionHandlers;
   onStaffToggle: (card: UnitCard, anchor?: DOMRect) => void;
+  /** Army-corps grid only: copies each division still lacks for completion (see
+   *  divisionFillPlan). Null hides the "take the whole division" buttons. */
+  fillCounts?: Map<number, number> | null;
+  onTakeDivision?: (division: number) => void;
 }) {
   return (
     <>
@@ -104,24 +155,7 @@ export function BuilderGrid({
         <div className="gens-row" aria-label="Staff generals">
           <span className="gens-tag">Staff</span>
           {sortStaffGenerals(staffGenerals).map((g) => (
-            <Medallion
-              key={g.unitKey}
-              card={g}
-              qty={handlers.qtyOf(g.unitKey)}
-              capCount={handlers.groupQtyOf(g)}
-              selected={handlers.inStaffSlot(g.unitKey) || handlers.isSelected(g.unitKey)}
-              inStaffSlot={handlers.inStaffSlot(g.unitKey)}
-              primed={handlers.isPrimed(g.unitKey)}
-              dimmed={handlers.isDimmed(g)}
-              atCap={handlers.atCapOf(g)}
-              overBudget={handlers.isOverBudget(g)}
-              overCorps={handlers.isOverCorps(g)}
-              onClick={(anchor) => onStaffToggle(g, anchor)}
-              onContextMenu={() => handlers.onDetails(g)}
-              onHover={handlers.onHover}
-              onHoverEnd={handlers.onHoverEnd}
-              pickRate={handlers.pickRateOf?.(g)}
-            />
+            <StaffMedallion key={g.unitKey} card={g} h={handlers} onToggle={onStaffToggle} />
           ))}
         </div>
       )}
@@ -131,10 +165,23 @@ export function BuilderGrid({
       {divisions.map((dv) => {
         const meta = divisionMeta.get(dv.division);
         const divComplete = meta?.complete ?? false;
+        const missing = fillCounts?.get(dv.division) ?? 0;
+        const divLabel = divisionNames?.get(dv.division) ?? roman(dv.division);
         return (
           <section className={`division${divComplete ? " complete" : ""}`} key={dv.division} aria-label={`Division ${dv.division}`}>
             <div className="division-tag">
-              <span className="dn">{divisionNames?.get(dv.division) ?? roman(dv.division)}</span>
+              <span className="dn">{divLabel}</span>
+              {onTakeDivision && !divComplete && missing > 0 && (
+                <button
+                  type="button"
+                  className="take-division"
+                  onClick={() => onTakeDivision(dv.division)}
+                  title={`Add the ${missing} missing unit cop${missing === 1 ? "y" : "ies"} this division can still take`}
+                  aria-label={`Take all of division ${divLabel}: add ${missing} missing unit cop${missing === 1 ? "y" : "ies"}`}
+                >
+                  + All <span className="n">{missing}</span>
+                </button>
+              )}
               {divComplete && <span className="row-disc">−{meta!.discount.toLocaleString()}</span>}
             </div>
             <div className="div-row">
@@ -150,24 +197,7 @@ export function BuilderGrid({
                     {bi > 0 && <span className="brig-sep" aria-hidden />}
                     {orderBrigadeCards(br.cards).map((card) =>
                       card.isGeneral && card.generalKind === "staff" ? (
-                        <Medallion
-                          key={card.unitKey}
-                          card={card}
-                          qty={handlers.qtyOf(card.unitKey)}
-                          capCount={handlers.groupQtyOf(card)}
-                          selected={handlers.inStaffSlot(card.unitKey) || handlers.isSelected(card.unitKey)}
-                          inStaffSlot={handlers.inStaffSlot(card.unitKey)}
-                          primed={handlers.isPrimed(card.unitKey)}
-                          dimmed={handlers.isDimmed(card)}
-                          atCap={handlers.atCapOf(card)}
-                          overBudget={handlers.isOverBudget(card)}
-                          overCorps={handlers.isOverCorps(card)}
-                          onClick={(anchor) => onStaffToggle(card, anchor)}
-                          onContextMenu={() => handlers.onDetails(card)}
-                          onHover={handlers.onHover}
-                          onHoverEnd={handlers.onHoverEnd}
-                          pickRate={handlers.pickRateOf?.(card)}
-                        />
+                        <StaffMedallion key={card.unitKey} card={card} h={handlers} onToggle={onStaffToggle} />
                       ) : (
                         <UnitMedallion key={card.unitKey} card={card} h={handlers} />
                       ),

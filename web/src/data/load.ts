@@ -45,6 +45,8 @@ function normalizeStats(raw: Record<string, unknown> | undefined): UnitStats {
   return {
     accuracy: num(s.accuracy),
     reloadSkill: num(s.reloadSkill),
+    ammo: num(s.ammo),
+    firearm: strOrNull(s.firearm),
     morale: num(s.morale),
     meleeAttack: num(s.meleeAttack),
     meleeDefense: num(s.meleeDefense),

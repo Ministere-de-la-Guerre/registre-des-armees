@@ -257,6 +257,11 @@ export function groupDiscount(total: GroupTotal): number {
   return Math.floor((total.rosterCost * (total.requiredCount - 1)) / 100);
 }
 
+// Mirrors the game's Lua (NTW3.FactionIsGermanStates): a "g" in the fourth key
+// component. The 9.6 tables renamed the 18 old "g" corps (fg5, ag6, gp7, ...) to
+// x<N>, so this never matches a shipped corps -- and that matches the game:
+// in-game, Bernadotte I.C 1805 (was a05_fg5_090) with its staff general and all
+// of division I prices at 4477, the x1 total (x1.5 would give 4335).
 export function isGermanStates(factionKey: string): boolean {
   const parts = factionKey.split("_");
   return parts.length >= 4 && parts[3].includes("g");
@@ -291,6 +296,41 @@ export function buildRosterTotals(
   return { divisions, brigades };
 }
 
+// calculateArmyCost runs many times per build against the same roster array — the
+// affordability replay prices every recruit-order prefix, and auto combat generals
+// prices many candidate builds — so its roster totals are memoized per (roster array,
+// faction). Roster arrays are never mutated once loaded. Private, so callers of
+// buildRosterTotals still get their own maps.
+interface RosterTotals {
+  divisions: Map<number, GroupTotal>;
+  brigades: Map<string, GroupTotal>;
+  divisionIds: number[];
+  /** Brigade keys sorted by (division, brigade) to match Python's tuple sort. */
+  brigadeOrder: { bkey: string; division: number; brigade: number }[];
+}
+const rosterTotalsCache = new WeakMap<readonly RulesUnit[], Map<string, RosterTotals>>();
+
+function cachedRosterTotals(recruitable: readonly RulesUnit[], factionKey: string): RosterTotals {
+  let byFaction = rosterTotalsCache.get(recruitable);
+  if (!byFaction) {
+    byFaction = new Map();
+    rosterTotalsCache.set(recruitable, byFaction);
+  }
+  let totals = byFaction.get(factionKey);
+  if (!totals) {
+    const { divisions, brigades } = buildRosterTotals(recruitable, factionKey);
+    const brigadeOrder = [...brigades.keys()]
+      .map((bkey) => {
+        const [division, brigade] = bkey.split(":").map(Number);
+        return { bkey, division, brigade };
+      })
+      .sort((a, b) => a.division - b.division || a.brigade - b.brigade);
+    totals = { divisions, brigades, divisionIds: [...divisions.keys()].sort((a, b) => a - b), brigadeOrder };
+    byFaction.set(factionKey, totals);
+  }
+  return totals;
+}
+
 export function calculateArmyCost(
   selected: readonly RulesUnit[],
   recruitable: readonly RulesUnit[],
@@ -317,7 +357,7 @@ export function calculateArmyCost(
     };
   }
 
-  const { divisions, brigades } = buildRosterTotals(recruitable, factionKey);
+  const { divisions, brigades, divisionIds, brigadeOrder } = cachedRosterTotals(recruitable, factionKey);
   const selectedDivisions = new Map<number, number>();
   const selectedBrigades = new Map<string, number>();
   for (const card of selected) {
@@ -329,13 +369,6 @@ export function calculateArmyCost(
   }
 
   const completed: CompletedGroup[] = [];
-  const divisionIds = [...divisions.keys()].sort((a, b) => a - b);
-  // Brigade keys sorted by (division, brigade) to match Python's tuple sort.
-  const brigadeKeys = [...brigades.keys()].sort((a, b) => {
-    const [da, ba] = a.split(":").map(Number);
-    const [db, bb] = b.split(":").map(Number);
-    return da - db || ba - bb;
-  });
 
   for (const divisionId of divisionIds) {
     const divisionTotal = divisions.get(divisionId)!;
@@ -352,8 +385,7 @@ export function calculateArmyCost(
       });
       continue;
     }
-    for (const bkey of brigadeKeys) {
-      const [bdiv, bid] = bkey.split(":").map(Number);
+    for (const { bkey, division: bdiv, brigade: bid } of brigadeOrder) {
       if (bdiv !== divisionId) continue;
       const brigadeTotal = brigades.get(bkey)!;
       const brigadeSelected = selectedBrigades.get(bkey) ?? 0;
@@ -376,8 +408,7 @@ export function calculateArmyCost(
   // exception). Their division never appears in `divisions`, so the loop above skips
   // them; evaluate them here. Each credits independently on its own completeness (the
   // division total is never used).
-  for (const bkey of brigadeKeys) {
-    const [bdiv, bid] = bkey.split(":").map(Number);
+  for (const { bkey, division: bdiv, brigade: bid } of brigadeOrder) {
     if (divisions.has(bdiv)) continue;
     const brigadeTotal = brigades.get(bkey)!;
     const brigadeSelected = selectedBrigades.get(bkey) ?? 0;

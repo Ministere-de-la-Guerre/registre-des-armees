@@ -14,7 +14,7 @@ import {
   windowStart,
 } from "../state/rotation";
 import { defaultStorageAdapter } from "../state/storage";
-import { fmtDateTime, fmtRel, windowRange } from "./rollTimeFormat";
+import { fmtDateTime, fmtRel, useRollClock, windowRange } from "./rollTimeFormat";
 import { DirectionBadge } from "./DirectionBadge";
 
 type RotationView = "combined" | "individual";
@@ -44,8 +44,9 @@ export function RotationModal({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Captured once when the popup opens so every row shares one reference clock.
-  const now = useMemo(() => new Date(), []);
+  // One reference clock for every row: searches follow `searchNow` (moves when the
+  // window rolls over), relative times follow `now` (ticks each minute).
+  const { now, searchNow } = useRollClock();
   const combat = useMemo(() => combatPool(roster.cards), [roster.cards]);
   const staff = useMemo(() => staffPool(roster.cards), [roster.cards]);
   const applies = rotationApplies(roster.factionKey);
@@ -94,8 +95,8 @@ export function RotationModal({
       ...offeredCombatKeys(roster.factionKey, combat, d),
       ...offeredStaffKeys(staff, roster.armyCorpsName, d),
     ];
-    return findRotationCover(offeredAt, selected.map((g) => g.unitKey), now);
-  }, [applies, selected, combat, staff, now, roster.factionKey, roster.armyCorpsName]);
+    return findRotationCover(offeredAt, selected.map((g) => g.unitKey), searchNow);
+  }, [applies, selected, combat, staff, searchNow, roster.factionKey, roster.armyCorpsName]);
 
   // Individual view: one row per general with its own nearest/next/previous times,
   // ordered by that nearest time so generals offered in the same window sit together.
@@ -105,8 +106,8 @@ export function RotationModal({
       ...g,
       result:
         g.kind === "combat"
-          ? findRotation(combat, combatCount, g.unitKey, now)
-          : findStaffRotation(staff, roster.armyCorpsName, g.unitKey, now),
+          ? findRotation(combat, combatCount, g.unitKey, searchNow)
+          : findStaffRotation(staff, roster.armyCorpsName, g.unitKey, searchNow),
     }));
     // Sort by nearest window time (generals never offered sink to the bottom).
     const rank = (t: Date | null) => (t ? t.getTime() : Number.POSITIVE_INFINITY);
@@ -114,17 +115,17 @@ export function RotationModal({
       .map((r, i) => ({ r, i }))
       .sort((a, b) => rank(a.r.result.closest) - rank(b.r.result.closest) || a.i - b.i)
       .map(({ r }) => r);
-  }, [applies, selected, combat, staff, combatCount, now, roster.armyCorpsName]);
+  }, [applies, selected, combat, staff, combatCount, searchNow, roster.armyCorpsName]);
 
   // Verification readout: what the game offers in this corps right now.
   const offeredNow = useMemo(() => {
     if (!applies) return null;
     return {
-      window: windowRange(windowStart(now)),
-      combat: offeredCombatKeys(roster.factionKey, combat, now).map((k) => index.byKey.get(k)?.name ?? k),
-      staff: offeredStaffKeys(staff, roster.armyCorpsName, now).map((k) => index.byKey.get(k)?.name ?? k),
+      window: windowRange(windowStart(searchNow)),
+      combat: offeredCombatKeys(roster.factionKey, combat, searchNow).map((k) => index.byKey.get(k)?.name ?? k),
+      staff: offeredStaffKeys(staff, roster.armyCorpsName, searchNow).map((k) => index.byKey.get(k)?.name ?? k),
     };
-  }, [applies, roster.factionKey, roster.armyCorpsName, combat, staff, now, index]);
+  }, [applies, roster.factionKey, roster.armyCorpsName, combat, staff, searchNow, index]);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>

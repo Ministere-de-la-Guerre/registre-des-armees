@@ -18,6 +18,20 @@ describe("dataVersionKey", () => {
     expect(a).not.toBe(changed);
   });
 
+  it("changes when only the content hash changes (a price-only rebalance)", () => {
+    const counts = { schemaVersion: 1, factionCount: 297, corpsListed: 297, totalSourceRows: 25668, towRows: 12032 };
+    const before = dataVersionKey({ ...counts, contentHash: "aa".repeat(32) });
+    const after = dataVersionKey({ ...counts, contentHash: "bb".repeat(32) });
+    expect(before).not.toBe(after);
+    expect(before).toBe(`${dataVersionKey(counts)}.${"a".repeat(16)}`);
+  });
+
+  it("keys a stamp without a content hash exactly as before", () => {
+    const counts = { schemaVersion: 1, factionCount: 297, corpsListed: 297, totalSourceRows: 25668, towRows: 12032 };
+    expect(dataVersionKey(counts)).toBe("1.297.297.25668.12032");
+    expect(dataVersionKey({ ...counts, contentHash: "" })).toBe("1.297.297.25668.12032");
+  });
+
   it("falls back to '0' for missing / malformed stamps", () => {
     expect(dataVersionKey(null)).toBe("0");
     expect(dataVersionKey(undefined)).toBe("0");

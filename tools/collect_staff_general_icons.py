@@ -230,10 +230,8 @@ def main() -> None:
     ]
     write_csv(PLACEMENT_REPORT, placement_rows, placement_fields)
     write_csv(ROOT_STAR_PLACEMENT_REPORT, placement_rows, placement_fields)
-    try:
-        write_csv(ROOT_PLACEMENT_REPORT, placement_rows, placement_fields)
-    except PermissionError:
-        print(f"Skipped locked root CSV: {ROOT_PLACEMENT_REPORT.name}")
+    # A locked file (e.g. open in Excel) must fail the run, not leave a stale CSV.
+    write_csv(ROOT_PLACEMENT_REPORT, placement_rows, placement_fields)
     write_csv(INVENTORY_REPORT, inventory_rows, inventory_fields)
 
     missing_originals = sum(row["copy_status"] != "copied_from_original_cards94" for row in placement_rows)

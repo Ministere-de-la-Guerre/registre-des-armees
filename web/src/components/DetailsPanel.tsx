@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { ABILITY_KEYS, ABILITY_LABELS, type UnitCard } from "../domain/types";
 import { classLabel } from "../domain/labels";
 import { Medallion } from "./Medallion";
@@ -20,6 +20,7 @@ export function DetailsPanel({
   card,
   inStaffSlot,
   onSetCommander,
+  setCommanderBlockedReason = null,
   onRecruitAsUnit,
   recruitBlockedReason = null,
   onClose,
@@ -31,6 +32,9 @@ export function DetailsPanel({
   card: UnitCard;
   inStaffSlot?: boolean;
   onSetCommander?: () => void;
+  /** Why this general can't take the staff slot right now (a hard limit the result
+   *  would break); disables the button. Null when allowed, or when clearing the slot. */
+  setCommanderBlockedReason?: string | null;
   /** Recruit this card as an ordinary unit rather than putting it in the staff slot.
    *  Offered for staff generals, which the grid otherwise only ever routes to the
    *  commander slot — the game allows fielding one as a normal unit (real replays do
@@ -55,6 +59,18 @@ export function DetailsPanel({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Take focus while open so keys stop reaching whatever opened the panel (a focused
+  // medallion would otherwise take Enter/Space as "add"), and hand it back on close.
+  // The close button, not an action: a stray Enter should never change the build.
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeRef.current?.focus();
+    return () => {
+      if (previous?.isConnected) previous.focus();
+    };
+  }, []);
+
   const abilities = ABILITY_KEYS.filter((k) => card.abilities[k]);
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -71,7 +87,7 @@ export function DetailsPanel({
             <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>{card.unitKey}</div>
           </div>
           <div style={{ flex: 1 }} />
-          <button className="btn small" onClick={onClose} aria-label="Close details">
+          <button ref={closeRef} className="btn small" onClick={onClose} aria-label="Close details">
             ✕
           </button>
         </div>
@@ -79,7 +95,12 @@ export function DetailsPanel({
           {(onSetCommander || onRecruitAsUnit) && (
             <div className="modal-actions">
               {onSetCommander && (
-                <button className={`btn small ${inStaffSlot ? "gold" : "primary"}`} onClick={onSetCommander}>
+                <button
+                  className={`btn small ${inStaffSlot ? "gold" : "primary"}`}
+                  onClick={onSetCommander}
+                  disabled={!!setCommanderBlockedReason}
+                  title={setCommanderBlockedReason ?? undefined}
+                >
                   {inStaffSlot ? "★ Remove from staff slot" : "★ Set as corps commander (staff slot)"}
                 </button>
               )}
@@ -106,11 +127,21 @@ export function DetailsPanel({
             <StatRow k="Range" v={card.range} />
             <StatRow k="Accuracy" v={card.stats.accuracy} />
             <StatRow k="Reload skill" v={card.stats.reloadSkill} />
+            {/* Melee units and generals carry 0 rounds: show a dash, not "0". */}
+            <StatRow k="Ammo" v={card.stats.ammo || null} />
             <StatRow k="Morale" v={card.stats.morale} />
             <StatRow k="Melee attack" v={card.stats.meleeAttack} />
             <StatRow k="Melee defence" v={card.stats.meleeDefense} />
             <StatRow k="Charge bonus" v={card.stats.chargeBonus} />
           </div>
+          {/* Full width below the grid: firearm names run long ("Land Pattern (aka
+              Brown Bess)"), too long for a half-width cell at phone width. */}
+          {card.stats.firearm && (
+            <div className="stat stat-wide">
+              <span className="k">Firearm</span>
+              <span className="v">{card.stats.firearm}</span>
+            </div>
+          )}
           {PICK_RATES_ENABLED && pickRate && (
             <>
               <div className="section-title">

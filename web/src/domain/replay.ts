@@ -74,26 +74,33 @@ export interface ReplayBattle {
   warnings: string[];
 }
 
-/** Reject candidates that decoded as text but are really binary.
+/** Reject candidates that look like strings but are really binary.
  *
  *  A uint32 field (tag 0x03) can contain a 0x0E byte, which looks like a string
  *  tag and starts a UTF-16 read on the wrong byte. Such reads pair a data byte
  *  with an ASCII byte and land in CJK/Hangul/PUA; genuine strings are Latin
- *  (plus Cyrillic/Greek headroom for eastern factions) and mostly plain ASCII. */
-function plausible(text: string): boolean {
-  let ascii = 0;
-  for (let i = 0; i < text.length; i += 1) {
-    const o = text.charCodeAt(i);
-    if (o >= 0x20 && o <= 0x7e) ascii += 1;
-    else if ((o >= 0xa0 && o <= 0x4ff) || QUOTES.has(o)) continue;
-    else return false;
+ *  (plus Cyrillic/Greek headroom for eastern factions) and mostly plain ASCII.
+ *
+ *  Checked on the raw code units, bailing at the first one that settles it, so a
+ *  false tag costs a character or two rather than a decode of up to 128 KB — a
+ *  file dense with 0x0E bytes would otherwise take seconds per megabyte. */
+function plausible(blob: Uint8Array, start: number, count: number): boolean {
+  let other = 0;
+  for (let k = start; k < start + count * 2; k += 2) {
+    const o = blob[k] | (blob[k + 1] << 8);
+    if (o >= 0x20 && o <= 0x7e) continue;
+    if (!((o >= 0xa0 && o <= 0x4ff) || QUOTES.has(o))) return false;
+    other += 1;
+    if (other * 2 > count) return false; // can no longer be mostly ASCII
   }
-  return ascii * 2 >= text.length;
+  return true;
 }
 
 /** Every well-formed tagged string in the file, in order. */
 export function readStrings(blob: Uint8Array): string[] {
-  const decoder = new TextDecoder("utf-16le");
+  // ignoreBOM: keep a leading U+FEFF rather than silently strip it, as Python's
+  // utf-16-le codec does (plausible() rejects one anyway, so this only pins parity).
+  const decoder = new TextDecoder("utf-16le", { ignoreBOM: true });
   const out: string[] = [];
   const n = blob.length;
   let i = 0;
@@ -104,16 +111,11 @@ export function readStrings(blob: Uint8Array): string[] {
     }
     const count = blob[i + 1] | (blob[i + 2] << 8);
     const end = i + 3 + count * 2;
-    if (count === 0 || end > n) {
-      i += 1;
-      continue;
-    }
-    const text = decoder.decode(blob.subarray(i + 3, end));
-    if (!plausible(text)) {
+    if (count === 0 || end > n || !plausible(blob, i + 3, count)) {
       i += 1; // step one byte: the real record may start just after a false tag
       continue;
     }
-    out.push(text);
+    out.push(decoder.decode(blob.subarray(i + 3, end)));
     i = end;
   }
   return out;
@@ -139,14 +141,25 @@ const isUnitKey = (s: string) => UNIT_PREFIXES.some((p) => s.startsWith(p));
  *  other string a unit key follows is the player name, and that one is itself
  *  preceded by a unit key (the commander), which tells the two apart.
  *
+ *  An EMPTY commander slot breaks that: empty strings are never read, so the block
+ *  becomes [army key][player][unit keys…][player] and the player name lands in
+ *  the army key's position. It gives itself away by reappearing straight after
+ *  the unit run, and the real army key is then the string before it.
+ *
  *  Name blocks hold no unit keys at all, so they are never found this way; they
  *  are picked up by string equality against the keys the key blocks yielded. */
 function armyKeys(strings: string[]): Set<string> {
   const keys = new Set<string>();
+  const markerLike = (s: string | undefined) => s !== undefined && !isUnitKey(s) && !FLAG_RE.test(s);
   strings.forEach((s, i) => {
     if (ARMY_KEY_RE.test(s)) keys.add(s);
-    else if (isUnitKey(s) || FLAG_RE.test(s)) return;
-    else if (isUnitKey(strings[i + 1] ?? "") && !isUnitKey(strings[i - 1] ?? "")) keys.add(s);
+    else if (!markerLike(s)) return;
+    else if (isUnitKey(strings[i + 1] ?? "") && !isUnitKey(strings[i - 1] ?? "")) {
+      let j = i + 1;
+      while (j < strings.length && isUnitKey(strings[j])) j += 1;
+      if (strings[j] !== s) keys.add(s);
+      else if (markerLike(strings[i - 1])) keys.add(strings[i - 1]);
+    }
   });
   return keys;
 }

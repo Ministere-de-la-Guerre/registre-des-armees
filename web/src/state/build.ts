@@ -6,6 +6,7 @@
 import type { FactionRoster, UnitCard } from "../domain/types";
 import {
   type LimitCheck,
+  type LimitViolation,
   type PriceResult,
   MAX_BUILD_COST,
   MAX_FOOT_ARTILLERY,
@@ -16,6 +17,7 @@ import {
   generalCaps,
   horseArtilleryMax,
 } from "../rules/rules";
+import { orderBrigadeCards } from "./ordering";
 
 export interface SelectedInstance {
   /** Stable id for this specific selected copy. */
@@ -188,12 +190,88 @@ export function evaluateAdd(
 
 /** True when adding one copy of `card` would push the build's final cost past the
  *  10,000 ceiling. Selection is still allowed (the ceiling is soft); the grid uses
- *  this to colour the unit's cost (and portrait) red as a warning. Uses the same
- *  face-value recruitment basis as the affordability replay: the new unit's full
- *  price on top of the current discounted total (a discount the card itself would
- *  trigger does not count toward affording it — matching the game). */
+ *  this to colour the unit's cost (and portrait) red as a warning. It asks exactly
+ *  the question the affordability replay (see priceBuild) will ask of the new copy,
+ *  which joins the end of the recruit order: its full face-value price on top of the
+ *  discounted total of the cards that were themselves affordable. So a card is red
+ *  precisely when it would be excluded from earning a discount — never red yet
+ *  credited, nor clear yet refused. */
 export function addWouldExceedBudget(index: RosterIndex, build: BuildState, card: UnitCard): boolean {
-  return priceBuild(index, build).finalCost + card.cost > MAX_BUILD_COST;
+  return affordableRunningCost(index, build) + card.cost > MAX_BUILD_COST;
+}
+
+/** The build with `unitKey` in the staff slot. Copies of the same card recruited as
+ *  units are folded into the slot (a card can't both command and fight in the line);
+ *  whoever held the slot before leaves the build. */
+export function withCommander(build: BuildState, unitKey: string): BuildState {
+  return {
+    ...build,
+    instances: build.instances.filter((i) => i.unitKey !== unitKey),
+    staffSlotUnitKey: unitKey,
+  };
+}
+
+/** Limit check for a build, or the data error that prevented one. */
+function checkBuildLimits(index: RosterIndex, build: BuildState): LimitCheck {
+  const { cards, staffSlotIndex } = expandBuild(index, build);
+  return checkKnownLimits(cards, index.roster.factionKey, {
+    staffSlotIndex,
+    recruitable: index.roster.cards,
+  });
+}
+
+/** A one-line blocking reason for a limit a change would break, phrased like the
+ *  evaluateAdd reasons so both routes read the same. */
+function limitReason(v: LimitViolation, index: RosterIndex): string {
+  switch (v.rule) {
+    case "total_cards":
+      return `Build is full (${v.maximum} cards).`;
+    case "staff_generals":
+      return "Only one staff general allowed in a build.";
+    case "artillery_foot":
+      return `Foot-artillery limit (${v.maximum}) reached.`;
+    case "artillery_horse":
+      return `Horse-artillery limit (${v.maximum}) reached.`;
+    case "cavalry_heavy":
+      return `Heavy-cavalry limit (${v.maximum}) reached.`;
+    case "combat_generals_against_cap":
+      return `Combat-general limit (${v.maximum}) reached.`;
+  }
+  if (v.rule.startsWith("unit_cap:")) return "Another variant of this unit is already selected (shared cap).";
+  if (v.rule.startsWith("combat_general_max:")) return "Only one combat general allowed for this unit.";
+  return describeViolation(v.rule, v.actual, v.maximum, index);
+}
+
+/** Returns a blocking reason if putting `card` in the staff slot would break a hard
+ *  limit, or null when it may command. The counterpart of {@link evaluateAdd} for the
+ *  "Set commander" route, judged on the build that would result (see withCommander):
+ *  the commander is a card like any other — it counts toward the 31, its unit's
+ *  shared cap, the one-general-per-unit rule and the artillery/cavalry class caps (a
+ *  combat general by the unit it leads), and there is never a second staff general.
+ *  Only the combat-general cap exempts it. Clearing the slot is always allowed.
+ *
+ *  Only limits the change newly breaks (or worsens) block it, so an imported build
+ *  that is already over some other limit can still change its commander. */
+export function evaluateSetCommander(index: RosterIndex, build: BuildState, card: UnitCard): AddBlock | null {
+  if (build.staffSlotUnitKey === card.unitKey) return null;
+  if (!card.isGeneral) return { reason: "Only a general can command the corps." };
+  let after: LimitCheck;
+  try {
+    after = checkBuildLimits(index, withCommander(build, card.unitKey));
+  } catch (e) {
+    return { reason: e instanceof Error ? e.message : String(e) };
+  }
+  let before: LimitViolation[] = [];
+  try {
+    before = checkBuildLimits(index, build).violations;
+  } catch {
+    // The current build can't be checked at all; judge the result on its own.
+  }
+  const worsened = after.violations.find((v) => {
+    const prior = before.find((p) => p.rule === v.rule);
+    return !prior || v.actual > prior.actual;
+  });
+  return worsened ? { reason: limitReason(worsened, index) } : null;
 }
 
 export type StaffGeneralAction = "set-commander" | "recruit";
@@ -226,12 +304,7 @@ export function staffGeneralAction(
  *  ceiling (soft — used only to colour the cost red, never to block). */
 export function staffSetWouldExceedBudget(index: RosterIndex, build: BuildState, card: UnitCard): boolean {
   if (build.staffSlotUnitKey === card.unitKey) return false;
-  const next: BuildState = {
-    ...build,
-    instances: build.instances.filter((i) => i.unitKey !== card.unitKey),
-    staffSlotUnitKey: card.unitKey,
-  };
-  return priceBuild(index, next).finalCost > MAX_BUILD_COST;
+  return priceBuild(index, withCommander(build, card.unitKey)).finalCost > MAX_BUILD_COST;
 }
 
 /** The selected cards (in selection order) that are *affordable* — i.e. each one
@@ -267,6 +340,13 @@ function recruitOrder(index: RosterIndex, build: BuildState): UnitCard[] {
     if (card) order.push(card);
   }
   return order;
+}
+
+/** Discounted total of just the affordable cards — the running total the next
+ *  recruit is judged against in the affordability replay. */
+function affordableRunningCost(index: RosterIndex, build: BuildState): number {
+  const affordable = affordableSubset(index, recruitOrder(index, build));
+  return calculateArmyCost(affordable, index.roster.cards, index.roster.factionKey).finalCost;
 }
 
 /** Price a build with the soft-ceiling rule: you pay the full base cost of every
@@ -310,7 +390,7 @@ export interface AutoGeneralsResult {
 }
 
 /** Auto-assign combat generals to units already in the build by *replacing* a
- *  selected plain copy with the combat-general variant of the same unit — it never
+ *  selected plain copy with a combat-general variant of the same unit — it never
  *  adds new units. Existing combat generals are left untouched.
  *
  *  A swap is rules-safe by construction: the general shares the unit's cap group and
@@ -320,13 +400,17 @@ export interface AutoGeneralsResult {
  *  a cheaper one lowers the running total — which can pull a formation-completing copy
  *  back within face-value budget and so unlock that formation's (often large) discount.
  *
- *  The goal is therefore the *cheapest* build: we greedily commit, one slot at a time,
- *  the swap that most lowers the final priced cost, and we stop as soon as no remaining
- *  swap lowers it (a swap that would only make the build dearer — including one that
- *  forfeits a discount — is never taken). This naturally takes the cost-reducing
- *  generals (up to the cap), skips cost-increasing ones, and may take fewer combat
- *  generals than the cap allows. Units that already carry a combat general are skipped
- *  (a unit may have only one). */
+ *  The goal is therefore the *cheapest* build. Because the affordability replay is
+ *  order-sensitive (and not monotonic — a copy made affordable adds to the running
+ *  total a later, bigger formation needed), *which* copy of a unit takes the general
+ *  and *which* of its generals matter, and slot-by-slot greedy choices can be hundreds
+ *  of gold off. So every copy of every eligible unit is a candidate, with every general
+ *  that leads it, and when the combinations fit {@link AUTO_GENERALS_EXACT_LIMIT} they
+ *  are all priced and the cheapest taken; only beyond that does it fall back to greedy
+ *  (commit the swap that most lowers the cost, one slot at a time). Either way a swap
+ *  set must *strictly* lower the final cost, ties go to fewer generals, and it may take
+ *  fewer than the cap allows — spending a slot for no gain is never done. Units that
+ *  already carry a combat general are skipped (a unit may have only one). */
 export function autoPickCombatGenerals(
   index: RosterIndex,
   build: BuildState,
@@ -341,62 +425,121 @@ export function autoPickCombatGenerals(
     if (c.isGeneral && c.generalKind === "combat") groupsWithGeneral.add(c.capGroupKey);
   }
 
-  // Cheapest combat-general variant available for each unit (cap group).
-  const cheapestGeneral = new Map<string, UnitCard>();
+  // Every combat-general variant of each unit (cap group), cheapest first.
+  const generalsOf = new Map<string, UnitCard[]>();
   for (const c of index.roster.cards) {
     if (!(c.isGeneral && c.generalKind === "combat")) continue;
-    const cur = cheapestGeneral.get(c.capGroupKey);
-    if (!cur || c.cost < cur.cost) cheapestGeneral.set(c.capGroupKey, c);
+    const list = generalsOf.get(c.capGroupKey);
+    if (list) list.push(c);
+    else generalsOf.set(c.capGroupKey, [c]);
+  }
+  for (const list of generalsOf.values()) {
+    list.sort((a, b) => a.cost - b.cost || a.unitKey.localeCompare(b.unitKey));
   }
 
-  // One replaceable plain copy per eligible group: the first selected instance of a
-  // non-general unit whose group has a general variant and no general yet.
+  // Candidate swaps, bucketed by unit (a unit takes at most one general): every
+  // selected plain copy of an eligible unit, paired with each general leading it.
   interface Candidate {
     instanceId: string;
     general: UnitCard;
     delta: number;
   }
-  const pool: Candidate[] = [];
-  const seenGroups = new Set<string>();
+  const buckets = new Map<string, Candidate[]>();
   for (const inst of build.instances) {
     const base = index.byKey.get(inst.unitKey);
-    if (!base || base.isGeneral) continue;
-    const group = base.capGroupKey;
-    if (groupsWithGeneral.has(group) || seenGroups.has(group)) continue;
-    const general = cheapestGeneral.get(group);
-    if (!general) continue;
-    seenGroups.add(group);
-    pool.push({ instanceId: inst.id, general, delta: general.cost - base.cost });
+    if (!base || base.isGeneral || groupsWithGeneral.has(base.capGroupKey)) continue;
+    const generals = generalsOf.get(base.capGroupKey);
+    if (!generals) continue;
+    const bucket = buckets.get(base.capGroupKey) ?? [];
+    for (const general of generals) {
+      bucket.push({ instanceId: inst.id, general, delta: general.cost - base.cost });
+    }
+    buckets.set(base.capGroupKey, bucket);
   }
+  const groups = [...buckets.values()];
 
-  const applySwap = (b: BuildState, c: Candidate): BuildState => ({
-    ...b,
-    instances: b.instances.map((i) => (i.id === c.instanceId ? { id: i.id, unitKey: c.general.unitKey } : i)),
+  const applySwaps = (swaps: readonly Candidate[]): BuildState => {
+    const to = new Map(swaps.map((c) => [c.instanceId, c.general.unitKey]));
+    return {
+      ...build,
+      instances: build.instances.map((i) => (to.has(i.id) ? { id: i.id, unitKey: to.get(i.id)! } : i)),
+    };
+  };
+  const finalOf = (swaps: readonly Candidate[]) => priceBuild(index, applySwaps(swaps)).finalCost;
+  const toResult = (swaps: readonly Candidate[]): AutoGeneralsResult => ({
+    replacements: swaps.map((c) => ({ instanceId: c.instanceId, generalUnitKey: c.general.unitKey })),
   });
 
-  const chosen: AutoGeneralReplacement[] = [];
-  let working = build;
-  let workingFinal = priceBuild(index, working).finalCost;
-  for (let slot = 0; slot < remaining && pool.length > 0; slot++) {
-    let best: { idx: number; final: number; delta: number; key: string } | null = null;
-    for (let i = 0; i < pool.length; i++) {
-      const cand = pool[i];
-      const final = priceBuild(index, applySwap(working, cand)).finalCost;
-      if (final > workingFinal) continue; // never make the build dearer
-      const better =
-        !best ||
-        final < best.final ||
-        (final === best.final && cand.delta < best.delta) ||
-        (final === best.final && cand.delta === best.delta && cand.general.unitKey.localeCompare(best.key) < 0);
-      if (better) best = { idx: i, final, delta: cand.delta, key: cand.general.unitKey };
+  const baseFinal = priceBuild(index, build).finalCost;
+  const maxSwaps = Math.min(remaining, groups.length);
+
+  if (countSwapSets(groups.map((g) => g.length), maxSwaps, AUTO_GENERALS_EXACT_LIMIT) <= AUTO_GENERALS_EXACT_LIMIT) {
+    // Exact: price every set of at most `maxSwaps` swaps (one per unit). Enumeration
+    // runs in build order, cheapest general first, so among equally cheap sets with
+    // the same number of generals the first found — the earliest copies, the cheapest
+    // generals — is kept.
+    let best: { final: number; swaps: Candidate[] } = { final: baseFinal, swaps: [] };
+    const picked: Candidate[] = [];
+    const search = (from: number) => {
+      if (picked.length === maxSwaps) return;
+      for (let g = from; g < groups.length; g++) {
+        for (const cand of groups[g]) {
+          picked.push(cand);
+          const final = finalOf(picked);
+          if (final < best.final || (final === best.final && picked.length < best.swaps.length)) {
+            best = { final, swaps: [...picked] };
+          }
+          search(g + 1);
+          picked.pop();
+        }
+      }
+    };
+    search(0);
+    return toResult(best.swaps);
+  }
+
+  // Greedy fallback: commit, one slot at a time, the swap that most lowers the cost.
+  const chosen: Candidate[] = [];
+  let workingFinal = baseFinal;
+  const open = [...groups];
+  for (let slot = 0; slot < remaining && open.length > 0; slot++) {
+    let best: { group: number; cand: Candidate; final: number } | null = null;
+    for (let g = 0; g < open.length; g++) {
+      for (const cand of open[g]) {
+        const final = finalOf([...chosen, cand]);
+        if (final >= workingFinal) continue; // only a strict saving earns a slot
+        const better =
+          !best ||
+          final < best.final ||
+          (final === best.final && cand.delta < best.cand.delta) ||
+          (final === best.final &&
+            cand.delta === best.cand.delta &&
+            cand.general.unitKey.localeCompare(best.cand.general.unitKey) < 0);
+        if (better) best = { group: g, cand, final };
+      }
     }
-    if (!best) break; // no remaining swap lowers (or holds) the cost; stop short of the cap
-    const cand = pool.splice(best.idx, 1)[0];
-    chosen.push({ instanceId: cand.instanceId, generalUnitKey: cand.general.unitKey });
-    working = applySwap(working, cand);
+    if (!best) break; // no remaining swap lowers the cost; stop short of the cap
+    chosen.push(best.cand);
+    open.splice(best.group, 1);
     workingFinal = best.final;
   }
-  return { replacements: chosen };
+  return toResult(chosen);
+}
+
+/** Largest number of swap sets autoPickCombatGenerals prices exhaustively. Each set
+ *  is one priceBuild; beyond this it falls back to greedy. */
+export const AUTO_GENERALS_EXACT_LIMIT = 2500;
+
+/** How many ways to pick at most `maxPicks` of the groups and one of each picked
+ *  group's options (the empty pick excluded), stopping early once past `limit`. */
+function countSwapSets(sizes: readonly number[], maxPicks: number, limit: number): number {
+  // ways[k] = sets of exactly k picks among the groups seen so far.
+  const ways = new Array<number>(maxPicks + 1).fill(0);
+  ways[0] = 1;
+  for (const size of sizes) {
+    for (let k = maxPicks; k >= 1; k--) ways[k] = Math.min(limit + 1, ways[k] + ways[k - 1] * size);
+  }
+  return ways.slice(1).reduce((sum, n) => Math.min(limit + 1, sum + n), 0);
 }
 
 /** Replace the unit held by one selected copy, keeping its slot (and id) in place.
@@ -530,6 +673,72 @@ export function resetCombatGenerals(index: RosterIndex, build: BuildState): Buil
   };
 }
 
+/** The copies "take the whole division" adds, in grid order (brigade by brigade, each
+ *  brigade ordered as the grid draws it): every plain unit placed in `division`,
+ *  topped up to its cap. That is exactly what the division discount counts toward
+ *  completion — each unit contributes `cap` copies (see buildRosterTotals) — and
+ *  copies already selected in a unit's cap group (its combat-general variants
+ *  included, as they share the unit's placement) count as taken, so a partial
+ *  division is only topped up. A combat general commanding from the staff slot counts
+ *  too, as pricing and the cap check both count him. Staff and combat generals are
+ *  never added. A support division (which earns no discount) lists its units the
+ *  same way. */
+export function divisionFillPlan(index: RosterIndex, build: BuildState, division: number): UnitCard[] {
+  const commanderGroup = build.staffSlotUnitKey ? index.byKey.get(build.staffSlotUnitKey)?.capGroupKey : undefined;
+  const byBrigade = new Map<number, UnitCard[]>();
+  for (const c of index.roster.cards) {
+    if (c.factionKey !== index.roster.factionKey || c.isGeneral || c.placement?.division !== division) continue;
+    const list = byBrigade.get(c.placement.brigade);
+    if (list) list.push(c);
+    else byBrigade.set(c.placement.brigade, [c]);
+  }
+  const plan: UnitCard[] = [];
+  for (const brigade of [...byBrigade.keys()].sort((a, b) => a - b)) {
+    for (const card of orderBrigadeCards(byBrigade.get(brigade)!)) {
+      const held = groupQtyOf(index, build, card.capGroupKey) + (card.capGroupKey === commanderGroup ? 1 : 0);
+      const missing = card.cap - held;
+      for (let i = 0; i < missing; i++) plan.push(card);
+    }
+  }
+  return plan;
+}
+
+export interface DivisionFill {
+  build: BuildState;
+  /** Copies actually added, in order. */
+  added: UnitCard[];
+  /** Copies the division still needed (the plan's length). */
+  wanted: number;
+  /** Distinct reasons some planned copies could not be added, in first-hit order. */
+  blockedReasons: string[];
+}
+
+/** Add a division's missing copies (see {@link divisionFillPlan}) one at a time
+ *  through the same hard-limit checks as a single add (evaluateAdd), skipping any
+ *  copy a limit refuses and carrying on with the rest. The cost ceiling is soft, so
+ *  an over-budget copy is still taken, exactly as a single click would. */
+export function fillDivision(
+  index: RosterIndex,
+  build: BuildState,
+  division: number,
+  combatCap: number,
+): DivisionFill {
+  const plan = divisionFillPlan(index, build, division);
+  let working = build;
+  const added: UnitCard[] = [];
+  const blockedReasons: string[] = [];
+  for (const card of plan) {
+    const block = evaluateAdd(index, working, card, combatCap);
+    if (block) {
+      if (!blockedReasons.includes(block.reason)) blockedReasons.push(block.reason);
+      continue;
+    }
+    working = { ...working, instances: [...working.instances, { id: makeInstanceId(), unitKey: card.unitKey }] };
+    added.push(card);
+  }
+  return { build: working, added, wanted: plan.length, blockedReasons };
+}
+
 export interface BuildSummary {
   expanded: ExpandedBuild;
   price: PriceResult;
@@ -557,6 +766,7 @@ function isCountedInfantry(c: UnitCard): boolean {
 
 const RULE_LABELS: Record<string, string> = {
   total_cards: "Total unit cards",
+  staff_generals: "Staff generals",
   artillery_foot: "Foot artillery",
   artillery_horse: "Horse artillery",
   cavalry_heavy: "Heavy cavalry",
@@ -585,20 +795,34 @@ export function summarize(index: RosterIndex, build: BuildState): BuildSummary {
   const faction = index.roster.factionKey;
   const price = priceBuild(index, build);
   let limits: LimitCheck;
+  // A build the rules engine can't even check (e.g. an imported save whose staff slot
+  // names a non-general) is not a valid one: report the data error as a violation
+  // rather than passing it off as legal, and keep the combat-general tally the header
+  // shows (counted from the cards themselves) meaningful.
+  const dataErrors: string[] = [];
   try {
     limits = checkKnownLimits(expanded.cards, faction, {
       staffSlotIndex: expanded.staffSlotIndex,
       recruitable: index.roster.cards,
     });
-  } catch {
-    limits = { counts: {}, violations: [], valid: true };
+  } catch (e) {
+    dataErrors.push(`This build can't be checked: ${e instanceof Error ? e.message : String(e)}`);
+    limits = {
+      counts: {
+        total_cards: expanded.cards.length,
+        combat_generals_against_cap: combatGeneralsAgainstCap(index, build),
+      },
+      violations: [],
+      valid: false,
+    };
   }
   const totalMen = expanded.cards.reduce((sum, c) => sum + (c.finalMen ?? 0), 0);
   const totalSquares = expanded.cards.reduce((sum, c) => sum + (c.abilities.canFormSquare ? 1 : 0), 0);
   const totalInfantry = expanded.cards.reduce((sum, c) => sum + (isCountedInfantry(c) ? 1 : 0), 0);
-  const violationMessages = limits.violations.map((v) =>
-    describeViolation(v.rule, v.actual, v.maximum, index),
-  );
+  const violationMessages = [
+    ...dataErrors,
+    ...limits.violations.map((v) => describeViolation(v.rule, v.actual, v.maximum, index)),
+  ];
   return {
     expanded,
     price,

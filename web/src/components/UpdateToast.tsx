@@ -3,12 +3,14 @@
 interface UpdateToastProps {
   onReload: () => void;
   onDismiss: () => void;
+  /** Defaults to the "update waiting" wording. */
+  message?: string;
 }
 
-export function UpdateToast({ onReload, onDismiss }: UpdateToastProps) {
+export function UpdateToast({ onReload, onDismiss, message = "A new version is available." }: UpdateToastProps) {
   return (
     <div className="pwa-toast" role="status" aria-live="polite">
-      <span>A new version is available.</span>
+      <span>{message}</span>
       <button className="btn gold small" onClick={onReload}>
         Reload
       </button>

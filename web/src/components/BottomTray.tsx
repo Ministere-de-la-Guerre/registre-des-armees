@@ -78,6 +78,16 @@ function DesktopTray({
   // remaining copies plus empty slots so the whole army fits one row.
   const emptyCount = Math.max(0, MAX_TOTAL_UNIT_CARDS - totalCards);
   const hasBuild = build.instances.length > 0 || build.staffSlotUnitKey !== null;
+  // Removing a copy unmounts its medallion without a mouseleave, which would leave
+  // its hover card stuck on screen — so end the hover first.
+  const removeInstance = (id: string) => {
+    onHoverEnd();
+    onRemoveInstance(id);
+  };
+  const clearStaff = () => {
+    onHoverEnd();
+    onClearStaff();
+  };
 
   return (
     <div className="tray">
@@ -93,7 +103,10 @@ function DesktopTray({
               inStaffSlot
               hideName
               onClick={() => onDetails(staffCard)}
-              onContextMenu={onClearStaff}
+              activateLabel="show details"
+              onContextMenu={clearStaff}
+              onRemove={clearStaff}
+              onDetails={() => onDetails(staffCard)}
               onHover={onHover}
               onHoverEnd={onHoverEnd}
             />
@@ -111,7 +124,10 @@ function DesktopTray({
             showSpeed
             overCorps={isOverCorps(card)}
             onClick={() => onDetails(card)}
-            onContextMenu={() => onRemoveInstance(inst.id)}
+            activateLabel="show details"
+            onContextMenu={() => removeInstance(inst.id)}
+            onRemove={() => removeInstance(inst.id)}
+            onDetails={() => onDetails(card)}
             onHover={onHover}
             onHoverEnd={onHoverEnd}
             onSwapGeneral={canSwapGeneral(card) ? () => onSwapGeneral(inst.id) : undefined}
@@ -215,6 +231,13 @@ function TouchTray({
             <b className={corpsStat.over ? "over" : undefined}>{corpsStat.count}</b>/{corpsStat.max} corps
           </span>
         )}
+        {/* Broken limits (see the header banner, which collapsed chrome hides). */}
+        {summary.violationMessages.length > 0 && (
+          <span className="tray-stat" title={summary.violationMessages.join("\n")}>
+            <b className="over">⚠ {summary.violationMessages.length}</b>{" "}
+            limit{summary.violationMessages.length === 1 ? "" : "s"}
+          </span>
+        )}
         <span className="tray-strip-chevron" aria-hidden>
           {expanded ? "▾" : "▴"}
         </span>
@@ -236,7 +259,10 @@ function TouchTray({
                     card={staffCard}
                     inStaffSlot
                     onClick={() => onDetails(staffCard)}
+                    activateLabel="show details"
                     onContextMenu={onClearStaff}
+                    onRemove={onClearStaff}
+                    onDetails={() => onDetails(staffCard)}
                     onPeek={onPeek}
                     peekOn="tap"
                   />
@@ -252,7 +278,10 @@ function TouchTray({
                   showSpeed
                   overCorps={isOverCorps(card)}
                   onClick={() => onDetails(card)}
+                  activateLabel="show details"
                   onContextMenu={() => onRemoveInstance(inst.id)}
+                  onRemove={() => onRemoveInstance(inst.id)}
+                  onDetails={() => onDetails(card)}
                   onPeek={onPeek}
                   peekOn="tap"
                   onSwapGeneral={canSwapGeneral(card) ? () => onSwapGeneral(inst.id) : undefined}

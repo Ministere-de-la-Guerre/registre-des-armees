@@ -1,13 +1,17 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 // Long-press → right-click parity for touch. Desktop is untouched: the handlers
 // ignore mouse pointers entirely, so a mouse still uses the native contextmenu
 // and click. On touch/pen, a ~450 ms hold (cancelled by movement or scroll)
-// fires the callback the same code path right-click uses.
+// fires the callback the same code path right-click uses. (The iOS callout /
+// Android image sheet / text selection a hold would otherwise raise is suppressed
+// in CSS on .medallion.)
 //
-// Android Chrome ALSO synthesizes a `contextmenu` on long-press, so the caller
-// must dedupe: after this hook fires, `wasRecent()` is true briefly, and the
-// caller swallows both the synthetic contextmenu and the trailing click.
+// The browser still fires its own events for that same press: Android Chrome
+// synthesizes a `contextmenu` while the finger is down, and every browser fires a
+// `click` when it lifts — however long it was held. So the caller must dedupe:
+// once this hook fires, `suppressing()` stays true for the rest of the press and a
+// short grace after release, and the caller swallows both.
 export interface LongPress {
   handlers: {
     onPointerDown: (e: React.PointerEvent) => void;
@@ -15,9 +19,13 @@ export interface LongPress {
     onPointerUp: () => void;
     onPointerCancel: () => void;
   };
-  /** True if a long-press fired in the last ~700 ms (for click/contextmenu dedupe). */
-  wasRecent: () => boolean;
+  /** True from the moment a long-press fires until shortly after that press is
+   *  released (for click/contextmenu dedupe). */
+  suppressing: () => boolean;
 }
+
+/** How long after releasing a long-press its trailing click is still swallowed. */
+const RELEASE_GRACE_MS = 400;
 
 export function useLongPress(
   onLongPress: (() => void) | undefined,
@@ -27,7 +35,10 @@ export function useLongPress(
   const tol = opts.moveTolerance ?? 10;
   const timer = useRef<number | null>(null);
   const start = useRef<{ x: number; y: number } | null>(null);
-  const firedAt = useRef(0);
+  // The press that fired is still down (no release seen yet).
+  const held = useRef(false);
+  // After release: swallow events until this time.
+  const suppressUntil = useRef(0);
 
   const clear = () => {
     if (timer.current !== null) {
@@ -36,19 +47,19 @@ export function useLongPress(
     }
   };
 
+  // Never fire into an unmounted component (e.g. a tray copy removed mid-press).
+  useEffect(() => clear, []);
+
   const onPointerDown = (e: React.PointerEvent) => {
+    // A new press (of any pointer) ends an earlier one whose release we never saw,
+    // e.g. a finger that slid off the element before lifting.
+    held.current = false;
     if (!onLongPress || (e.pointerType !== "touch" && e.pointerType !== "pen")) return;
     start.current = { x: e.clientX, y: e.clientY };
-    // Keep the native event so we can suppress residual native gestures (Android
-    // image-save sheet, stray text selection) ONLY once the press is recognized as
-    // long — never on touchstart, so page/grid scrolling keeps working. If the
-    // finger moves first, the timer is cleared and we never preventDefault.
-    const native = e.nativeEvent;
     clear();
     timer.current = window.setTimeout(() => {
       timer.current = null;
-      firedAt.current = Date.now();
-      native.preventDefault?.();
+      held.current = true;
       onLongPress();
     }, ms);
   };
@@ -58,8 +69,16 @@ export function useLongPress(
     if (Math.hypot(e.clientX - start.current.x, e.clientY - start.current.y) > tol) clear();
   };
 
+  const release = () => {
+    clear();
+    if (held.current) {
+      held.current = false;
+      suppressUntil.current = Date.now() + RELEASE_GRACE_MS;
+    }
+  };
+
   return {
-    handlers: { onPointerDown, onPointerMove, onPointerUp: clear, onPointerCancel: clear },
-    wasRecent: () => Date.now() - firedAt.current < 700,
+    handlers: { onPointerDown, onPointerMove, onPointerUp: release, onPointerCancel: release },
+    suppressing: () => held.current || Date.now() < suppressUntil.current,
   };
 }

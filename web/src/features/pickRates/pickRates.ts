@@ -38,11 +38,13 @@ export function corpsPickRates(season: PickRateSeason | null, factionKey: string
 
 /** Whether the corpus was computed against the same unit roster the app is showing.
  *  When it wasn't, a missing unit might simply be newer than the corpus, so its
- *  absence cannot be read as "never picked". */
+ *  absence cannot be read as "never picked". A season with no stamp (the loader
+ *  turns a missing or malformed one into {}) proves nothing, so it never matches. */
 export function rosterMatches(season: PickRateSeason | null, appVersion: Record<string, number> | null): boolean {
   if (!season?.unitDataVersion || !appVersion) return false;
   const a = season.unitDataVersion;
-  return Object.keys(a).every((k) => a[k] === appVersion[k]);
+  const keys = Object.keys(a);
+  return keys.length > 0 && keys.every((k) => a[k] === appVersion[k]);
 }
 
 /** Turn a raw {builds, copies} record into a rate against the corps' sample. */
@@ -167,6 +169,15 @@ export function shortLabel(rate: UnitPickRate): string {
   }
 }
 
+/** A percentage as printed. Floored, not rounded: the tier and bucket breakpoints are
+ *  whole percents compared against the exact rate, so flooring is what keeps the
+ *  printed number on the same side of every breakpoint as the colour and label —
+ *  84/99 must not read "85%" beside a tier that says it is short of 85, nor 199/200
+ *  read "100%". A pick that floors to nothing still says it happened. */
+export function formatPct(pct: number): string {
+  return pct > 0 && pct < 1 ? "<1%" : `${Math.floor(pct)}%`;
+}
+
 /** The full sentence for the details panel and tooltips, where there is room to be
  *  explicit and the percentage can be stated with its sample beside it. */
 export function longLabel(rate: UnitPickRate): string {
@@ -174,7 +185,7 @@ export function longLabel(rate: UnitPickRate): string {
     case "data":
       return rate.pct === null
         ? `Picked in ${rate.builds} of ${buildsLabel(rate.n)}`
-        : `Picked in ${rate.builds} of ${buildsLabel(rate.n)} (${Math.round(rate.pct)}%)`;
+        : `Picked in ${rate.builds} of ${buildsLabel(rate.n)} (${formatPct(rate.pct)})`;
     case "never":
       return `Never picked — 0 of ${buildsLabel(rate.n)}`;
     case "unplayed":

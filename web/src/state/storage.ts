@@ -6,6 +6,8 @@
 export interface StorageResult {
   ok: boolean;
   error?: string;
+  /** Set on a successful write the user should still hear about. */
+  warning?: string;
 }
 
 export interface StorageAdapter {
@@ -44,9 +46,7 @@ export class LocalStorageAdapter implements StorageAdapter {
       this.store.setItem(key, value);
       return { ok: true };
     } catch (e) {
-      const name = e instanceof Error ? e.name : "";
-      const quota = name === "QuotaExceededError" || name === "NS_ERROR_DOM_QUOTA_REACHED";
-      return { ok: false, error: quota ? "Storage quota exceeded." : "Could not write to storage." };
+      return { ok: false, error: isQuotaError(e) ? "Storage quota exceeded." : "Could not write to storage." };
     }
   }
 
@@ -75,17 +75,37 @@ export class MemoryStorageAdapter implements StorageAdapter {
   }
 }
 
+function isQuotaError(e: unknown): boolean {
+  const name = e && typeof e === "object" ? (e as { name?: unknown }).name : undefined;
+  return name === "QuotaExceededError" || name === "NS_ERROR_DOM_QUOTA_REACHED";
+}
+
 function safeLocalStorage(): Storage | null {
+  let ls: Storage | undefined;
   try {
-    const ls = globalThis.localStorage;
-    if (!ls) return null;
-    // Probe: some environments expose localStorage but throw on use.
-    const probe = `${STORAGE_NAMESPACE}.__probe__`;
+    ls = globalThis.localStorage;
+  } catch {
+    return null; // merely touching it throws when storage is blocked
+  }
+  if (!ls) return null;
+  // Probe: some environments expose localStorage but throw on use.
+  const probe = `${STORAGE_NAMESPACE}.__probe__`;
+  try {
     ls.setItem(probe, "1");
     ls.removeItem(probe);
     return ls;
-  } catch {
-    return null;
+  } catch (e) {
+    // A FULL store still reads fine. Falling back to the memory adapter here
+    // would hide every existing save (and disable Export, the one way to get
+    // them out) exactly when the user most needs them; keep the real store and
+    // let each write report the quota error instead.
+    if (!isQuotaError(e)) return null;
+    try {
+      ls.getItem(probe);
+      return ls;
+    } catch {
+      return null;
+    }
   }
 }
 

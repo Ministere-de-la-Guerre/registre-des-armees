@@ -78,6 +78,23 @@ describe("pricing", () => {
     expect(result.completedGroups[0].groupType).toBe("division");
   });
 
+  it("memoized roster totals stay per roster array and per faction", () => {
+    // One recruitable array shared by two factions, priced repeatedly: each faction
+    // must keep seeing only its own formations.
+    const fa = "ntw3_ac_test_x5_001";
+    const fb = "ntw3_ac_test_x5_002";
+    const a = card("a", { faction: fa, cost: 500, cap: 2 });
+    const b = card("b", { faction: fb, cost: 300, cap: 3 });
+    const roster = [a, b];
+    for (let i = 0; i < 2; i++) {
+      expect(calculateArmyCost([a, a], roster, fa).normalDiscount).toBe(10);
+      expect(calculateArmyCost([b, b, b], roster, fb).normalDiscount).toBe(18);
+    }
+    // A different array with the same faction is priced from its own cards.
+    const bigger = card("a", { faction: fa, cost: 500, cap: 3 });
+    expect(calculateArmyCost([bigger, bigger], [bigger], fa).normalDiscount).toBe(0);
+  });
+
   it("german states multiplies total normal discount", () => {
     const faction = "ntw3_ac_test_g5_001";
     const unit = card("line", { faction, cost: 500, cap: 2 });
@@ -88,6 +105,7 @@ describe("pricing", () => {
     expect(result.finalCost).toBe(985);
     expect(result.germanStates).toBe(true);
   });
+
 
   it("tagged general can complete a brigade but is not in roster", () => {
     const faction = "ntw3_ac_test_x5_001";

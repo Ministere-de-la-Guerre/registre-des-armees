@@ -11,6 +11,7 @@ import type { PickRateIndex, PickRateSeason, SeasonSummary } from "./types";
 const num = (v: unknown, fallback = 0) => (typeof v === "number" && Number.isFinite(v) ? v : fallback);
 const str = (v: unknown, fallback = "") => (typeof v === "string" ? v : fallback);
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
+const naturalCompare = (a: string, b: string) => a.localeCompare(b, "en", { numeric: true });
 
 async function getJson(path: string): Promise<unknown> {
   const res = await fetch(dataUrl(path), { cache: "no-cache" });
@@ -47,8 +48,11 @@ export async function loadPickRateIndex(): Promise<PickRateIndex | null> {
     const requested = typeof raw.defaultSeason === "string" ? raw.defaultSeason : null;
     return {
       schemaVersion: num(raw.schemaVersion, 1),
-      // Never point at a season that isn't in the list.
-      defaultSeason: seasons.some((s) => s.id === requested) ? requested : seasons[seasons.length - 1].id,
+      // Never point at a season that isn't in the list. Without a valid default take
+      // the newest id, compared naturally so season-10 outranks season-9.
+      defaultSeason: seasons.some((s) => s.id === requested)
+        ? requested
+        : seasons.reduce((a, b) => (naturalCompare(b.id, a.id) > 0 ? b : a)).id,
       seasons,
     };
   } catch {

@@ -502,6 +502,10 @@ input::placeholder { color: #6f7888; }
 .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 16px; }
 .stat { display: flex; justify-content: space-between; border-bottom: 1px dotted var(--line-2); padding: 3px 0; font-size: 13px; }
 .stat .k { color: var(--text-soft); }
+/* A full-width row under the stat grid for long values (the firearm name): the
+   value wraps onto further lines, right-aligned, instead of overflowing. */
+.stat.stat-wide { margin-top: 6px; gap: 16px; }
+.stat.stat-wide .v { text-align: right; min-width: 0; overflow-wrap: anywhere; }
 .ability-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .section-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gold-bright); margin: 14px 0 6px; }
 
@@ -558,6 +562,8 @@ input::placeholder { color: #6f7888; }
   background: var(--panel-2); color: var(--text); border: 1px solid var(--gold-deep); border-radius: 8px;
   padding: 8px 16px; z-index: 90; box-shadow: var(--shadow); pointer-events: none;
 }
+/* The "image ready — Share" prompt reuses the toast's spot but is tappable. */
+.toast.share-ready { pointer-events: auto; display: flex; align-items: center; gap: 10px; }
 
 /* --- combat-general rotation popup --- */
 .rot-modal { max-width: 600px; }
@@ -608,6 +614,9 @@ input::placeholder { color: #6f7888; }
 .tow-filler { color: var(--text-soft); }
 .tow-warning { margin-top: 12px; padding: 8px 11px; font-size: 12px; line-height: 1.45; color: var(--gold-bright); background: rgba(200, 170, 110, 0.1); border: 1px solid var(--gold-deep); border-radius: 7px; }
 .tow-warning.banner { margin: 0 0 8px; border-radius: 0; border-left: none; border-right: none; }
+/* Broken limits of the current build: the same banner, in the "bad" palette. */
+.build-violations { color: var(--bad); background: rgba(138, 53, 40, 0.14); border-color: var(--bad-deep); }
+.build-violations ul { margin: 2px 0 0 18px; }
 /* Per-corps breakdown chips inside the build-based warning banner: one chip per
    source corps the selection spans, with its selected-unit count. Chips past the
    4-corps roll are the ones to trim, so they read red. */
@@ -646,6 +655,13 @@ input::placeholder { color: #6f7888; }
   letter-spacing: 0.05em; min-width: 24px;
 }
 .division.complete .division-tag .dn { color: var(--good-bright); }
+/* "Take the whole division": a small pill beside the division name. */
+.take-division {
+  font-size: 11px; font-weight: 600; line-height: 1.2; padding: 2px 8px; border-radius: 999px;
+  color: var(--gold-bright); background: var(--panel-2); border: 1px solid var(--gold-deep); cursor: pointer;
+}
+.take-division:hover { background: var(--panel-3); }
+.take-division .n { color: var(--text-soft); font-weight: 400; }
 .gens-row { align-items: center; }
 .gens-tag {
   font-family: var(--serif); font-size: 12px; color: var(--gold); letter-spacing: 0.08em;
@@ -832,6 +848,8 @@ input::placeholder { color: #6f7888; }
   }
   .tooltip .tt-actions { margin-top: 9px; display: flex; justify-content: flex-end; }
   .tooltip .tt-actions .btn { min-height: 40px; padding: 6px 14px; }
+  /* Division "+ All": a thumb-sized target. */
+  .take-division { min-height: 32px; padding: 4px 12px; font-size: 12px; }
 
   /* --- Part 1b: collapsible / scrollable top chrome -----------------------
      One chevron tab hides the brand bar + the faction controls bar so the grid can

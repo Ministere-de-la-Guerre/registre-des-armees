@@ -1,16 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { makeUnit } from "../test/factories";
 import {
   WINDOW_START_HOURS,
   combatPool,
   findRotation,
   findRotationCover,
+  nextWindowStart,
   offeredCombatKeys,
   offeredStaffKeys,
+  prevWindowStart,
   seedForDate,
   shuffleByDate,
   staffCommanderKey,
   staffPool,
+  windowStart,
   windowStartHour,
 } from "./rotation";
 
@@ -352,5 +355,103 @@ describe("staffCommanderKey", () => {
       named("napoleon", "Napoléon Bonaparte", 1007, 70),
     ]);
     expect(staffCommanderKey(pool, "7. Garde impériale")).toBe("napoleon");
+  });
+});
+
+// DST: window arithmetic must stay monotonic and gap-free when a window's start
+// hour is skipped (spring forward) or repeated (fall back). Each case switches the
+// process time zone (Node re-reads process.env.TZ on assignment; vitest runs each
+// file in its own forked process) and checks that the switch really took effect,
+// so these can't pass vacuously under a zone without the transitions.
+describe("window arithmetic across DST transitions", () => {
+  const ZONES: [string, [number, number, number], [number, number, number]][] = [
+    // [zone, spring-forward day, fall-back day] in 2026 (local calendar)
+    ["Europe/Athens", [2026, 2, 29], [2026, 9, 25]], // 03:00→04:00, 04:00→03:00
+    ["America/Santiago", [2026, 8, 6], [2026, 3, 4]], // 00:00→01:00, Sat 24:00→23:00
+    ["Atlantic/Azores", [2026, 2, 29], [2026, 9, 25]], // 00:00→01:00, 01:00→00:00
+  ];
+  let savedTz: string | undefined;
+  beforeEach(() => {
+    savedTz = process.env.TZ;
+  });
+  afterEach(() => {
+    if (savedTz === undefined) delete process.env.TZ;
+    else process.env.TZ = savedTz;
+  });
+  const useZone = (tz: string, [y, m, d]: [number, number, number]) => {
+    process.env.TZ = tz;
+    // Precondition: the spring-forward day really is 23 h long in this zone.
+    const len = new Date(y, m, d + 1).getTime() - new Date(y, m, d).getTime();
+    expect(len, `TZ=${tz} not applied`).toBe(23 * 3_600_000);
+  };
+
+  it.each(ZONES)("%s: a year of window starts is strictly monotonic and self-consistent", (tz, spring) => {
+    useZone(tz, spring);
+    const end = new Date(2027, 0, 1).getTime();
+    let ws = windowStart(new Date(2026, 0, 1, 0, 30));
+    let count = 0;
+    while (ws.getTime() < end) {
+      const nx = nextWindowStart(ws);
+      expect(nx.getTime()).toBeGreaterThan(ws.getTime());
+      expect(prevWindowStart(nx).getTime()).toBe(ws.getTime());
+      expect(windowStart(ws).getTime()).toBe(ws.getTime());
+      expect(seedForDate(nx)).not.toBe(seedForDate(ws));
+      ws = nx;
+      count++;
+    }
+    expect(count).toBe(9 * 365); // no window lost or duplicated
+  });
+
+  it.each(ZONES)("%s: every instant around both transitions lies in its window", (tz, spring, fall) => {
+    useZone(tz, spring);
+    for (const [y, m, d] of [spring, fall]) {
+      const from = new Date(y, m, d - 1, 12).getTime();
+      const to = new Date(y, m, d + 1, 12).getTime();
+      for (let t = from; t < to; t += 5 * 60_000) {
+        const at = new Date(t);
+        const ws = windowStart(at);
+        expect(ws.getTime()).toBeLessThanOrEqual(t);
+        expect(nextWindowStart(ws).getTime()).toBeGreaterThan(t);
+        expect(prevWindowStart(ws).getTime()).toBeLessThan(ws.getTime());
+        expect(seedForDate(ws)).toBe(seedForDate(at)); // same game roll as the clock reads
+      }
+    }
+  });
+
+  it("Europe/Athens: the skipped-03:00 window opens at 04:00 and ends at 06:00", () => {
+    useZone("Europe/Athens", [2026, 2, 29]);
+    const ws = windowStart(new Date(2026, 2, 29, 4, 30));
+    expect([ws.getDate(), ws.getHours(), ws.getMinutes()]).toEqual([29, 4, 0]);
+    expect(prevWindowStart(ws).getHours()).toBe(0);
+    const nx = nextWindowStart(ws);
+    expect([nx.getDate(), nx.getHours()]).toEqual([29, 6]);
+  });
+
+  it("Europe/Athens: fall-back's repeated 03:00 hour stays in one window", () => {
+    useZone("Europe/Athens", [2026, 2, 29]);
+    const first = new Date(2026, 9, 25, 3, 30); // first 03:30 (EEST)
+    const second = new Date(first.getTime() + 3_600_000); // repeated 03:30 (EET)
+    expect(second.getHours()).toBe(3);
+    const ws = windowStart(second);
+    expect(ws.getTime()).toBe(windowStart(first).getTime());
+    expect(nextWindowStart(ws).getTime() - ws.getTime()).toBe(4 * 3_600_000); // 03:00–06:00 + 1 h
+  });
+
+  it.each(ZONES)("%s: searches scan through the spring-forward day", (tz, spring) => {
+    useZone(tz, spring);
+    const [y, m, d] = spring;
+    // A general offered only in the 06:00 window of the spring-forward day, looked
+    // up the evening before: it must be found a few hours ahead, not a year back.
+    const sched = (at: Date): string[] =>
+      at.getMonth() === m && at.getDate() === d && windowStartHour(at.getHours()) === 6 ? ["A"] : [];
+    const now = new Date(y, m, d - 1, 22, 0);
+    const cover = findRotationCover(sched, ["A"], now);
+    expect(cover.groups.map((g) => [g.window.getTime(), g.direction])).toEqual([
+      [new Date(y, m, d, 6).getTime(), "future"],
+    ]);
+    // …and from earlier that morning (after the gap), the window ahead is found.
+    const early = new Date(y, m, d, 4, 30);
+    const cover2 = findRotationCover(sched, ["A"], early);
+    expect(cover2.groups[0].window.getTime()).toBe(new Date(y, m, d, 6).getTime());
   });
 });

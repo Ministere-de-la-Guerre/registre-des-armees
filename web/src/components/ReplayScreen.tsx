@@ -6,7 +6,7 @@
 // Everything happens locally — the file is read in the browser and never leaves
 // the device.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { assetUrl } from "../data/assets";
 import { loadFaction } from "../data/load";
 import { type ReplayArmy, parseReplay } from "../domain/replay";
@@ -60,7 +60,7 @@ export function ReplayScreen({
 }: {
   corpsIndex: CorpsIndex | null;
   session: ReplaySession;
-  onSessionChange: (session: ReplaySession) => void;
+  onSessionChange: Dispatch<SetStateAction<ReplaySession>>;
   onBack: () => void;
   onOpenInBuilder: (entry: CorpsEntry, saved: SavedBuild) => void;
 }) {
@@ -70,6 +70,8 @@ export function ReplayScreen({
   const [dragging, setDragging] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Bumped per opened file; a slower earlier file must not land over a newer one.
+  const requestRef = useRef(0);
   const repo = useMemo(() => new BuildRepository(), []);
 
   useEffect(() => {
@@ -87,12 +89,18 @@ export function ReplayScreen({
   }, [corpsIndex]);
 
   const openFile = async (file: File) => {
+    const request = ++requestRef.current;
+    const current = () => request === requestRef.current;
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
+      // A drop bypasses the picker's accept=".replay", so check the name here.
+      if (!/\.replay$/i.test(file.name)) throw new Error(`${file.name} is not a .replay file.`);
       if (file.size > MAX_REPLAY_BYTES) throw new Error(`${file.name} is too large to be a replay.`);
-      const parsed = parseReplay(new Uint8Array(await file.arrayBuffer()));
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (!current()) return;
+      const parsed = parseReplay(bytes);
       if (parsed.armies.length === 0) {
         onSessionChange(emptyReplaySession());
         setError(`No armies found in ${file.name}. Is it a Napoleon: Total War .replay?`);
@@ -117,15 +125,16 @@ export function ReplayScreen({
           }
         }),
       );
-      onSessionChange({
-        ...base,
-        rosters: new Map(loaded.filter((e): e is [string, FactionRoster] => e !== null)),
-      });
+      // Merge only the rosters, into whatever the session is now — the user may
+      // have picked another army meanwhile — and only if it is still this file.
+      const rosters = new Map(loaded.filter((e): e is [string, FactionRoster] => e !== null));
+      onSessionChange((s) => (s.battle === parsed ? { ...s, rosters } : s));
     } catch (e) {
+      if (!current()) return;
       onSessionChange(emptyReplaySession());
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy(false);
+      if (current()) setBusy(false);
     }
   };
 
@@ -253,7 +262,7 @@ export function ReplayScreen({
                 key={`${v.army.factionKey}-${i}`}
                 view={v}
                 active={v === active}
-                onClick={() => onSessionChange({ ...session, activeIndex: i })}
+                onClick={() => onSessionChange((s) => ({ ...s, activeIndex: i }))}
               />
             ))}
           </div>
@@ -285,7 +294,7 @@ function ArmyCard({ view, active, onClick }: { view: ArmyView; active: boolean; 
       {flag ? <img className="flag" src={flag} alt="" /> : <span className="flag missing">—</span>}
       <span style={{ minWidth: 0 }}>
         <span className="corps-name">{army.player || "AI / unassigned"}</span>
-        <span className="corps-meta">{entry?.name ?? army.corpsName ?? army.factionKey}</span>
+        <span className="corps-meta">{entry?.name || army.corpsName || army.factionKey}</span>
         <span className="corps-meta">
           {cards} cards
           {cost !== null && (
@@ -323,7 +332,7 @@ function ArmyDetail({ view, onSave, onOpen }: { view: ArmyView; onSave: () => vo
       <div className="corps-header">
         {postFlag && <img className="post-flag" src={postFlag} alt="" />}
         <div className="titles">
-          <h2>{entry?.name ?? army.corpsName ?? army.factionKey}</h2>
+          <h2>{entry?.name || army.corpsName || army.factionKey}</h2>
           <div className="sub">
             {army.general}
             {army.player && ` — played by ${army.player}`}

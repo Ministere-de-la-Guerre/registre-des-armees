@@ -51,7 +51,14 @@ export interface MedallionProps {
    *  driven by `!hideName` rather than this flag. */
   showSpeed?: boolean;
   onClick?: (anchor?: DOMRect) => void;
+  /** What Enter/Space (i.e. onClick) does here, for the screen-reader hint. */
+  activateLabel?: string;
   onContextMenu?: () => void;
+  /** Keyboard Delete/Backspace. Kept apart from onContextMenu, which means "details"
+   *  in the grid but "remove" in the tray. Omit where there is nothing to remove. */
+  onRemove?: () => void;
+  /** Keyboard "i": full details. */
+  onDetails?: () => void;
   onHover?: (card: UnitCard, anchor: DOMRect) => void;
   onHoverEnd?: () => void;
   /** Touch peek: show the simplified stat card. On coarse-pointer devices this
@@ -75,6 +82,15 @@ export interface MedallionProps {
   pickRate?: ReactNode;
 }
 
+/** True when an element's focus came from the keyboard (not a click or tap). */
+function isKeyboardFocus(el: Element): boolean {
+  try {
+    return el.matches(":focus-visible");
+  } catch {
+    return true; // no :focus-visible support: keep the old focus-shows-card behaviour
+  }
+}
+
 /** Oval unit portrait used in the grid, build tray, and details modal. */
 export function Medallion({
   card,
@@ -91,7 +107,10 @@ export function Medallion({
   hideName = false,
   showSpeed = false,
   onClick,
+  activateLabel = "add",
   onContextMenu,
+  onRemove,
+  onDetails,
   onHover,
   onHoverEnd,
   onPeek,
@@ -100,7 +119,6 @@ export function Medallion({
   ledByGeneral = false,
   pickRate,
 }: MedallionProps) {
-  const [failed, setFailed] = useState(false);
   const coarse = isCoarsePointer();
   // The peek stat card needs the tapped medallion's on-screen position so it can
   // spawn clear of the unit (upper half when the unit is low on the screen). Read
@@ -119,10 +137,20 @@ export function Medallion({
   const longPressAction = peekActive && peekOn === "longpress" ? () => onPeek!(card, anchorRect()) : onContextMenu;
   const longPress = useLongPress(longPressAction);
   const icon = assetUrl(card.icon);
+  // Remember *which* icon failed, so a new card (e.g. a general swapped into the same
+  // tray slot, same React key) gets a fresh try instead of inheriting the fallback.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const failed = failedSrc !== null && failedSrc === icon;
   const badge = assetUrl(card.guerrillaBadge);
   // A general occupying the staff slot is tracked separately from instance qty,
   // so count it as one taken to show e.g. 1/1 instead of 0/1 once selected.
   const capShown = inStaffSlot ? Math.max(capCount ?? qty, 1) : capCount ?? qty;
+  // Advertise only the shortcuts this medallion actually has.
+  const keyHints = [
+    onClick && `Enter to ${activateLabel}`,
+    onRemove && "Delete to remove",
+    onDetails && "i for details",
+  ].filter(Boolean);
 
   return (
     <div
@@ -137,11 +165,11 @@ export function Medallion({
       aria-pressed={selected || inStaffSlot}
       aria-label={`${card.name}. ${CLASS_LABELS[card.unitClass] ?? card.unitClass}. Cost ${card.cost}. ${
         selected || inStaffSlot ? `Selected${qty > 1 ? `, quantity ${qty}` : ""}` : "Not selected"
-      }. Enter to add, Delete to remove, i for details.`}
+      }.${keyHints.length ? ` ${keyHints.join(", ")}.` : ""}`}
       {...longPress.handlers}
       onClick={() => {
-        // Swallow the click the browser fires right after a touch long-press.
-        if (longPress.wasRecent()) return;
+        // Swallow the click the browser fires on release after a touch long-press.
+        if (longPress.suppressing()) return;
         // On touch, a tray medallion's tap opens the peek card instead of its
         // desktop click action (which is "show full details").
         if (peekActive && peekOn === "tap") {
@@ -155,33 +183,37 @@ export function Medallion({
         e.preventDefault();
         // On Android a long-press also synthesizes contextmenu; the hook already
         // fired the callback, so ignore the duplicate.
-        if (longPress.wasRecent()) return;
+        if (longPress.suppressing()) return;
         onContextMenu();
       }}
-      // Desktop hover shows the stat card. On touch a tap synthesizes a
-      // `mouseenter`, which would pop that same card on every select — gate the
-      // hover path off on coarse pointers (touch uses the explicit peek gesture
-      // instead). Desktop mice keep hover-shows-tooltip.
-      onMouseEnter={(e) => !coarse && onHover?.(card, e.currentTarget.getBoundingClientRect())}
-      onMouseLeave={() => !coarse && onHoverEnd?.()}
-      // On touch, a tap focuses the medallion — firing this would pop the hover
-      // card on every select. Gate the focus-tooltip path off on coarse pointers;
-      // desktop keyboard users (fine pointer) keep focus-shows-tooltip.
-      onFocus={(e) => !coarse && onHover?.(card, e.currentTarget.getBoundingClientRect())}
+      // Desktop hover shows the stat card — for a real mouse only. A touch tap
+      // synthesizes `mouseenter` (even on an iPad that reports a fine pointer), which
+      // would pop the card on every select and leave it stuck; pointer events say
+      // which kind of pointer it was. Touch uses the explicit peek gesture instead.
+      onPointerEnter={(e) => e.pointerType === "mouse" && onHover?.(card, e.currentTarget.getBoundingClientRect())}
+      onPointerLeave={(e) => e.pointerType === "mouse" && onHoverEnd?.()}
+      // Keyboard focus shows the same card. A tap or click also focuses the
+      // medallion, so only a keyboard-style (:focus-visible) focus counts, and never
+      // on coarse pointers.
+      onFocus={(e) => !coarse && isKeyboardFocus(e.currentTarget) && onHover?.(card, e.currentTarget.getBoundingClientRect())}
       onBlur={() => !coarse && onHoverEnd?.()}
       onKeyDown={(e) => {
         // Only keys aimed at the medallion itself — never ones typed on a child
         // control (the ★ swap badge), which owns its own Enter/Space.
         if (e.target !== e.currentTarget) return;
+        // A modal owns the keyboard: a medallion left focused behind one must not
+        // act (the modal's own medallion, inside it, is inert anyway).
+        const modal = document.querySelector('[aria-modal="true"]');
+        if (modal && !modal.contains(e.currentTarget)) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           onClick?.();
-        } else if (e.key === "Delete" || e.key === "Backspace") {
+        } else if ((e.key === "Delete" || e.key === "Backspace") && onRemove) {
           e.preventDefault();
-          onContextMenu?.();
-        } else if (e.key === "i") {
+          onRemove();
+        } else if (e.key === "i" && onDetails) {
           e.preventDefault();
-          onContextMenu?.();
+          onDetails();
         }
       }}
     >
@@ -212,7 +244,7 @@ export function Medallion({
         title={overCorps ? "From a 5th+ army corps — the game rolls only 4 together" : undefined}
       >
         {icon && !failed ? (
-          <img className="icon" src={icon} alt="" loading="lazy" onError={() => setFailed(true)} />
+          <img className="icon" src={icon} alt="" loading="lazy" onError={() => setFailedSrc(icon)} />
         ) : (
           <div className="fallback" aria-hidden>
             {ABBR[card.unitClass] ?? card.unitClass}

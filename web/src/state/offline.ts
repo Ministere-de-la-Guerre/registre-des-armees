@@ -3,12 +3,18 @@
 // The service worker runtime-caches whatever the user browses, but that is
 // implicit and evictable. This module lets the user *explicitly* pull a faction's
 // JSON + every icon it references into the Cache API, under a data-version-keyed
-// cache the SW also reads from (see src/sw.ts `caches.match`), and records a
+// cache the SW also reads from (see src/sw.ts `cacheFirst`), and records a
 // marker so the UI can show which factions are fully downloaded. Everything is a
 // no-op when the Cache API is unavailable (e.g. inside Electron / private mode).
 
 import { assetUrl, dataUrl } from "../data/assets";
-import { dataVersionKey, offlineCacheName, type DataVersion } from "../data/version";
+import {
+  OFFLINE_FETCH_HEADER,
+  dataVersionKey,
+  offlineCacheName,
+  runtimeCacheName,
+  type DataVersion,
+} from "../data/version";
 import type { FactionRoster } from "../domain/types";
 
 export function offlineSupported(): boolean {
@@ -44,9 +50,17 @@ function rosterAssetUrls(roster: FactionRoster): string[] {
   return [...set];
 }
 
+/** Completion marker, under this deployment's base path (not the bare origin):
+ *  the stable and beta sites share the github.io origin, and an origin-rooted
+ *  marker would be the same URL for both. Only ever looked up in this
+ *  deployment's current-key offline cache. */
 function markerUrl(versionKey: string, factionKey: string): string {
-  const origin = globalThis.location?.origin ?? "";
-  return `${origin}/__offline__/${versionKey}/${encodeURIComponent(factionKey)}`;
+  const rel = assetUrl(`__offline__/${versionKey}/${encodeURIComponent(factionKey)}`)!;
+  return new URL(rel, globalThis.location?.href ?? "http://localhost/").toString();
+}
+
+async function currentOfflineCache(key: string): Promise<Cache> {
+  return caches.open(offlineCacheName(key));
 }
 
 export interface DownloadProgress {
@@ -71,8 +85,10 @@ export async function downloadFactionOffline(
   const urls = [dataUrl(`factions/${roster.factionKey}.json`), ...rosterAssetUrls(roster)];
   const total = urls.length;
   let cache: Cache;
+  let runtime: Cache;
   try {
-    cache = await caches.open(offlineCacheName(key));
+    cache = await currentOfflineCache(key);
+    runtime = await caches.open(runtimeCacheName(key));
   } catch (e) {
     // caches.open can reject (quota / private-mode). Report it instead of leaving
     // the caller's promise rejected — a rejection wedges the button at "Saving 0%".
@@ -89,14 +105,18 @@ export async function downloadFactionOffline(
       try {
         // Only a hit in the DURABLE offline cache counts as already-saved. An
         // asset sitting in the evictable runtime cache (from ordinary browsing) is
-        // promoted into the offline cache so it can't silently vanish later.
+        // MOVED into the offline cache so it can't silently vanish later — and so
+        // it isn't stored twice. Only the current key's runtime cache is a valid
+        // source: a copy from an older data version may be stale.
         const already = await cache.match(url);
         if (!already) {
-          const runtime = await caches.match(url);
-          if (runtime) {
-            await cache.put(url, runtime);
+          const browsed = await runtime.match(url);
+          if (browsed) {
+            await cache.put(url, browsed);
+            await runtime.delete(url);
           } else {
-            const res = await fetch(url, { cache: "no-store" });
+            // The header keeps the SW from also filing this in the runtime cache.
+            const res = await fetch(url, { cache: "no-store", headers: { [OFFLINE_FETCH_HEADER]: "1" } });
             if (res.ok) await cache.put(url, res.clone());
             else failed++;
           }
@@ -111,6 +131,12 @@ export async function downloadFactionOffline(
   const CONCURRENCY = 6;
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, total) }, worker));
 
+  // The marker means "fully downloaded": a partial run must not earn one, or the
+  // topbar shows ✓ Offline and "Download all" skips a faction with missing icons.
+  // Everything that did land stays cached, so a retry only fetches the gaps.
+  if (failed > 0) {
+    return { ok: false, cached: total - failed, total, error: `${failed} file(s) failed to download` };
+  }
   try {
     await cache.put(
       markerUrl(key, roster.factionKey),
@@ -124,7 +150,7 @@ export async function downloadFactionOffline(
     // the button at "Saving 100%" with no recovery.
     return { ok: false, cached: total - failed, total, error: `Couldn't finalize the offline save: ${String(e)}` };
   }
-  return { ok: failed === 0, cached: total - failed, total, error: failed ? `${failed} file(s) failed to download` : undefined };
+  return { ok: true, cached: total, total };
 }
 
 export interface DownloadAllProgress {
@@ -166,11 +192,11 @@ export async function downloadAllFactionsOffline(
     }
     const factionKey = factionKeys[i];
     opts.onProgress?.({ index: i + 1, total, factionKey });
-    if (await isFactionOffline(factionKey)) {
-      result.skipped++;
-      continue;
-    }
     try {
+      if (await isFactionOffline(factionKey)) {
+        result.skipped++;
+        continue;
+      }
       const roster = await loadRoster(factionKey);
       const res = await downloadFactionOffline(roster, (perFaction) =>
         opts.onProgress?.({ index: i + 1, total, factionKey, perFaction }),
@@ -187,14 +213,15 @@ export async function downloadAllFactionsOffline(
 export async function isFactionOffline(factionKey: string): Promise<boolean> {
   if (!offlineSupported()) return false;
   const key = await getDataVersionKey();
-  return !!(await caches.match(markerUrl(key, factionKey)));
+  const cache = await currentOfflineCache(key);
+  return !!(await cache.match(markerUrl(key, factionKey)));
 }
 
 /** Faction keys currently marked as fully downloaded (for the current data version). */
 export async function listOfflineFactions(): Promise<string[]> {
   if (!offlineSupported()) return [];
   const key = await getDataVersionKey();
-  const cache = await caches.open(offlineCacheName(key));
+  const cache = await currentOfflineCache(key);
   const prefix = markerUrl(key, "");
   const keys = await cache.keys();
   return keys
@@ -208,7 +235,7 @@ export async function listOfflineFactions(): Promise<string[]> {
 export async function removeFactionOffline(factionKey: string): Promise<void> {
   if (!offlineSupported()) return;
   const key = await getDataVersionKey();
-  const cache = await caches.open(offlineCacheName(key));
+  const cache = await currentOfflineCache(key);
   await cache.delete(markerUrl(key, factionKey));
   await cache.delete(dataUrl(`factions/${factionKey}.json`));
 }

@@ -14,9 +14,15 @@ export function FactionOfflineButton({ roster }: { roster: FactionRoster }) {
   useEffect(() => {
     let alive = true;
     setState("checking");
-    void isFactionOffline(roster.factionKey).then((saved) => {
-      if (alive) setState(saved ? "saved" : "idle");
-    });
+    isFactionOffline(roster.factionKey)
+      .then((saved) => {
+        if (alive) setState(saved ? "saved" : "idle");
+      })
+      .catch(() => {
+        // Cache API refused (quota / storage blocked): don't wedge the button at
+        // "checking" — offer the save, which reports its own error if it fails.
+        if (alive) setState("idle");
+      });
     return () => {
       alive = false;
     };

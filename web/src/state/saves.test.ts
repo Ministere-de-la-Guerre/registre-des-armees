@@ -154,3 +154,78 @@ describe("resolve + dirty", () => {
     expect(isDirty(changed, saved)).toBe(true);
   });
 });
+
+describe("stored-list safety", () => {
+  const KEY = "rda.savedBuilds";
+
+  it("keeps unknown fields and unreadable entries when writing", () => {
+    const adapter = new MemoryStorageAdapter();
+    const foreign = { id: "b_future", factionKey: "f", instances: ["a"], name: "Future", notes: "from a newer build" };
+    const junk = { not: "a build" };
+    adapter.write(KEY, JSON.stringify([foreign, junk]));
+    const repo = new BuildRepository(adapter);
+
+    repo.save(buildToSaved(current(build(["b"])), { name: "New" }));
+    repo.rename("b_future", "Renamed");
+
+    const stored = JSON.parse(adapter.read(KEY)!) as Record<string, unknown>[];
+    expect(stored).toHaveLength(3);
+    expect(stored).toContainEqual(junk);
+    const future = stored.find((e) => e.id === "b_future")!;
+    expect(future.notes).toBe("from a newer build");
+    expect(future.name).toBe("Renamed");
+  });
+
+  it("saving over an entry keeps the fields this version does not know", () => {
+    const adapter = new MemoryStorageAdapter();
+    adapter.write(KEY, JSON.stringify([{ id: "b_1", factionKey: "f", instances: ["a"], name: "X", notes: "keep me" }]));
+    const repo = new BuildRepository(adapter);
+    repo.save({ ...repo.get("b_1")!, instances: ["a", "b"] });
+    const stored = JSON.parse(adapter.read(KEY)!) as Record<string, unknown>[];
+    expect(stored).toHaveLength(1);
+    expect(stored[0].notes).toBe("keep me");
+    expect(stored[0].instances).toEqual(["a", "b"]);
+  });
+
+  it("never overwrites an unreadable stored value without backing it up", () => {
+    const adapter = new MemoryStorageAdapter();
+    adapter.write(KEY, "{not an array");
+    const repo = new BuildRepository(adapter);
+    const result = repo.save(buildToSaved(current(build(["a"])), { name: "After" }));
+    expect(result.ok).toBe(true);
+    expect(result.warning).toMatch(/couldn't be read/);
+    expect(repo.list().map((b) => b.name)).toEqual(["After"]);
+    const backupKey = /“(.+)”/.exec(result.warning!)![1];
+    expect(adapter.read(backupKey)).toBe("{not an array");
+  });
+
+  it("refuses the write when the backup itself fails", () => {
+    const store = new Map<string, string>([[KEY, "{corrupt"]]);
+    const adapter: StorageAdapter = {
+      available: true,
+      read: (k) => store.get(k) ?? null,
+      write: (): StorageResult => ({ ok: false, error: "Storage quota exceeded." }),
+      remove: () => {},
+    };
+    const result = new BuildRepository(adapter).save(buildToSaved(current(build(["a"])), { name: "X" }));
+    expect(result.ok).toBe(false);
+    expect(store.get(KEY)).toBe("{corrupt");
+  });
+
+  it("gives an id-less legacy entry a stable id so it can be renamed and deleted", () => {
+    const adapter = new MemoryStorageAdapter();
+    adapter.write(KEY, JSON.stringify([{ factionKey: "f", selection: { a: 1 }, name: "Old" }]));
+    const repo = new BuildRepository(adapter);
+    const [first] = repo.list();
+    expect(repo.list()[0].id).toBe(first.id);
+    repo.rename(first.id, "Renamed");
+    expect(repo.get(first.id)?.name).toBe("Renamed");
+    repo.remove(first.id);
+    expect(repo.list()).toEqual([]);
+  });
+
+  it("clamps absurd legacy selection counts", () => {
+    const migrated = migrateSavedBuild({ factionKey: "f", selection: { a: 1e9, b: 5 } });
+    expect(migrated!.instances.length).toBeLessThanOrEqual(64);
+  });
+});

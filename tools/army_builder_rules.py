@@ -361,6 +361,11 @@ def group_discount(total: GroupTotal) -> int:
     return total.roster_cost * (total.required_count - 1) // 100
 
 
+# Mirrors the game's Lua (NTW3.FactionIsGermanStates): a "g" in the fourth key
+# component. The 9.6 tables renamed the 18 old "g" corps (fg5, ag6, gp7, ...) to
+# x<N>, so this never matches a shipped corps -- and that matches the game:
+# in-game, Bernadotte I.C 1805 (was a05_fg5_090) with its staff general and all
+# of division I prices at 4477, the x1 total (x1.5 would give 4335).
 def is_german_states(faction_key: str) -> bool:
     parts = faction_key.split("_")
     return len(parts) >= 4 and "g" in parts[3]

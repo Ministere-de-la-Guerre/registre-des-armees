@@ -43,6 +43,13 @@ THRESHOLDS = {"minSampleForPercent": 5, "autoInclude": 85, "contested": 25, "rar
 #: `Napoleon: Total War 1.3.0 (Final Release; Build 2081 (Curator); …` -> "1.3.0 (Build 2081)"
 BUILD_RE = re.compile(r"Total War\s+([\d.]+).*?Build\s+(\d+)")
 
+#: army_units.csv column telling apart two armies of one battle (the army's position in
+#: the parsed battle). A corps can be fielded twice in one battle, and each is a build:
+#: `n` counts army appearances, so `b` must too, or the rate and copies-per-build skew.
+ARMY_ID_COLUMN = "army_index"
+#: armies.csv column naming who fielded the army, for the scoped player count.
+PLAYER_COLUMN = "player"
+
 
 def load(name: str) -> list[dict]:
     path = STATS / name
@@ -130,17 +137,22 @@ def build_season(season_id: str, label: str, recorded: str) -> dict:
     reg_copies: dict[str, Counter[str]] = defaultdict(Counter)
     reg_officer_builds: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
 
-    for row in load("army_units.csv"):
+    army_units = load("army_units.csv")
+    if army_units and ARMY_ID_COLUMN not in army_units[0]:
+        print(f"warning: army_units.csv has no {ARMY_ID_COLUMN!r} column; a corps fielded "
+              "twice in one battle counts as one build there")
+    for row in army_units:
         key = row["army_key"]
         if not in_scope(key) or row["resolved"] != "True":
             continue
-        battle, unit_key, base = row["battle_id"], row["unit_key"], row["base_unit_key"]
-        builds_with[key][unit_key].add(battle)
+        army = f'{row["battle_id"]}#{row.get(ARMY_ID_COLUMN, "")}'
+        unit_key, base = row["unit_key"], row["base_unit_key"]
+        builds_with[key][unit_key].add(army)
         copies[key][unit_key] += 1
-        reg_builds[key][base].add(battle)
+        reg_builds[key][base].add(army)
         reg_copies[key][base] += 1
         if row["is_commander"] == "True":
-            reg_officer_builds[key][base].add(battle)
+            reg_officer_builds[key][base].add(army)
 
     for key, per_unit in builds_with.items():
         if key not in corps:
@@ -148,19 +160,26 @@ def build_season(season_id: str, label: str, recorded: str) -> dict:
         # Zero-pick cards are omitted; the reader infers "never picked" from the corps
         # having a sample plus a matching roster stamp.
         corps[key]["units"] = {
-            unit_key: {"b": len(battles), "t": copies[key][unit_key]}
-            for unit_key, battles in sorted(per_unit.items())
+            unit_key: {"b": len(builds), "t": copies[key][unit_key]}
+            for unit_key, builds in sorted(per_unit.items())
         }
         corps[key]["regiments"] = {
             base: {
-                "b": len(battles),
+                "b": len(builds),
                 "t": reg_copies[key][base],
                 "c": len(reg_officer_builds[key].get(base, ())),
             }
-            for base, battles in sorted(reg_builds[key].items())
+            for base, builds in sorted(reg_builds[key].items())
         }
 
     in_scope_armies = [r for r in armies if in_scope(r["army_key"])]
+    # Players who fielded an in-scope army, like battles and armies below; players.csv
+    # spans the whole corpus, Custom Armies and TOW included.
+    if not in_scope_armies or PLAYER_COLUMN in in_scope_armies[0]:
+        player_count = len({r[PLAYER_COLUMN] for r in in_scope_armies if r[PLAYER_COLUMN]})
+    else:
+        print(f"warning: armies.csv has no {PLAYER_COLUMN!r} column; players counts the whole corpus")
+        player_count = len(players)
     return {
         "schemaVersion": 2,
         "id": season_id,
@@ -169,7 +188,7 @@ def build_season(season_id: str, label: str, recorded: str) -> dict:
         "corpus": {
             "battles": len({r["battle_id"] for r in in_scope_armies}),
             "armies": len(in_scope_armies),
-            "players": len(players),
+            "players": player_count,
             "recorded": recorded,
         },
         "scope": {
@@ -183,10 +202,15 @@ def build_season(season_id: str, label: str, recorded: str) -> dict:
     }
 
 
+def natural_key(name: str) -> list:
+    """`season-9` before `season-10`: digit runs compare as numbers, not text."""
+    return [(0, int(p), "") if p.isdigit() else (1, 0, p) for p in re.split(r"(\d+)", name)]
+
+
 def write_index(seasons_dir: Path) -> dict:
     """Rebuild the index from whatever season files are present, newest label last."""
     seasons = []
-    for path in sorted(seasons_dir.glob("*.json")):
+    for path in sorted(seasons_dir.glob("*.json"), key=lambda p: natural_key(p.name)):
         if path.name == "index.json":
             continue
         data = json.loads(path.read_text(encoding="utf-8"))

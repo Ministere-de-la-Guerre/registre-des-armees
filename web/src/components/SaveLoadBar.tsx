@@ -12,6 +12,7 @@ import {
   importBuildJson,
   resolveSavedBuild,
 } from "../state/saves";
+import type { StorageResult } from "../state/storage";
 
 export function SaveLoadBar({
   roster,
@@ -100,9 +101,9 @@ export function SaveLoadBar({
   // Only surface builds saved for the corps currently open.
   const corpsSaves = saves.filter((s) => s.factionKey === roster.factionKey);
 
-  const persistAndReport = (result: { ok: boolean; error?: string }, okMsg: string) => {
+  const persistAndReport = (result: StorageResult, okMsg: string) => {
     refresh();
-    onMessage(result.ok ? okMsg : `Not saved: ${result.error ?? "storage error"}.`);
+    onMessage(result.ok ? (result.warning ? `${okMsg} ${result.warning}` : okMsg) : `Not saved: ${result.error ?? "storage error"}.`);
     return result.ok;
   };
 

@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { calculateArmyCost } from "../rules/rules";
+import type { UnitCard } from "../domain/types";
 import { makeRoster, makeUnit } from "../test/factories";
 import {
   type BuildState,
   addWouldExceedBudget,
   staffGeneralAction,
   autoPickCombatGenerals,
+  divisionFillPlan,
   evaluateAdd,
+  evaluateSetCommander,
+  fillDivision,
   generalSwapFor,
   hasCombatGeneralInstances,
   indexRoster,
   priceBuild,
   resetCombatGenerals,
+  summarize,
   swapInstanceUnit,
   unitsWithCombatGenerals,
 } from "./build";
@@ -190,8 +195,8 @@ describe("autoPickCombatGenerals", () => {
     const idx = roster();
     const { replacements } = autoPickCombatGenerals(idx, b(["a", "bb"]), 4);
     expect(replacements).toEqual([
-      { instanceId: "i1", generalUnitKey: "bb_com" },
       { instanceId: "i0", generalUnitKey: "a_com" },
+      { instanceId: "i1", generalUnitKey: "bb_com" },
     ]);
   });
 
@@ -270,10 +275,10 @@ describe("autoPickCombatGenerals", () => {
 
   it("upgrades artillery units without tripping the class cap (a swap is class-neutral)", () => {
     // Two foot-artillery units fill the foot-artillery cap of 2; replacing each with
-    // its combat general keeps the foot-artillery count unchanged, so both upgrade.
+    // its (cheaper) combat general keeps the foot-artillery count unchanged, so both upgrade.
     const af = (unitKey: string, group: string, isGen = false) =>
       makeUnit({
-        unitKey, factionKey: FK, cost: 400, cap: 9, groupCap: 9, capGroupKey: group, baseUnitKey: group,
+        unitKey, factionKey: FK, cost: isGen ? 350 : 400, cap: 9, groupCap: 9, capGroupKey: group, baseUnitKey: group,
         unitClass: isGen ? "general" : "artillery_foot", underlyingUnitClass: "artillery_foot",
         isGeneral: isGen, generalKind: isGen ? "combat" : null,
       });
@@ -550,5 +555,218 @@ describe("staffGeneralAction", () => {
     expect(staffGeneralAction(i, build, staff)).toBe("recruit");
     // Recruiting: 9,500 + 1,000 = 10,500 -> over. A swap would have read as affordable.
     expect(addWouldExceedBudget(i, build, staff)).toBe(true);
+  });
+});
+
+describe("evaluateSetCommander", () => {
+  // Default test faction is "_ac_" rated 5, so the combat-general cap is 4.
+  const gen = (unitKey: string, kind: "staff" | "combat", partial: Partial<UnitCard> = {}) =>
+    makeUnit({
+      unitKey, unitClass: "general", isGeneral: true, generalKind: kind, menRaw: kind === "staff" ? 32 : 80,
+      cap: 1, groupCap: 1, placement: null, ...partial,
+    });
+
+  it("blocks a second staff general when one is already recruited as a unit", () => {
+    const idx = indexRoster(makeRoster([gen("s1", "staff"), gen("s2", "staff")]));
+    expect(evaluateSetCommander(idx, b(["s1"]), idx.byKey.get("s2")!)?.reason).toMatch(/one staff general/i);
+  });
+
+  it("blocks a 32nd card, but lets a commander swap keep the build at 31", () => {
+    const filler = makeUnit({ unitKey: "f", cost: 10, cap: 99, groupCap: 99 });
+    const idx = indexRoster(makeRoster([filler, gen("s1", "staff"), gen("s2", "staff")]));
+    const full = Array.from({ length: 31 }, () => "f");
+    expect(evaluateSetCommander(idx, b(full), idx.byKey.get("s1")!)?.reason).toMatch(/full/i);
+    expect(evaluateSetCommander(idx, b(full.slice(1), "s2"), idx.byKey.get("s1")!)).toBeNull();
+  });
+
+  it("counts an artillery-led combat general against the foot-artillery cap", () => {
+    const art = makeUnit({ unitKey: "art", unitClass: "artillery_foot", underlyingUnitClass: "artillery_foot", cap: 9, groupCap: 9 });
+    const artCom = gen("gun_com", "combat", { underlyingUnitClass: "artillery_foot", capGroupKey: "gun", baseUnitKey: "gun" });
+    const idx = indexRoster(makeRoster([art, artCom]));
+    expect(evaluateSetCommander(idx, b(["art", "art"]), artCom)?.reason).toMatch(/foot-artillery/i);
+  });
+
+  it("blocks a combat general whose unit's shared cap is already full (no free formation copy)", () => {
+    // (Real combat-general keys end in _com_<n>, which the rules engine's cap groups key on.)
+    // Brigade A + B, cap 1 each. Commanding with A's combat general on top of A would
+    // count A twice toward the division and earn a discount the game never grants.
+    const a = makeUnit({ unitKey: "a", placement: { division: 1, brigade: 1 } });
+    const bb = makeUnit({ unitKey: "bb", placement: { division: 1, brigade: 2 } });
+    const aCom = gen("a_com_1", "combat", { capGroupKey: "a", baseUnitKey: "a", placement: { division: 1, brigade: 1 } });
+    const idx = indexRoster(makeRoster([a, bb, aCom]));
+    expect(evaluateSetCommander(idx, b(["a"]), aCom)?.reason).toMatch(/shared cap/i);
+    expect(evaluateSetCommander(idx, b(["bb"]), aCom)).toBeNull();
+  });
+
+  it("blocks a second combat general for a unit that already has one", () => {
+    const u = makeUnit({ unitKey: "u", cap: 3, groupCap: 3 });
+    const c1 = gen("u_com_1", "combat", { capGroupKey: "u", baseUnitKey: "u", cap: 3, groupCap: 3 });
+    const c2 = gen("u_com_2", "combat", { capGroupKey: "u", baseUnitKey: "u", cap: 3, groupCap: 3 });
+    const idx = indexRoster(makeRoster([u, c1, c2]));
+    expect(evaluateSetCommander(idx, b(["u", "u_com_1"]), c2)?.reason).toMatch(/one combat general/i);
+  });
+
+  it("always allows clearing the slot, and moving a recruited general into it", () => {
+    const c = gen("c", "combat");
+    const idx = indexRoster(makeRoster([c, gen("s", "staff")]));
+    expect(evaluateSetCommander(idx, b([], "c"), c)).toBeNull();
+    expect(evaluateSetCommander(idx, b(["c"]), c)).toBeNull();
+  });
+
+  it("does not blame the commander for a limit an imported build already breaks", () => {
+    const art = makeUnit({ unitKey: "art", unitClass: "artillery_foot", underlyingUnitClass: "artillery_foot", cap: 9, groupCap: 9 });
+    const idx = indexRoster(makeRoster([art, gen("s", "staff")]));
+    expect(evaluateSetCommander(idx, b(["art", "art", "art"]), idx.byKey.get("s")!)).toBeNull();
+  });
+
+  it("refuses a non-general", () => {
+    const u = makeUnit({ unitKey: "u" });
+    const idx = indexRoster(makeRoster([u]));
+    expect(evaluateSetCommander(idx, b([]), u)?.reason).toMatch(/general/i);
+  });
+});
+
+describe("summarize", () => {
+  it("reports a build the rules engine can't check as invalid, not as legal", () => {
+    // An imported save whose staff slot names a plain unit.
+    const u = makeUnit({ unitKey: "u", cap: 9, groupCap: 9 });
+    const c = makeUnit({ unitKey: "c", unitClass: "general", isGeneral: true, generalKind: "combat", menRaw: 80, capGroupKey: "u", baseUnitKey: "u", cap: 9, groupCap: 9 });
+    const idx = indexRoster(makeRoster([u, c]));
+    const summary = summarize(idx, b(["u", "c"], "u"));
+    expect(summary.limits.valid).toBe(false);
+    expect(summary.violationMessages[0]).toMatch(/can't be checked/i);
+    expect(summary.limits.counts.combat_generals_against_cap).toBe(1);
+  });
+
+  it("labels the staff-general limit", () => {
+    const s = (k: string) => makeUnit({ unitKey: k, unitClass: "general", isGeneral: true, generalKind: "staff", menRaw: 32, placement: null });
+    const idx = indexRoster(makeRoster([s("s1"), s("s2")]));
+    const summary = summarize(idx, b(["s1"], "s2"));
+    expect(summary.violationMessages).toContain("Staff generals: 2 selected, maximum is 1.");
+  });
+});
+
+describe("autoPickCombatGenerals — exact search", () => {
+  const FK = "ntw3_ac_test_x5_001";
+  const unit = (key: string, cost: number, cap: number, brigade: number) =>
+    makeUnit({ unitKey: key, factionKey: FK, cost, cap, groupCap: cap, placement: { division: 1, brigade } });
+  const general = (key: string, group: string, cost: number, cap: number, brigade: number) =>
+    makeUnit({
+      unitKey: key, factionKey: FK, cost, cap, groupCap: cap, capGroupKey: group, baseUnitKey: group,
+      isGeneral: true, generalKind: "combat", unitClass: "general", menRaw: 80, placement: { division: 1, brigade },
+    });
+  const apply = (build: BuildState, replacements: { instanceId: string; generalUnitKey: string }[]) =>
+    replacements.reduce((acc, r) => swapInstanceUnit(acc, r.instanceId, r.generalUnitKey), build);
+
+  it("picks the copies whose swap unlocks a discount, not just the first copies", () => {
+    // Brigade 1 = u3×2 + u2×2 + u1 (roster 10,500, 5 copies → 420 discount); u0×2 sits
+    // in brigade 2. Swapping the *first* u3/u2 copies (the old greedy pick) leaves the
+    // later copies over budget (16,800); swapping the *second* copies lets them in and
+    // completes brigade 1 (16,800 − 420).
+    const idx = indexRoster(makeRoster([
+      unit("u0", 3900, 2, 2), unit("u1", 2500, 1, 1), unit("u2", 2200, 2, 1), unit("u3", 1800, 2, 1),
+      general("u2_com", "u2", 1500, 2, 1), general("u3_com", "u3", 1000, 2, 1),
+    ], FK));
+    const build = b(["u3", "u2", "u1", "u0", "u3", "u2", "u0"]);
+    expect(priceBuild(idx, apply(build, [
+      { instanceId: "i0", generalUnitKey: "u3_com" },
+      { instanceId: "i1", generalUnitKey: "u2_com" },
+    ])).finalCost).toBe(16800);
+    const { replacements } = autoPickCombatGenerals(idx, build, 2);
+    expect(replacements).toEqual([
+      { instanceId: "i4", generalUnitKey: "u3_com" },
+      { instanceId: "i5", generalUnitKey: "u2_com" },
+    ]);
+    expect(priceBuild(idx, apply(build, replacements)).finalCost).toBe(16380);
+  });
+
+  it("never spends a slot on a swap that doesn't lower the cost", () => {
+    const idx = indexRoster(makeRoster([unit("a", 500, 2, 1), general("a_com", "a", 500, 2, 1)], FK));
+    expect(autoPickCombatGenerals(idx, b(["a"]), 4).replacements).toEqual([]);
+  });
+
+  it("falls back to greedy on a large candidate space and still only takes savings", () => {
+    // 31 distinct units, each with a cheaper general, and a cap of 8: far too many
+    // swap sets to price exhaustively. Greedy takes the eight biggest savings.
+    const cards = [];
+    for (let i = 0; i < 31; i++) {
+      cards.push(makeUnit({ unitKey: `u${i}`, factionKey: "ntw3_zz_test_001", cost: 300 }));
+      cards.push(makeUnit({
+        unitKey: `u${i}_com`, factionKey: "ntw3_zz_test_001", cost: 300 - i, capGroupKey: `u${i}`, baseUnitKey: `u${i}`,
+        isGeneral: true, generalKind: "combat", unitClass: "general", menRaw: 80,
+      }));
+    }
+    const idx = indexRoster(makeRoster(cards, "ntw3_zz_test_001"));
+    const build = b(Array.from({ length: 31 }, (_, i) => `u${i}`));
+    const { replacements } = autoPickCombatGenerals(idx, build, 8);
+    expect(replacements.map((r) => r.generalUnitKey).sort()).toEqual(
+      ["u23_com", "u24_com", "u25_com", "u26_com", "u27_com", "u28_com", "u29_com", "u30_com"],
+    );
+  });
+});
+
+describe("addWouldExceedBudget follows the affordability replay", () => {
+  it("does not flag a copy that fits beside the affordable cards and earns its discount", () => {
+    // e (9,000) is affordable, big (3,000) is not, x (500) is. A 2nd x still fits the
+    // affordable running total (9,500 + 500) and completes x's brigade for a discount,
+    // so it must not read as over budget even though the paid total is already 12,500.
+    const FK = "ntw3_ac_test_x5_001";
+    const u = (unitKey: string, cost: number, brigade: number, cap = 1) =>
+      makeUnit({ unitKey, factionKey: FK, cost, cap, groupCap: cap, placement: { division: 1, brigade } });
+    const idx = indexRoster(makeRoster([u("e", 9000, 9), u("big", 3000, 8), u("x", 500, 1, 2)], FK));
+    const build = b(["e", "big", "x"]);
+    expect(addWouldExceedBudget(idx, build, idx.byKey.get("x")!)).toBe(false);
+    const after = priceBuild(idx, b(["e", "big", "x", "x"]));
+    expect(after.completedGroups.some((g) => g.groupType === "brigade" && g.brigadeId === 1)).toBe(true);
+    // A copy that doesn't fit is still flagged.
+    expect(addWouldExceedBudget(idx, build, idx.byKey.get("big")!)).toBe(true);
+  });
+});
+
+describe("take entire division", () => {
+  const FK = "ntw3_ac_test_x5_001";
+  const u = (unitKey: string, cost: number, division: number, brigade: number, cap = 1, partial: Partial<UnitCard> = {}) =>
+    makeUnit({ unitKey, factionKey: FK, cost, cap, groupCap: cap, placement: { division, brigade }, ...partial });
+  const roster = () =>
+    indexRoster(makeRoster([
+      u("x", 800, 1, 2, 2),
+      u("y", 600, 1, 2),
+      u("z", 700, 1, 1),
+      u("x_com", 900, 1, 2, 2, { capGroupKey: "x", baseUnitKey: "x", isGeneral: true, generalKind: "combat", unitClass: "general", menRaw: 80 }),
+      u("staff", 400, 1, 1, 1, { isGeneral: true, generalKind: "staff", unitClass: "general", menRaw: 32 }),
+      u("w", 500, 2, 1),
+      u("f1", 300, 1, 3, 3, { unitClass: "artillery_foot", underlyingUnitClass: "artillery_foot" }),
+    ], FK));
+
+  it("lists every plain unit of the division up to its cap, brigade by brigade in grid order", () => {
+    const idx = roster();
+    expect(divisionFillPlan(idx, b([]), 1).map((c) => c.unitKey)).toEqual(["z", "x", "x", "y", "f1", "f1", "f1"]);
+  });
+
+  it("tops up a partial division, counting a combat general as a copy of its unit", () => {
+    const idx = roster();
+    expect(divisionFillPlan(idx, b(["x_com", "z"]), 1).map((c) => c.unitKey)).toEqual(["x", "y", "f1", "f1", "f1"]);
+    expect(divisionFillPlan(idx, b(["w"]), 2)).toEqual([]);
+  });
+
+  it("adds through the normal limits, skipping what a cap refuses", () => {
+    const idx = roster();
+    const fill = fillDivision(idx, b(["w"]), 1, 4);
+    expect(fill.wanted).toBe(7);
+    expect(fill.added.map((c) => c.unitKey)).toEqual(["z", "x", "x", "y", "f1", "f1"]);
+    expect(fill.blockedReasons).toEqual(["Foot-artillery limit (2) reached."]);
+    expect(fill.build.instances.map((i) => i.unitKey)).toEqual(["w", "z", "x", "x", "y", "f1", "f1"]);
+    // The division is complete once filled (the refused third gun aside, the count is
+    // what matters: 6 of 7 copies here, so it is not).
+    expect(priceBuild(idx, fill.build).completedGroups.some((g) => g.groupType === "division" && g.divisionId === 1)).toBe(false);
+  });
+
+  it("completes the division's discount when nothing is refused", () => {
+    const idx = indexRoster(makeRoster([u("x", 800, 1, 2, 2), u("y", 600, 1, 1)], FK));
+    const fill = fillDivision(idx, b([]), 1, 4);
+    expect(fill.added).toHaveLength(3);
+    expect(priceBuild(idx, fill.build).completedGroups).toEqual([
+      expect.objectContaining({ groupType: "division", divisionId: 1 }),
+    ]);
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { UnitCard } from "../domain/types";
 import { makeRoster, makeUnit } from "../test/factories";
 import { type BuildState, indexRoster, makeInstanceId } from "./build";
@@ -407,9 +407,24 @@ describe("build-derived roll helpers", () => {
   const cards = [staff("081"), staff("082"), combat("081", "c1"), towUnit("081", "line"), towUnit("082", "line")];
   const index = indexRoster(makeRoster(cards, "ntw3_tow_a03_x8_032"));
 
-  it("collects distinct source corps a build draws from, including the staff slot", () => {
+  it("collects distinct source corps a build draws from", () => {
     const build = buildOf([cards[3].unitKey, cards[4].unitKey], cards[0].unitKey);
     expect(towSourceCorpsIdsInBuild(build, index)).toEqual(["081", "082"]);
+  });
+
+  it("ignores staff generals' corps — ToWFgenerals offers every staff general", () => {
+    // Commander from 082, units only from 081: the roll needs only 081.
+    expect(towSourceCorpsIdsInBuild(buildOf([cards[3].unitKey], cards[1].unitKey), index)).toEqual(["081"]);
+    // Same for a staff general recruited as a unit under a combat commander.
+    expect(towSourceCorpsIdsInBuild(buildOf([cards[3].unitKey, cards[1].unitKey], cards[2].unitKey), index)).toEqual([
+      "081",
+    ]);
+  });
+
+  it("counts a combat general in the staff slot like any combat general", () => {
+    const build = buildOf([cards[4].unitKey], cards[2].unitKey);
+    expect(towSourceCorpsIdsInBuild(build, index)).toEqual(["082", "081"]);
+    expect(towCombatGeneralKeysInBuild(build, index)).toEqual([cards[2].unitKey]);
   });
 
   it("collects only combat generals from the build, ignoring staff generals", () => {
@@ -444,11 +459,21 @@ describe("towCorpsCeiling", () => {
     expect(isCardOverCorpsCeiling(lineOf("085"), c)).toBe(true);
   });
 
-  it("tallies selected copies per corps including the staff slot", () => {
+  it("tallies selected copies per corps, leaving out the staff commander", () => {
     const build = buildOf([lineOf("081").unitKey, lineOf("081").unitKey], staff("082").unitKey);
     const c = towCorpsCeiling(build, index);
     expect(c.counts.get("081")).toBe(2);
-    expect(c.counts.get("082")).toBe(1);
+    expect(c.counts.has("082")).toBe(false);
+  });
+
+  it("is not over with four unit corps and a commander from a fifth", () => {
+    const build = buildOf(["081", "082", "083", "084"].map((id) => lineOf(id).unitKey), staff("085").unitKey);
+    const c = towCorpsCeiling(build, index);
+    expect(c.count).toBe(4);
+    expect(c.over).toBe(false);
+    // Staff generals are never over the ceiling; a fifth corps' units still are.
+    expect(isCardOverCorpsCeiling(staff("086"), c)).toBe(false);
+    expect(isCardOverCorpsCeiling(lineOf("085"), c)).toBe(true);
   });
 
   it("marks a would-be fifth corps over only once four are already used", () => {
@@ -502,9 +527,56 @@ describe("findTowBuildRollTime", () => {
     expect(corpsOnly.closest?.getTime() ?? null).toBe(combi.closest?.getTime() ?? null);
   });
 
+  it("finds a window for four unit corps under a commander from a fifth corps", () => {
+    const withLines = [...cards, ...["081", "082", "083", "084"].map((id) => towUnit(id, "line"))];
+    const index = indexRoster(makeRoster(withLines, "ntw3_tow_a03_x8_032"));
+    const staff085 = withLines.find((c) => c.unitKey.includes("_staff_085_"))!;
+    const lines = withLines.filter((c) => !c.isGeneral).map((c) => c.unitKey);
+    const build = buildOf(lines, staff085.unitKey);
+    const corps = towSourceCorpsIdsInBuild(build, index);
+    expect(corps).toEqual(["081", "082", "083", "084"]);
+    const now = new Date(2026, 5, 23, 14, 20);
+    const result = findTowBuildRollTime(withLines, corps, towCombatGeneralKeysInBuild(build, index), now);
+    expect(result.closest).not.toBeNull();
+    // The staff commander is offered in that window even though 085 did not roll.
+    expect(rollTowArmy(withLines, result.closest!).generalKeys.staffKeys).toContain(staff085.unitKey);
+  });
+
   it("returns no window for an impossible corps id", () => {
     const result = findTowBuildRollTime(cards, ["999"], [], new Date(2026, 5, 23, 14));
     expect(result.closest).toBeNull();
     expect(result.closestCombatGeneralKeys).toBeNull();
+  });
+});
+
+// DST: on a spring-forward day the window after the skipped hour must not send the
+// scan back to midnight (which returned a "future" match hours in the past).
+describe("TOW roll scan across a DST gap", () => {
+  const cards = ["081", "082", "083", "084", "085", "086", "087"].map((id) => staff(id));
+  let savedTz: string | undefined;
+  beforeEach(() => {
+    savedTz = process.env.TZ;
+    process.env.TZ = "Europe/Athens";
+    // Precondition: 29 Mar 2026 is 23 h long there (03:00 → 04:00).
+    expect(new Date(2026, 2, 30).getTime() - new Date(2026, 2, 29).getTime()).toBe(23 * 3_600_000);
+  });
+  afterEach(() => {
+    if (savedTz === undefined) delete process.env.TZ;
+    else process.env.TZ = savedTz;
+  });
+
+  it("keeps next ahead of and prev behind the current window, for every single corps", () => {
+    const now = new Date(2026, 2, 29, 4, 30); // just after the skipped 03:00
+    const cur = new Date(2026, 2, 29, 4, 0);
+    for (const id of ["081", "082", "083", "084", "085", "086", "087"]) {
+      const r = findTowCorpsCombinationTime(cards, [id], now, "contains");
+      expect(r.next).not.toBeNull();
+      expect(r.prev).not.toBeNull();
+      expect(r.next!.getTime()).toBeGreaterThanOrEqual(cur.getTime());
+      expect(r.prev!.getTime()).toBeLessThan(cur.getTime());
+      // Within a few days either way — never wrapped round the year.
+      expect(r.next!.getTime() - now.getTime()).toBeLessThan(7 * 86_400_000);
+      expect(now.getTime() - r.prev!.getTime()).toBeLessThan(7 * 86_400_000);
+    }
   });
 });

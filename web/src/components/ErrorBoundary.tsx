@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { applyUpdate } from "../pwa";
 
 interface Props {
   children: ReactNode;
@@ -60,7 +61,10 @@ export class ErrorBoundary extends Component<Props, State> {
         >
           {error.message}
         </pre>
-        <button className="btn primary" onClick={() => window.location.reload()}>
+        {/* applyUpdate activates a waiting service worker before reloading (a
+            plain reload would not under registerType "prompt"); with no update
+            waiting — or in Electron — it is just a reload. */}
+        <button className="btn primary" onClick={applyUpdate}>
           Reload
         </button>
       </div>

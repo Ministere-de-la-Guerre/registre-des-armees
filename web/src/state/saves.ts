@@ -37,6 +37,20 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+/** Stable id for a stored entry that has none (very old saves). A random one
+ *  would differ on every list(), so Rename / Delete could never find the entry
+ *  again — the repository rewrites entries verbatim rather than re-migrating. */
+function legacyId(raw: Record<string, unknown>): string {
+  const text = JSON.stringify(raw);
+  let h = 0x811c9dc5; // FNV-1a
+  for (let i = 0; i < text.length; i += 1) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+  return `b_legacy_${(h >>> 0).toString(36)}`;
+}
+
+// A build holds at most 31 cards; a v1 `selection` count far beyond that is
+// corrupt, and expanding e.g. 1e9 copies would freeze the tab.
+const MAX_MIGRATED_COPIES = 64;
+
 /** Coerce an unknown persisted record into a SavedBuild, migrating older shapes. */
 export function migrateSavedBuild(raw: unknown): SavedBuild | null {
   if (!raw || typeof raw !== "object") return null;
@@ -51,7 +65,8 @@ export function migrateSavedBuild(raw: unknown): SavedBuild | null {
   } else if (r.selection && typeof r.selection === "object" && !Array.isArray(r.selection)) {
     for (const [k, v] of Object.entries(r.selection as Record<string, unknown>)) {
       const n = typeof v === "number" ? v : Number(v);
-      for (let i = 0; i < Math.floor(Number.isFinite(n) ? n : 0); i += 1) instances.push(k);
+      const copies = Math.min(Math.floor(Number.isFinite(n) ? n : 0), MAX_MIGRATED_COPIES - instances.length);
+      for (let i = 0; i < copies; i += 1) instances.push(k);
     }
   } else if (Array.isArray(r.selection)) {
     instances = (r.selection as unknown[]).filter((k): k is string => typeof k === "string");
@@ -62,7 +77,7 @@ export function migrateSavedBuild(raw: unknown): SavedBuild | null {
   const cfg = (r.config ?? {}) as Record<string, unknown>;
   return {
     saveFormatVersion: SAVE_FORMAT_VERSION,
-    id: typeof r.id === "string" ? r.id : makeId(),
+    id: typeof r.id === "string" ? r.id : legacyId(r),
     name: typeof r.name === "string" && r.name ? r.name : "Untitled build",
     createdAt: typeof r.createdAt === "string" ? r.createdAt : nowIso(),
     updatedAt: typeof r.updatedAt === "string" ? r.updatedAt : nowIso(),
@@ -165,12 +180,24 @@ export function exportAllBuilds(repo: BuildRepository): BuildsBackup {
 
 export interface ImportSummary {
   imported: number;
+  /** Unreadable entries, or ones the store refused (see `error`). */
   skipped: number;
+  /** Entries whose copy on this device was edited more recently than the backup. */
+  keptNewer: number;
+  error?: string;
+}
+
+function stampOf(iso: string | undefined): number {
+  const t = iso ? Date.parse(iso) : NaN;
+  return Number.isFinite(t) ? t : 0;
 }
 
 /** Merge a backup file into the repo, by id. Accepts a full backup object, a bare
  *  array of builds, or a single build — each entry migrated through the same path
- *  as normal loads, so older exports import cleanly. */
+ *  as normal loads, so older exports import cleanly. An entry never replaces a
+ *  copy on this device that was updated more recently: restoring an old backup
+ *  must not silently revert the edits made since (those are counted in
+ *  `keptNewer` instead). */
 export function importAllBuilds(repo: BuildRepository, text: string): ImportSummary | null {
   let parsed: unknown;
   try {
@@ -184,17 +211,41 @@ export function importAllBuilds(repo: BuildRepository, text: string): ImportSumm
     : record && Array.isArray(record.builds)
       ? (record.builds as unknown[])
       : [parsed];
-  let imported = 0;
-  let skipped = 0;
+  const existing = new Map(repo.list().map((b) => [b.id, b]));
+  const summary: ImportSummary = { imported: 0, skipped: 0, keptNewer: 0 };
   for (const raw of rawBuilds) {
     const build = migrateSavedBuild(raw);
-    if (build && repo.save(build).ok) imported += 1;
-    else skipped += 1;
+    if (!build) {
+      summary.skipped += 1;
+      continue;
+    }
+    // migrateSavedBuild stamps a missing updatedAt with "now"; an undated entry
+    // must count as the oldest possible, not the newest.
+    const dated = typeof (raw as Record<string, unknown>).updatedAt === "string";
+    const current = existing.get(build.id);
+    if (current && stampOf(current.updatedAt) > (dated ? stampOf(build.updatedAt) : 0)) {
+      summary.keptNewer += 1;
+      continue;
+    }
+    const result = repo.save(build);
+    if (result.ok) {
+      summary.imported += 1;
+      existing.set(build.id, build);
+    } else {
+      summary.skipped += 1;
+    }
+    summary.error ??= result.error ?? result.warning;
   }
-  return { imported, skipped };
+  return summary;
 }
 
-/** Repository over a StorageAdapter. Components use this, never localStorage. */
+/** Repository over a StorageAdapter. Components use this, never localStorage.
+ *
+ *  Writes edit the stored array entry by entry and leave every other entry
+ *  byte-for-byte as it was. The key is shared by the stable and beta web builds
+ *  (same origin), so a newer build's fields, or an entry this version can't
+ *  read, must survive an older build saving next to them — re-serializing
+ *  everything through migrateSavedBuild used to drop both. */
 export class BuildRepository {
   constructor(private adapter: StorageAdapter = defaultStorageAdapter()) {}
 
@@ -202,19 +253,26 @@ export class BuildRepository {
     return this.adapter.available;
   }
 
-  list(): SavedBuild[] {
+  /** The stored array, or `unreadable` when the key holds something else. */
+  private readStored(): { entries: unknown[] } | { unreadable: string } {
     const raw = this.adapter.read(STORAGE_KEY);
-    if (!raw) return [];
+    if (!raw) return { entries: [] };
     try {
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      return parsed
-        .map(migrateSavedBuild)
-        .filter((b): b is SavedBuild => b !== null)
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) return { entries: parsed };
     } catch {
-      return [];
+      /* fall through */
     }
+    return { unreadable: raw };
+  }
+
+  list(): SavedBuild[] {
+    const stored = this.readStored();
+    if (!("entries" in stored)) return [];
+    return stored.entries
+      .map(migrateSavedBuild)
+      .filter((b): b is SavedBuild => b !== null)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
   get(id: string): SavedBuild | undefined {
@@ -231,24 +289,57 @@ export class BuildRepository {
     );
   }
 
-  private writeAll(builds: SavedBuild[]): StorageResult {
-    return this.adapter.write(STORAGE_KEY, JSON.stringify(builds));
+  /** Apply `edit` to the stored entries and write them back. If the stored value
+   *  can't be parsed, it is first copied aside under its own key — the write
+   *  that follows would otherwise destroy the only copy — and the write is
+   *  refused if that copy can't be made. */
+  private update(edit: (entries: unknown[]) => unknown[]): StorageResult {
+    const stored = this.readStored();
+    let warning: string | undefined;
+    let entries: unknown[];
+    if ("entries" in stored) {
+      entries = stored.entries;
+    } else {
+      const backupKey = `${STORAGE_KEY}.unreadable-${Date.now()}`;
+      const backup = this.adapter.write(backupKey, stored.unreadable);
+      if (!backup.ok) {
+        return {
+          ok: false,
+          error: "the existing saved builds couldn't be read, and were left untouched rather than overwritten",
+        };
+      }
+      entries = [];
+      warning = `The previously saved builds couldn't be read; they were kept under “${backupKey}”.`;
+    }
+    const result = this.adapter.write(STORAGE_KEY, JSON.stringify(edit(entries)));
+    return warning && result.ok ? { ...result, warning } : result;
   }
 
-  /** Insert or update by id. */
+  /** Insert or update by id. Fields this version doesn't know about are kept. */
   save(build: SavedBuild): StorageResult {
-    const all = this.list().filter((b) => b.id !== build.id);
-    all.push(build);
-    return this.writeAll(all);
+    return this.update((entries) => {
+      const next: unknown[] = [];
+      let replaced = false;
+      for (const e of entries) {
+        if (migrateSavedBuild(e)?.id !== build.id) next.push(e);
+        else if (!replaced) {
+          next.push({ ...(e as Record<string, unknown>), ...build });
+          replaced = true;
+        } // (a later duplicate of the same id is dropped, as before)
+      }
+      if (!replaced) next.push(build);
+      return next;
+    });
   }
 
   remove(id: string): StorageResult {
-    return this.writeAll(this.list().filter((b) => b.id !== id));
+    return this.update((entries) => entries.filter((e) => migrateSavedBuild(e)?.id !== id));
   }
 
   rename(id: string, name: string): StorageResult {
-    const all = this.list().map((b) => (b.id === id ? { ...b, name, updatedAt: nowIso() } : b));
-    return this.writeAll(all);
+    return this.update((entries) =>
+      entries.map((e) => (migrateSavedBuild(e)?.id === id ? { ...(e as Record<string, unknown>), id, name, updatedAt: nowIso() } : e)),
+    );
   }
 
   duplicate(id: string): { result: StorageResult; copy?: SavedBuild } {

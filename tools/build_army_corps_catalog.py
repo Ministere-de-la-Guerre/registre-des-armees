@@ -109,6 +109,10 @@ def source_flag_directory(flags_root: Path, source_row: dict[str, str]) -> Path:
 
 
 def contingent_code(source_key: str) -> str:
+    """The contingent segment of a corps key (``fg5`` in ntw3_ac_a05_fg5_095);
+    empty for non-corps factions such as custom armies."""
+    if identity(source_key) is None:
+        return ""
     return source_key.split("_")[3]
 
 
@@ -117,6 +121,8 @@ def clean_flag_donor(
     flags_root: Path,
 ) -> dict[str, str] | None:
     target_code = contingent_code(source_row["key"])
+    if not target_code:
+        return None
     target_index = int(source_row["index"])
     candidates = [
         row for row in source_corps.values()
@@ -152,7 +158,15 @@ def display_numbers(name: str) -> tuple[int | None, int | None]:
     return None, int(rating.group("rating")) if rating else None
 
 
-def copy_selection_flag(source_dir: Path, destination_dir: Path) -> tuple[str, str, str, str]:
+def published_path(path: Path, destination_dir: Path, published_dir: Path | None) -> str:
+    """Repo-relative path a written file will have once the build is published."""
+    final = (published_dir or destination_dir) / path.relative_to(destination_dir)
+    return final.relative_to(ROOT).as_posix()
+
+
+def copy_selection_flag(
+    source_dir: Path, destination_dir: Path, published_dir: Path | None = None,
+) -> tuple[str, str, str, str]:
     source = next(
         (source_dir / name for name in (
             "mini_flag.tga", "id_flag_infantry.tga", "id_flag_cavalry.tga",
@@ -179,13 +193,13 @@ def copy_selection_flag(source_dir: Path, destination_dir: Path) -> tuple[str, s
         prepared.save(tga)
         prepared.save(png)
     return (
-        source.name, method, tga.relative_to(ROOT).as_posix(),
-        png.relative_to(ROOT).as_posix(),
+        source.name, method, published_path(tga, destination_dir, published_dir),
+        published_path(png, destination_dir, published_dir),
     )
 
 
 def copy_post_selection_flag(
-    source_dir: Path, destination_dir: Path
+    source_dir: Path, destination_dir: Path, published_dir: Path | None = None,
 ) -> tuple[str, str, str]:
     source = source_dir / "flag_132.tga"
     if not source.is_file():
@@ -196,8 +210,8 @@ def copy_post_selection_flag(
     with Image.open(source) as image:
         image.save(png)
     return (
-        source.name, tga.relative_to(ROOT).as_posix(),
-        png.relative_to(ROOT).as_posix(),
+        source.name, published_path(tga, destination_dir, published_dir),
+        published_path(png, destination_dir, published_dir),
     )
 
 
@@ -206,17 +220,74 @@ def main() -> None:
     parser.add_argument("--flags-root", type=Path, default=DEFAULT_FLAGS)
     args = parser.parse_args()
 
+    # Validate every input before touching the tracked output tree.
+    if not args.flags_root.is_dir():
+        raise SystemExit(
+            f"Flags root not found: {args.flags_root} "
+            "(pass --flags-root <NTW3 graphic/ui/flags directory>)"
+        )
     main_factions = load_main_factions()
+    if not main_factions:
+        raise SystemExit(f"No factions in {MAIN_CSV}; run build_ntw3_army_builder_database.py first.")
     source_corps, source_standard = load_source_factions()
     rows: list[dict[str, object]] = []
     missing_source: list[str] = []
     missing_flags: list[str] = []
     flag_source_counts: dict[str, int] = defaultdict(int)
-    post_selection_count = 0
 
+    # Build into a sibling staging tree and only swap it in once everything
+    # succeeded, so a failed run never leaves the published assets wiped.
+    staging = OUTPUT.with_name(OUTPUT.name + ".staging")
+    if staging.exists():
+        shutil.rmtree(staging)
+    try:
+        build_flags(
+            args.flags_root, main_factions, source_corps, source_standard, staging,
+            rows, missing_source, missing_flags, flag_source_counts,
+        )
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    post_selection_count = sum(1 for row in rows if row["post_selection_flag_source_file"])
+    if not rows or missing_source or missing_flags:
+        shutil.rmtree(staging, ignore_errors=True)
+        write_report(rows, main_factions, missing_source, missing_flags, flag_source_counts, post_selection_count)
+        raise SystemExit("Catalog validation failed; see report. Existing assets left untouched.")
+
+    finalize_rows(rows)
+    fields = list(rows[0])
+    with CATALOG_CSV.open("w", newline="", encoding="utf-8-sig") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    grouped: dict[str, dict[str, list[dict[str, object]]]] = defaultdict(lambda: defaultdict(list))
+    for row in rows:
+        grouped[str(row["side"])][str(row["theatre_name"])].append(row)
+    CATALOG_JSON.write_text(
+        json.dumps(grouped, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
+
+    retired = OUTPUT.with_name(OUTPUT.name + ".old")
+    if retired.exists():
+        shutil.rmtree(retired)
     if OUTPUT.exists():
-        shutil.rmtree(OUTPUT)
+        OUTPUT.rename(retired)
+    staging.rename(OUTPUT)
+    shutil.rmtree(retired, ignore_errors=True)
 
+    write_report(rows, main_factions, missing_source, missing_flags, flag_source_counts, post_selection_count)
+    print(f"Wrote {len(rows)} corps to {CATALOG_CSV}")
+    print(f"Assets: {OUTPUT}")
+
+
+def build_flags(
+    flags_root: Path, main_factions: dict[str, str],
+    source_corps: dict[tuple[str, str, str, int], dict[str, str]],
+    source_standard: dict[str, dict[str, str]], staging: Path,
+    rows: list[dict[str, object]], missing_source: list[str], missing_flags: list[str],
+    flag_source_counts: dict[str, int],
+) -> None:
     for faction_key, main_name in main_factions.items():
         parsed = identity(faction_key)
         if parsed is None:
@@ -228,31 +299,33 @@ def main() -> None:
             continue
 
         side, theatre_order, theatre_name, theatre_basis = theatre_for(faction_key)
-        destination = OUTPUT / side / f"{theatre_order:04d}_{slug(theatre_name)}" / faction_key
-        source_dir = source_flag_directory(args.flags_root, source_row)
+        relative = Path(side) / f"{theatre_order:04d}_{slug(theatre_name)}" / faction_key
+        destination = staging / relative
+        published = OUTPUT / relative
+        source_dir = source_flag_directory(flags_root, source_row)
         selection_source_row = source_row
         try:
             flag_source_file, flag_derivation, tga_path, png_path = copy_selection_flag(
-                source_dir, destination
+                source_dir, destination, published
             )
         except FileNotFoundError:
-            donor = clean_flag_donor(source_row, source_corps, args.flags_root)
+            donor = clean_flag_donor(source_row, source_corps, flags_root)
             if donor is None:
                 missing_flags.append(faction_key)
                 continue
             selection_source_row = donor
             flag_source_file, flag_derivation, tga_path, png_path = copy_selection_flag(
-                source_flag_directory(args.flags_root, donor), destination
+                source_flag_directory(flags_root, donor), destination, published
             )
             flag_derivation = "same_contingent_donor_" + flag_derivation
 
-        variants = sorted(path.name for path in source_dir.iterdir() if path.is_file())
+        variants = sorted(
+            path.name for path in source_dir.iterdir() if path.is_file()
+        ) if source_dir.is_dir() else []
         flag_source_counts[flag_source_file] += 1
         post_source, post_tga_path, post_png_path = copy_post_selection_flag(
-            source_dir, destination
+            source_dir, destination, published
         )
-        if post_source:
-            post_selection_count += 1
         display_name = main_name or html.unescape(source_row["screen_name"])
         display_year, display_rating = display_numbers(display_name)
         rows.append({
@@ -281,6 +354,9 @@ def main() -> None:
             "post_selection_flag_png_path": post_png_path,
         })
 
+
+def finalize_rows(rows: list[dict[str, object]]) -> None:
+    """Assign per-theatre display order and sort the catalog."""
     theatre_rows: dict[tuple[str, str], list[dict[str, object]]] = defaultdict(list)
     for row in rows:
         theatre_rows[(str(row["side"]), str(row["theatre_name"]))].append(row)
@@ -304,19 +380,13 @@ def main() -> None:
         int(row["theatre_order"]), int(row["theatre_display_order"]),
         str(row["faction_key"]),
     ))
-    fields = list(rows[0])
-    with CATALOG_CSV.open("w", newline="", encoding="utf-8-sig") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields)
-        writer.writeheader()
-        writer.writerows(rows)
 
-    grouped: dict[str, dict[str, list[dict[str, object]]]] = defaultdict(lambda: defaultdict(list))
-    for row in rows:
-        grouped[str(row["side"])][str(row["theatre_name"])].append(row)
-    CATALOG_JSON.write_text(
-        json.dumps(grouped, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
 
+def write_report(
+    rows: list[dict[str, object]], main_factions: dict[str, str], missing_source: list[str],
+    missing_flags: list[str], flag_source_counts: dict[str, int], post_selection_count: int,
+) -> None:
+    REPORT.parent.mkdir(parents=True, exist_ok=True)
     inferred = sorted({str(row["theatre_name"]) for row in rows if row["theatre_basis"] == "source_block_inference"})
     REPORT.write_text("\n".join([
         "NTW3 army-corps theatre and flag validation",
@@ -340,11 +410,6 @@ def main() -> None:
         "Missing flags:",
         *(missing_flags or ["none"]),
     ]) + "\n", encoding="utf-8")
-
-    if missing_source or missing_flags:
-        raise SystemExit("Catalog validation failed; see report.")
-    print(f"Wrote {len(rows)} corps to {CATALOG_CSV}")
-    print(f"Assets: {OUTPUT}")
 
 
 if __name__ == "__main__":

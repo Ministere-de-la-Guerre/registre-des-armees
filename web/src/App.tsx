@@ -32,7 +32,9 @@ export default function App() {
   const [replaySession, setReplaySession] = useState<ReplaySession>(emptyReplaySession);
 
   // PWA plumbing (web target only; a no-op inside the Electron desktop app).
-  const [needRefresh, setNeedRefresh] = useState(false);
+  // "waiting": a new version is ready to apply. "elsewhere": another tab applied
+  // it, so this tab is still on the old code and should reload when convenient.
+  const [pendingUpdate, setPendingUpdate] = useState<"waiting" | "elsewhere" | null>(null);
   const [showOffline, setShowOffline] = useState(false);
   const web = isWebTarget();
 
@@ -56,7 +58,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    registerPwa({ onNeedRefresh: () => setNeedRefresh(true) });
+    registerPwa({
+      onNeedRefresh: () => setPendingUpdate("waiting"),
+      onUpdatedElsewhere: () => setPendingUpdate("elsewhere"),
+    });
   }, []);
 
   // factionKey → display name, for the offline panel's downloaded-factions list.
@@ -76,16 +81,21 @@ export default function App() {
     return [...keys];
   }, [index]);
 
+  // Bumped per openCorps/back so a slow load that finishes after the user has
+  // moved on (Back, or Retry) can't install a roster for the wrong corps.
+  const rosterRequest = useRef(0);
+
   const openCorps = (entry: CorpsEntry, saved: SavedBuild | null = null) => {
+    const request = ++rosterRequest.current;
     setSelected(entry);
     setRoster(null);
     setError(null);
     setPendingSaved(saved);
     setLoadingRoster(true);
     loadFaction(entry.factionKey)
-      .then(setRoster)
-      .catch((e) => setError(String(e)))
-      .finally(() => setLoadingRoster(false));
+      .then((r) => request === rosterRequest.current && setRoster(r))
+      .catch((e) => request === rosterRequest.current && setError(String(e)))
+      .finally(() => request === rosterRequest.current && setLoadingRoster(false));
   };
 
   /** Open one army out of a replay in the full builder, then come back here. */
@@ -95,8 +105,11 @@ export default function App() {
   };
 
   const back = () => {
+    rosterRequest.current++;
     setSelected(null);
     setRoster(null);
+    setError(null);
+    setLoadingRoster(false);
     setPendingSaved(null);
     setScreen(returnToReplay ? "replay" : "corps");
     setReturnToReplay(false);
@@ -140,7 +153,23 @@ export default function App() {
         )}
       </div>
 
-      {error && <div className="error-box">⚠ {error}</div>}
+      {error && (
+        <div className="error-box">
+          ⚠ {error}
+          {/* A failed faction load leaves no builder and no picker on screen, so
+              the way out has to live here. */}
+          {selected && !roster && (
+            <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 14 }}>
+              <button className="btn small" onClick={() => openCorps(selected, pendingSaved)}>
+                Retry
+              </button>
+              <button className="btn ghost small" onClick={back}>
+                ← Back
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {!selected && screen === "replay" && (
         <ReplayScreen
@@ -186,7 +215,17 @@ export default function App() {
           allFactionKeys={allFactionKeys}
         />
       )}
-      {needRefresh && <UpdateToast onReload={applyUpdate} onDismiss={() => setNeedRefresh(false)} />}
+      {pendingUpdate && (
+        <UpdateToast
+          message={
+            pendingUpdate === "elsewhere"
+              ? "The app was updated in another tab. Reload to finish updating."
+              : undefined
+          }
+          onReload={applyUpdate}
+          onDismiss={() => setPendingUpdate(null)}
+        />
+      )}
     </div>
   );
 }

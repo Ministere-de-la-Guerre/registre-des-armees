@@ -3,18 +3,21 @@ import type { FactionRoster } from "../domain/types";
 import { towCorpsNameMap } from "../domain/towCorpsNames";
 import type { BuildState, RosterIndex } from "../state/build";
 import {
+  LEGACY_TOW_MAX_COMBAT_GENERALS,
+  LEGACY_TOW_MAX_SOURCE_CORPS,
   findTowBuildRollTime,
+  findTowCorpsCombinationTime,
   towCombatGeneralKeysInBuild,
   towSourceCorpsIdsInBuild,
 } from "../state/towRoll";
-import { fmtDateTime, fmtRel, windowRange } from "./rollTimeFormat";
+import { fmtDateTime, fmtRel, useRollClock, windowRange } from "./rollTimeFormat";
 import { DirectionBadge } from "./DirectionBadge";
 
 /** Theatres-of-War "Generate times" popup. Unlike the Corps roll menu (which
  *  times whatever corps you toggle on), this times the build you actually made:
  *  the nearest local window whose in-game roll offers every source corps your
- *  selected units come from AND every combat general you used. Opening the popup
- *  runs the search once against a single reference clock. */
+ *  selected units come from AND every combat general you used. The search re-runs
+ *  whenever the local clock enters a new window. */
 export function TowGenerateModal({
   roster,
   index,
@@ -39,12 +42,25 @@ export function TowGenerateModal({
   const targetCorps = useMemo(() => towSourceCorpsIdsInBuild(build, index), [build, index]);
   const targetGenerals = useMemo(() => towCombatGeneralKeysInBuild(build, index), [build, index]);
 
-  // Captured once when the popup opens so the whole readout shares one clock.
-  const now = useMemo(() => new Date(), []);
+  // One clock for the whole readout: the search follows `searchNow` (moves when the
+  // window rolls over), relative times follow `now` (ticks each minute).
+  const { now, searchNow } = useRollClock();
   const result = useMemo(
-    () => (targetCorps.length ? findTowBuildRollTime(roster.cards, targetCorps, targetGenerals, now) : null),
-    [roster.cards, targetCorps, targetGenerals, now],
+    () => (targetCorps.length ? findTowBuildRollTime(roster.cards, targetCorps, targetGenerals, searchNow) : null),
+    [roster.cards, targetCorps, targetGenerals, searchNow],
   );
+
+  // Why no window fits, when none does: too many corps for one roll, too many
+  // combat generals for one roll, corps that roll together but never with these
+  // combat generals, or corps that never roll together at all.
+  const noWindowReason = useMemo((): "corps-count" | "general-count" | "generals" | "corps" | null => {
+    if (!result || result.closest) return null;
+    if (targetCorps.length > LEGACY_TOW_MAX_SOURCE_CORPS) return "corps-count";
+    if (targetGenerals.length > LEGACY_TOW_MAX_COMBAT_GENERALS) return "general-count";
+    if (targetGenerals.length === 0) return "corps";
+    const corpsOnly = findTowCorpsCombinationTime(roster.cards, targetCorps, searchNow, "contains");
+    return corpsOnly.closest ? "generals" : "corps";
+  }, [result, roster.cards, targetCorps, targetGenerals, searchNow]);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -71,8 +87,9 @@ export function TowGenerateModal({
         <div className="modal-body">
           {!result ? (
             <div className="rot-note">
-              Your build has no Theatres-of-War units yet. Select the units you want from the grid, then
-              reopen this to find the nearest in-game time that lets you recruit them.
+              Your build has no Theatres-of-War units that depend on the roll yet (staff generals are
+              offered in every window). Select the units you want from the grid, then reopen this to find
+              the nearest in-game time that lets you recruit them.
             </div>
           ) : (
             <div className="tow-times">
@@ -136,9 +153,13 @@ export function TowGenerateModal({
                   ) : (
                     <div className="rot-note rot-never">
                       No window in the yearly rotation offers this whole build together.{" "}
-                      {result.targetCombatGeneralKeys.length > 0
-                        ? "Your combat generals can't all be rolled alongside these corps — try fewer combat generals or fewer corps."
-                        : "Try selecting units from fewer corps."}
+                      {noWindowReason === "corps-count"
+                        ? `Your units come from ${result.targetSourceCorpsIds.length} corps, but a roll holds only ${LEGACY_TOW_MAX_SOURCE_CORPS} — select units from fewer corps.`
+                        : noWindowReason === "general-count"
+                          ? `Your build uses ${result.targetCombatGeneralKeys.length} combat generals, but a roll offers only ${LEGACY_TOW_MAX_COMBAT_GENERALS} — use fewer combat generals.`
+                          : noWindowReason === "generals"
+                            ? "These corps do roll together, but never alongside all of your combat generals — try fewer combat generals."
+                            : "These corps never roll together — try units from a different set of corps."}
                     </div>
                   )}
                 </div>

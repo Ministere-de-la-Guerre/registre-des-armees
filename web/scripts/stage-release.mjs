@@ -59,10 +59,23 @@ mkdirSync(destDir, { recursive: true });
 // shipping a stale latest.yml would point the updater at the wrong version.
 const latestYmlPath = join(releaseDir, "latest.yml");
 if (existsSync(latestYmlPath)) {
-  const stampedVersion = /^version:\s*(.+)$/m.exec(readFileSync(latestYmlPath, "utf8"))?.[1]?.trim();
+  const latestYml = readFileSync(latestYmlPath, "utf8");
+  const stampedVersion = /^version:\s*(.+)$/m.exec(latestYml)?.[1]?.trim();
   if (stampedVersion !== version) {
     console.error(`web/release/latest.yml is version ${stampedVersion ?? "(unreadable)"}, not ${version}.`);
     console.error(`It is stale from an earlier build. Re-run the ${channel} build for ${version} first.`);
+    process.exit(1);
+  }
+  // Same version is not enough: stable and beta can share a version number, and a
+  // latest.yml left by the OTHER channel's build would send this channel's
+  // clients looking for an installer that isn't in the release. Every file it
+  // names (`path:` and each `url:`) must be this channel's Setup .exe.
+  const setupExe = required[0];
+  const named = [...latestYml.matchAll(/^\s*(?:-\s*)?(?:url|path):\s*['"]?([^'"\r\n]+?)['"]?\s*$/gm)].map((m) => m[1]);
+  const wrong = named.filter((n) => n !== setupExe);
+  if (named.length === 0 || wrong.length > 0) {
+    console.error(`web/release/latest.yml does not point at ${setupExe} (it names: ${named.join(", ") || "nothing"}).`);
+    console.error(`It is from a different channel's build. Re-run the ${channel} build for ${version} first.`);
     process.exit(1);
   }
 }

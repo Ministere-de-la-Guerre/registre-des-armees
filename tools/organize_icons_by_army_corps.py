@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import csv
 import re
 import shutil
@@ -59,7 +60,33 @@ def destination_for(row: dict[str, str]) -> tuple[Path, str, str, str]:
     return destination, corps_key, division, brigade
 
 
+def stale_files(expected: set[Path]) -> list[Path]:
+    """Files under OUTPUT_DIR that the current database no longer places there."""
+    if not OUTPUT_DIR.is_dir():
+        return []
+    return sorted(
+        path for path in OUTPUT_DIR.rglob("*")
+        if path.is_file() and path.resolve() not in expected
+    )
+
+
+def prune(paths: list[Path]) -> None:
+    for path in paths:
+        path.unlink()
+    # Remove directories emptied by the prune (deepest first).
+    for directory in sorted((p for p in OUTPUT_DIR.rglob("*") if p.is_dir()), reverse=True):
+        if not any(directory.iterdir()):
+            directory.rmdir()
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--prune", action="store_true",
+        help="delete organized icons the current database no longer places "
+             "(otherwise they are only counted in the summary)",
+    )
+    args = parser.parse_args()
     rows = read_rows()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -135,6 +162,10 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(manifest_rows)
 
+    stale = stale_files({path.resolve() for path in seen_destinations})
+    if args.prune:
+        prune(stale)
+
     corps_directories = [path for path in OUTPUT_DIR.iterdir() if path.is_dir() and path.name != "TOW"]
     summary_lines = [
         "NTW3 icon organization by army corps",
@@ -148,6 +179,7 @@ def main() -> None:
         f"renamed_collision_copies: {counters['renamed_collision_copy']}",
         f"missing_icon_references: {counters['missing_icon_reference']}",
         f"missing_source_files: {counters['missing_source_file']}",
+        f"stale_files_{'pruned' if args.prune else 'found (rerun with --prune to delete)'}: {len(stale)}",
         f"output_directory: {OUTPUT_DIR.relative_to(PROJECT_ROOT).as_posix()}",
         f"manifest: {MANIFEST_PATH.relative_to(PROJECT_ROOT).as_posix()}",
     ]

@@ -4,14 +4,16 @@
 // Shell + small stable assets are precached (revisioned by the build). The heavy,
 // content-stable payload — per-faction JSON and the 13.6k unit icons — is cached
 // at runtime, cache-first, keyed by the data-version stamp so a data rebuild
-// invalidates it. `caches.match` (no cacheName) lets the runtime handler serve
-// assets that the in-app "make available offline" flow wrote to its own cache.
+// invalidates it. Lookups are confined to THIS deployment's caches for the
+// CURRENT key — the in-app "make available offline" cache first, then the runtime
+// cache — so an entry left in an old-key cache can never be served again.
 //
 // This file is bundled ONLY for the web target; the Electron desktop app serves
 // the same dist over app:// and never registers a service worker (see pwa.ts).
 import { precacheAndRoute, cleanupOutdatedCaches, matchPrecache } from "workbox-precaching";
 import { registerRoute } from "workbox-routing";
 import {
+  OFFLINE_FETCH_HEADER,
   dataVersionKey,
   runtimeCacheName,
   offlineCacheName,
@@ -55,14 +57,25 @@ function currentVersionKey(): Promise<string> {
 }
 
 async function cacheFirst(request: Request): Promise<Response> {
-  // Serve from ANY cache (runtime OR the in-app offline downloader's cache).
-  const hit = await caches.match(request);
-  if (hit) return hit;
-  const response = await fetch(request);
-  if (response.ok) {
-    const key = await currentVersionKey();
+  // Only the current key's caches, never a bare `caches.match`: that searches
+  // every cache on the origin, so a stale copy in an old-key cache (one the
+  // activate sweep hasn't reclaimed yet) would keep serving last build's prices.
+  const key = await currentVersionKey();
+  for (const cacheName of [offlineCacheName(key), runtimeCacheName(key)]) {
+    const hit = await caches.match(request, { cacheName });
+    if (hit) return hit;
+  }
+  // Revalidate against the server on a miss: GitHub Pages sends max-age=600, so a
+  // plain fetch right after a deploy could pull the PREVIOUS build's file out of
+  // the HTTP cache and pin it under the new key. (Leave explicit modes — the
+  // offline downloader's no-store — alone.)
+  const response = await fetch(request, request.cache === "default" ? { cache: "no-cache" } : undefined);
+  // The offline downloader stores its own copy; skip the duplicate runtime one.
+  if (response.ok && !request.headers.has(OFFLINE_FETCH_HEADER)) {
     const cache = await caches.open(runtimeCacheName(key));
-    cache.put(request, response.clone());
+    cache.put(request, response.clone()).catch(() => {
+      /* quota — the response is still served, just not cached */
+    });
   }
   return response;
 }

@@ -61,6 +61,8 @@ const PORTRAIT_H = 76;
 const TOP_PAD = 12; // room for the badges that overhang the portrait top
 const COST_H = 20;
 const MIN_WIDTH = 360;
+const HEADER_GAP = 16; // least space between the title and a same-line subtitle
+const SUBTITLE_LINE_H = 17; // extra header height when the subtitle gets its own line
 
 function loadImage(src: string, timeoutMs = 15000): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
@@ -262,13 +264,28 @@ export async function renderBuildImage(
   let contentW = 0;
   cells.forEach((_, i) => (contentW += gapBefore(i) + CELL_W));
   const width = Math.max(MIN_WIDTH, PAD * 2 + contentW);
-  const height = PAD + HEADER_H + TOP_PAD + PORTRAIT_H + COST_H + PAD;
 
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(width * OUTPUT_SCALE);
-  canvas.height = Math.round(height * OUTPUT_SCALE);
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas 2D context unavailable");
+
+  // Header layout: title left, subtitle right-aligned on the same line — unless the
+  // two would collide (a long corps name on a narrow, few-unit strip), in which case
+  // the subtitle drops to its own line under the title rather than being overdrawn.
+  const titleFont = `600 19px ${SERIF}`;
+  const subFont = `12px ${SANS}`;
+  const inner = width - PAD * 2;
+  ctx.font = titleFont;
+  const titleW = ctx.measureText(meta.title).width;
+  ctx.font = subFont;
+  const subW = ctx.measureText(meta.subtitle).width;
+  const stacked = titleW + HEADER_GAP + subW > inner;
+  const headerH = HEADER_H + (stacked ? SUBTITLE_LINE_H : 0);
+  const height = PAD + headerH + TOP_PAD + PORTRAIT_H + COST_H + PAD;
+
+  // Sizing the canvas resets its context state, so scale after.
+  canvas.width = Math.round(width * OUTPUT_SCALE);
+  canvas.height = Math.round(height * OUTPUT_SCALE);
   ctx.scale(OUTPUT_SCALE, OUTPUT_SCALE);
 
   // Background.
@@ -278,25 +295,30 @@ export async function renderBuildImage(
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, width, height);
 
-  // Header: title (left, serif gold) + subtitle (right, soft) + divider line.
+  // Header: title (left, serif gold) + subtitle (right, soft — or under the title
+  // when stacked) + divider line. maxWidth only squeezes text that still can't fit.
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = C.goldBright;
-  ctx.font = `600 19px ${SERIF}`;
+  ctx.font = titleFont;
   ctx.textAlign = "left";
-  ctx.fillText(meta.title, PAD, PAD + 22, width - PAD * 2);
+  ctx.fillText(meta.title, PAD, PAD + 22, inner);
   ctx.fillStyle = C.textSoft;
-  ctx.font = `12px ${SANS}`;
-  ctx.textAlign = "right";
-  ctx.fillText(meta.subtitle, width - PAD, PAD + 21);
+  ctx.font = subFont;
+  if (stacked) {
+    ctx.fillText(meta.subtitle, PAD, PAD + 22 + SUBTITLE_LINE_H, inner);
+  } else {
+    ctx.textAlign = "right";
+    ctx.fillText(meta.subtitle, width - PAD, PAD + 21);
+  }
   ctx.strokeStyle = C.goldDeep;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(PAD, PAD + HEADER_H - 8);
-  ctx.lineTo(width - PAD, PAD + HEADER_H - 8);
+  ctx.moveTo(PAD, PAD + headerH - 8);
+  ctx.lineTo(width - PAD, PAD + headerH - 8);
   ctx.stroke();
 
   // Cells.
-  const portraitTop = PAD + HEADER_H + TOP_PAD;
+  const portraitTop = PAD + headerH + TOP_PAD;
   let x = PAD;
   cells.forEach((cell, i) => {
     x += gapBefore(i);
@@ -330,19 +352,54 @@ function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-export type DeliverResult = "copied" | "shared" | "saved";
+/** How an export ended. "downloaded" means a download was *started* — whether it
+ *  landed can't be known (an installed iOS web app silently drops blob downloads),
+ *  so callers must not report it as saved. */
+export type DeliverResult = "copied" | "shared" | "cancelled" | "downloaded";
 
-/** Send the rendered image to the device: clipboard on desktop, share/save on touch. */
-export async function deliverImage(blob: Blob, filename: string, coarse: boolean): Promise<DeliverResult> {
+const errorName = (e: unknown) => (e instanceof Error || e instanceof DOMException ? e.name : "");
+
+/** Open the share sheet for the image, falling back to a download. Must be called
+ *  straight from a user gesture (a tap handler, before any await): browsers — WebKit
+ *  strictly — refuse navigator.share once that gesture's activation has lapsed. */
+export async function shareImageFile(file: File): Promise<DeliverResult> {
+  try {
+    await navigator.share({ files: [file] });
+    return "shared";
+  } catch (e) {
+    // User dismissed the sheet — handled; don't also download.
+    if (errorName(e) === "AbortError") return "cancelled";
+    downloadBlob(file, file.name);
+    return "downloaded";
+  }
+}
+
+/** Send the image to the device: clipboard on desktop, share sheet (else download)
+ *  on touch. Call it synchronously from the click handler with the render still in
+ *  flight: the clipboard write is started at once with the pending image (a
+ *  Promise-valued ClipboardItem), inside the click's user activation.
+ *
+ *  The share sheet can't take a pending file, so on touch it is only tried once the
+ *  render is done. When the browser then refuses it for lack of a fresh gesture
+ *  (NotAllowedError — WebKit, after a slow render), the file comes back as
+ *  `{ retryShare }` for the caller to offer behind a new tap (see shareImageFile). */
+export async function deliverImage(
+  image: Promise<Blob>,
+  filename: string,
+  coarse: boolean,
+): Promise<DeliverResult | { retryShare: File }> {
   // Desktop / fine pointer: copy the PNG to the clipboard.
   if (!coarse && typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
     try {
-      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": image })]);
       return "copied";
     } catch {
-      // Clipboard blocked (permissions, insecure context) → fall back to download.
+      // Clipboard blocked (permissions, insecure context, no Promise support) →
+      // fall back to download.
     }
   }
+
+  const blob = await image;
 
   // Phones / tablets: prefer the native share sheet (lets iOS "Save Image" to
   // Photos, which a blob download can't do in a standalone PWA); else download.
@@ -353,13 +410,15 @@ export async function deliverImage(blob: Blob, filename: string, coarse: boolean
         await navigator.share({ files: [file] });
         return "shared";
       } catch (e) {
-        // User dismissed the sheet — treat as handled, don't also download.
-        if (e instanceof Error && e.name === "AbortError") return "shared";
+        const name = errorName(e);
+        if (name === "AbortError") return "cancelled";
+        // The render outlasted the tap's activation: ask for a fresh tap.
+        if (name === "NotAllowedError") return { retryShare: file };
         // Any other failure → fall through to a direct download.
       }
     }
   }
 
   downloadBlob(blob, filename);
-  return "saved";
+  return "downloaded";
 }

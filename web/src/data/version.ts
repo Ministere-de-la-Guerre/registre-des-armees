@@ -10,9 +10,17 @@ export interface DataVersion {
   corpsListed?: number;
   totalSourceRows?: number;
   towRows?: number;
+  /** sha256 hex of the generated faction JSON + corps index (tools/build_web_data.py). */
+  contentHash?: string;
 }
 
-/** A short, stable string that changes whenever the generated dataset changes. */
+/** A short, stable string that changes whenever the generated dataset changes.
+ *
+ *  The counts alone are NOT enough: a balance patch that only changes prices keeps
+ *  every count identical, so the key (and with it the cache names) would never
+ *  move and returning users would be served the old faction JSON forever. The
+ *  content hash catches that. Stamps written before the hash existed still key on
+ *  the counts alone, so their key is unchanged. */
 export function dataVersionKey(dv: DataVersion | null | undefined): string {
   if (!dv || typeof dv !== "object") return "0";
   const fields: (keyof DataVersion)[] = [
@@ -26,8 +34,17 @@ export function dataVersionKey(dv: DataVersion | null | undefined): string {
     const v = dv[f];
     return typeof v === "number" && Number.isFinite(v) ? String(v) : "x";
   });
+  // A 64-bit prefix is plenty to tell builds apart and keeps cache names short.
+  const hash = typeof dv.contentHash === "string" ? dv.contentHash.replace(/[^0-9A-Za-z]/g, "").slice(0, 16) : "";
+  if (hash) parts.push(hash.toLowerCase());
   return parts.join(".");
 }
+
+/** Request header the in-app offline downloader sets on its own fetches, telling
+ *  the SW not to ALSO copy the response into the runtime cache — the page stores
+ *  it in the offline cache itself, and a second copy would double the footprint
+ *  of "Download all" (every icon, twice). */
+export const OFFLINE_FETCH_HEADER = "x-rda-offline-fetch";
 
 export const RUNTIME_CACHE_PREFIX = "rda-runtime";
 export const OFFLINE_CACHE_PREFIX = "rda-offline";

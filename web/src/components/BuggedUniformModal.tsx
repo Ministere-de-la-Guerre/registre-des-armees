@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { UnitCard } from "../domain/types";
 
 /** Warns that the just-selected unit's uniform is bugged in the game itself.
@@ -10,6 +10,17 @@ export function BuggedUniformModal({ card, onClose }: { card: UnitCard; onClose:
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // Take focus while open, so the Enter/Space that added the unit from a focused
+  // medallion can't keep adding copies behind the warning; hand it back on close.
+  const ackRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    ackRef.current?.focus();
+    return () => {
+      if (previous?.isConnected) previous.focus();
+    };
+  }, []);
 
   return (
     // Dismiss on backdrop mousedown (not click) so a drag that releases outside
@@ -44,7 +55,7 @@ export function BuggedUniformModal({ card, onClose }: { card: UnitCard; onClose:
             it in an actual battle.
           </p>
           <div className="modal-actions" style={{ marginTop: 14, marginBottom: 0, justifyContent: "flex-end" }}>
-            <button className="btn" onClick={onClose}>
+            <button ref={ackRef} className="btn" onClick={onClose}>
               Got it
             </button>
           </div>

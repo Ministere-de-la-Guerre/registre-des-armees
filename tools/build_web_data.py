@@ -21,7 +21,10 @@ Design goals (see README "Data refresh"):
     crashing the whole build.
   * ToW factions and unit variants are included; a TOW corps drops its (inert)
     ACDV division/brigade tags so the web layer lays it out as one long list.
-  * Re-runnable: PNG conversion / copies are skipped when already up to date.
+  * Re-runnable: PNG conversion / copies are skipped when already up to date, and
+    anything under web/public/{data,assets} this run did not produce (e.g. files of
+    a removed faction) is pruned, so the output always mirrors the current source.
+  * Exits non-zero on fatal conditions (missing inputs, no factions produced).
 
 Run from anywhere:  python tools/build_web_data.py
 or via the app:      npm run build:data
@@ -30,6 +33,7 @@ or via the app:      npm run build:data
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import shutil
 import sys
@@ -117,6 +121,8 @@ class AssetCopier:
         self.copied = 0
         self.skipped = 0
         self.missing: list[str] = []
+        # Every web/public-relative path this run produced (written or up to date).
+        self.produced: set[str] = set()
 
     def convert_tga_to_png(self, rel_tga: str) -> str | None:
         """Convert assets/.../x.tga -> web/public/assets/.../x.png. Returns rel png path."""
@@ -126,6 +132,7 @@ class AssetCopier:
         if not src.is_file():
             self.missing.append(rel_tga)
             return None
+        self.produced.add(rel_png)
         if dst.is_file() and dst.stat().st_mtime >= src.stat().st_mtime:
             self.skipped += 1
             return rel_png
@@ -151,6 +158,7 @@ class AssetCopier:
         if not src.is_file():
             self.missing.append(rel_path)
             return None
+        self.produced.add(rel)
         if dst.is_file() and dst.stat().st_mtime >= src.stat().st_mtime:
             self.skipped += 1
             return rel
@@ -205,6 +213,49 @@ def _flood_white_to_transparent(src: Path, dst: Path, threshold: int = 240) -> N
     im.save(dst, "PNG")
 
 
+# --- output bookkeeping --------------------------------------------------------
+def write_data_file(path: Path, payload: object, written: dict[str, bytes]) -> None:
+    """Write compact JSON as exact bytes (platform-independent) and remember them."""
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    written[path.relative_to(WEB_PUBLIC).as_posix()] = data
+
+
+def content_hash(files: dict[str, bytes]) -> str:
+    """sha256 hex identifying the runtime-cached data set.
+
+    Files are fed in sorted web/public-relative path order; each contributes its
+    UTF-8 path, a NUL byte, its length as 8 big-endian bytes, then its bytes as
+    written — so renames, additions and removals all change the hash too.
+    """
+    digest = hashlib.sha256()
+    for rel in sorted(files):
+        data = files[rel]
+        digest.update(rel.encode("utf-8") + b"\0")
+        digest.update(len(data).to_bytes(8, "big"))
+        digest.update(data)
+    return digest.hexdigest()
+
+
+def prune_stale(root: Path, keep: set[str]) -> int:
+    """Delete files under ``root`` whose web/public-relative path is not in
+    ``keep`` (left over from a removed faction, icon, flag or season), then any
+    directories that became empty. Returns the number of files removed."""
+    if not root.is_dir():
+        return 0
+    removed = 0
+    # Reverse lexicographic order visits a directory's contents before the directory.
+    for path in sorted(root.rglob("*"), reverse=True):
+        if path.is_dir() and not path.is_symlink():
+            if not any(path.iterdir()):
+                path.rmdir()
+        elif path.relative_to(WEB_PUBLIC).as_posix() not in keep:
+            path.unlink()
+            removed += 1
+    return removed
+
+
 # --- normalization -------------------------------------------------------------
 def normalize_unit(row: dict, assets: AssetCopier, errors: list[str]) -> dict | None:
     unit_key = _s(row, "unit_key")
@@ -227,6 +278,7 @@ def normalize_unit(row: dict, assets: AssetCopier, errors: list[str]) -> dict | 
 
     division = _int_or_none(_s(row, "division_id"))
     brigade = _int_or_none(_s(row, "brigade_id"))
+    division_brigade_code = _s(row, "division_brigade_code") or None
     if _is_tow_faction(faction_key):
         # A TOW corps ignores the ACDV division/brigade tags — the web layer lays
         # it out as one long list of arm/class brigades (docs/TOW_ARMY_BUILDS.md
@@ -234,6 +286,7 @@ def normalize_unit(row: dict, assets: AssetCopier, errors: list[str]) -> dict | 
         # chips out of the TOW filter panel and earns no (TOW-forbidden) discounts.
         division = None
         brigade = None
+        division_brigade_code = None
 
     icon_src = _s(row, "icon_path")
     icon = assets.convert_tga_to_png(icon_src) if icon_src else None
@@ -253,7 +306,7 @@ def normalize_unit(row: dict, assets: AssetCopier, errors: list[str]) -> dict | 
         "speedCode": _s(row, "speed_code") or None,
         "division": division,
         "brigade": brigade,
-        "divisionBrigadeCode": _s(row, "division_brigade_code") or None,
+        "divisionBrigadeCode": division_brigade_code,
         "cost": cost,
         "cap": cap,
         "range": _int_or_none(_s(row, "range")),
@@ -274,6 +327,9 @@ def normalize_unit(row: dict, assets: AssetCopier, errors: list[str]) -> dict | 
         "stats": {
             "accuracy": _int_or_none(_s(row, "accuracy")),
             "reloadSkill": _int_or_none(_s(row, "reload_skill")),
+            "ammo": _int_or_none(_s(row, "ammo")),
+            # Display name of the small arm the unit fires (None for artillery / melee).
+            "firearm": _s(row, "firearm") or None,
             "morale": _int_or_none(_s(row, "morale")),
             "meleeAttack": _int_or_none(_s(row, "melee_attack")),
             "meleeDefense": _int_or_none(_s(row, "melee_defense")),
@@ -293,15 +349,24 @@ def normalize_unit(row: dict, assets: AssetCopier, errors: list[str]) -> dict | 
     }
 
 
+def fatal(message: str) -> int:
+    print(f"ERROR: {message}", file=sys.stderr)
+    return 1
+
+
 def main() -> int:
-    assert UNITS_CSV.is_file(), f"missing {UNITS_CSV}"
-    assert CATALOG_JSON.is_file(), f"missing {CATALOG_JSON}"
+    for required in (UNITS_CSV, CATALOG_JSON):
+        if not required.is_file():
+            return fatal(f"missing required input {required}")
 
     OUT_DATA.mkdir(parents=True, exist_ok=True)
-    (OUT_DATA / "factions").mkdir(parents=True, exist_ok=True)
 
     assets = AssetCopier()
     errors: list[str] = []
+    # web/public-relative path -> bytes of every data file the client runtime-caches.
+    cached_data: dict[str, bytes] = {}
+    # Every other web/public/data file this run produced (kept by the prune step).
+    other_data: set[str] = set()
 
     # 1. Load + normalize units, grouped by faction (Theatres of War included).
     by_faction: dict[str, list[dict]] = {}
@@ -317,6 +382,8 @@ def main() -> int:
             if card is None:
                 continue
             by_faction.setdefault(faction_key, []).append(card)
+    if not by_faction:
+        return fatal(f"no faction rosters could be built from {UNITS_CSV}")
 
     # 2. Resolve the shared cap group cap = the underlying (base) unit's cap, so
     #    a commander variant counts against its base unit's cap (README), rather
@@ -364,13 +431,12 @@ def main() -> int:
             c["name"],
             c["unitKey"],
         ))
-        out = OUT_DATA / "factions" / f"{faction_key}.json"
-        out.write_text(json.dumps({
+        write_data_file(OUT_DATA / "factions" / f"{faction_key}.json", {
             "schemaVersion": SCHEMA_VERSION,
             "factionKey": faction_key,
             "armyCorpsName": cards[0].get("armyCorpsName", ""),
             "cards": cards,
-        }, ensure_ascii=False), encoding="utf-8")
+        }, cached_data)
 
     # 3. Build the theatre-grouped corps index from the catalog. Theatres of War
     #    are split into Imperial and Coalition sides; TOW corps are not AC, so
@@ -405,9 +471,18 @@ def main() -> int:
         if side_theatres:
             index_sides.append({"side": side, "theatres": side_theatres})
 
-    (OUT_DATA / "corps-index.json").write_text(
-        json.dumps({"schemaVersion": SCHEMA_VERSION, "sides": index_sides}, ensure_ascii=False),
-        encoding="utf-8",
+    if listed == 0:
+        return fatal(f"the corps index lists no corps (check {CATALOG_JSON})")
+    indexed = {
+        corps["factionKey"]
+        for side in index_sides for theatre in side["theatres"] for corps in theatre["corps"]
+    }
+    unrostered = sorted(indexed - set(by_faction))
+    unindexed = sorted(set(by_faction) - indexed)
+
+    write_data_file(
+        OUT_DATA / "corps-index.json",
+        {"schemaVersion": SCHEMA_VERSION, "sides": index_sides}, cached_data,
     )
 
     # 4. Copy shared UI assets (command-star strips + the guerrilla badge).
@@ -417,14 +492,17 @@ def main() -> int:
     assets.copy_asset("assets/ui/command_stars/star_silver.png")
     assets.copy_asset("assets/ui/guerrilla_badge/guerrilla_badge.png")
 
-    # 5. Version manifest.
-    (OUT_DATA / "data-version.json").write_text(json.dumps({
+    # 5. Version manifest. contentHash changes whenever any runtime-cached data
+    #    file does (even when every count stays the same), keying the PWA caches.
+    (OUT_DATA / "data-version.json").write_bytes(json.dumps({
         "schemaVersion": SCHEMA_VERSION,
         "factionCount": len(by_faction),
         "corpsListed": listed,
         "totalSourceRows": total_rows,
         "towRows": tow_rows,
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+        "contentHash": content_hash(cached_data),
+    }, ensure_ascii=False, indent=2).encode("utf-8"))
+    other_data.add("data/data-version.json")
 
     # 5b. Pick-rate datasets (optional feature data; see docs/PICK_RATES.md).
     # These are a committed source artifact rather than something derived here — the
@@ -436,7 +514,14 @@ def main() -> int:
         out_pick_rates.mkdir(parents=True, exist_ok=True)
         for season_file in sorted(PICK_RATES_SRC.glob("*.json")):
             shutil.copy2(season_file, out_pick_rates / season_file.name)
+            other_data.add(f"data/pick-rates/{season_file.name}")
             pick_rates_copied += 1
+
+    # 5c. Drop anything a previous run left behind (removed factions, icons,
+    #     flags, seasons) so local/desktop builds never ship stale files.
+    other_data.add("data/build-report.txt")
+    pruned = prune_stale(OUT_DATA, set(cached_data) | other_data)
+    pruned += prune_stale(OUT_ASSETS, assets.produced)
 
     # 6. Validation report.
     report = OUT_DATA / "build-report.txt"
@@ -452,7 +537,16 @@ def main() -> int:
         f"missing_assets={len(assets.missing)}",
         f"validation_errors={len(errors)}",
         f"pick_rate_seasons={pick_rates_copied}",
+        f"stale_files_pruned={pruned}",
+        f"indexed_corps_without_roster={len(unrostered)}",
+        f"rosters_not_in_index={len(unindexed)}",
     ]
+    if unrostered:
+        lines.append("--- indexed corps without a roster (first 20) ---")
+        lines += unrostered[:20]
+    if unindexed:
+        lines.append("--- rosters not in the corps index (first 20) ---")
+        lines += unindexed[:20]
     if assets.missing:
         lines.append("--- missing assets (first 20) ---")
         lines += assets.missing[:20]

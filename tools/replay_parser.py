@@ -50,24 +50,28 @@ COMPOSITE_NO_RE = re.compile(r"\d+(?:[a-zA-Z-]{0,3}[./]{1,2}\d+)+")
 _QUOTES = {0x2013, 0x2014, 0x2018, 0x2019, 0x201C, 0x201D}
 
 
-def _plausible(text: str) -> bool:
-    """Reject candidates that decoded as text but are really binary.
+def _plausible(blob: bytes, start: int, count: int) -> bool:
+    """Reject candidates that look like strings but are really binary.
 
     A uint32 field (tag 0x03) can contain a 0x0E byte, which looks like a string tag
     and starts a UTF-16 read on the wrong byte. Such reads pair a data byte with an
     ASCII byte and land in CJK/Hangul/PUA; genuine strings are Latin (plus
     Cyrillic/Greek headroom for eastern factions) and mostly plain ASCII.
+
+    Checked on the raw code units, bailing at the first one that settles it, so a
+    false tag costs a character or two rather than a decode of up to 128 KB.
     """
-    ascii_n = 0
-    for ch in text:
-        o = ord(ch)
+    other = 0
+    for k in range(start, start + count * 2, 2):
+        o = blob[k] | (blob[k + 1] << 8)
         if 0x20 <= o <= 0x7E:
-            ascii_n += 1
-        elif 0xA0 <= o <= 0x04FF or o in _QUOTES:
-            pass
-        else:
+            continue
+        if not (0xA0 <= o <= 0x04FF or o in _QUOTES):
             return False
-    return ascii_n * 2 >= len(text)
+        other += 1
+        if other * 2 > count:
+            return False  # can no longer be mostly ASCII
+    return True
 
 
 def read_strings(blob: bytes) -> list[str]:
@@ -80,18 +84,11 @@ def read_strings(blob: bytes) -> list[str]:
             continue
         count = int.from_bytes(blob[i + 1 : i + 3], "little")
         end = i + 3 + count * 2
-        if count == 0 or end > n:
-            i += 1
-            continue
-        try:
-            text = blob[i + 3 : end].decode("utf-16-le")
-        except UnicodeDecodeError:
-            i += 1
-            continue
-        if not _plausible(text):
+        if count == 0 or end > n or not _plausible(blob, i + 3, count):
             i += 1  # step one byte: the real record may start just after a false tag
             continue
-        out.append(text)
+        # _plausible admits no surrogates, so this cannot raise.
+        out.append(blob[i + 3 : end].decode("utf-16-le"))
         i = end
     return out
 
@@ -158,20 +155,35 @@ def _army_keys(strings: list[str]) -> set[str]:
     string a unit key follows is the player name, and that one is itself preceded
     by a unit key (the commander), which tells the two apart.
 
+    An EMPTY commander slot breaks that: empty strings are never read, so the block
+    becomes [army key][player][unit keys…][player] and the player name lands in the
+    army key's position. It gives itself away by reappearing straight after the unit
+    run, and the real army key is then the string before it.
+
     Name blocks hold no unit keys at all, so they are never found this way; they
     are picked up by string equality against the keys the key blocks yielded."""
+
+    def marker_like(j: int) -> bool:
+        return 0 <= j < len(strings) and not _is_unit_key(strings[j]) and not FLAG_RE.match(strings[j])
+
     keys: set[str] = set()
     for i, s in enumerate(strings):
         if ARMY_KEY_RE.match(s):
             keys.add(s)
-        elif _is_unit_key(s) or FLAG_RE.match(s):
+        elif not marker_like(i):
             continue
         elif (
             i + 1 < len(strings)
             and _is_unit_key(strings[i + 1])
             and (i == 0 or not _is_unit_key(strings[i - 1]))
         ):
-            keys.add(s)
+            j = i + 1
+            while j < len(strings) and _is_unit_key(strings[j]):
+                j += 1
+            if j >= len(strings) or strings[j] != s:
+                keys.add(s)
+            elif marker_like(i - 1):
+                keys.add(strings[i - 1])
     return keys
 
 

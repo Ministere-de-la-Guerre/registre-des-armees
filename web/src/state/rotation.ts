@@ -183,42 +183,114 @@ export const WINDOW_START_HOURS: readonly number[] = (() => {
 
 /** The window-start hour for a clock hour. */
 export function windowStartHour(hour: number): number {
-  let s = WINDOW_START_HOURS[0];
-  for (const h of WINDOW_START_HOURS) if (h <= hour) s = h;
+  return WINDOW_START_HOURS[slotOfHour(hour)];
+}
+
+/** Index into WINDOW_START_HOURS of the window a clock hour falls in. */
+function slotOfHour(hour: number): number {
+  let s = 0;
+  for (let i = 0; i < WINDOW_START_HOURS.length; i++) if (WINDOW_START_HOURS[i] <= hour) s = i;
   return s;
 }
 
-/** Start of the window containing `d` (minutes/seconds cleared). */
+// DST: a window is identified by (local calendar day, slot), never by reading an
+// hour back off a Date — on a spring-forward day the slot's start hour may not
+// exist (EET 03:00→04:00; Santiago/Azores/Havana/Cairo/Beirut 00:00→01:00). The
+// game only sees the wall clock (os.date), so such a window simply begins at the
+// first instant after the gap. A window the clock skips entirely has no start and
+// is stepped over. A fall-back repeats an hour inside one window, which just makes
+// that window an hour longer. (Pacific/Chatham alone falls back across a window
+// boundary, 03:45→02:45; its brief return to the earlier window is not modelled.)
+// Calendar days are stepped as UTC day numbers so a skipped local midnight can
+// never stall the walk.
+
+const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
+// Slots examined before giving up on finding a neighbouring window (4 days).
+const SLOT_SCAN_LIMIT = 4 * 9;
+
+/** Sortable key of a local wall-clock reading (date + hour). */
+function wallKey(y: number, m: number, d: number, h: number): number {
+  return ((y * 12 + m) * 32 + d) * 24 + h;
+}
+function wallKeyOf(t: Date): number {
+  return wallKey(t.getFullYear(), t.getMonth(), t.getDate(), t.getHours());
+}
+
+/** The local calendar day of `t` as a UTC day number (ms at UTC midnight). */
+function localDay(t: Date): number {
+  return Date.UTC(t.getFullYear(), t.getMonth(), t.getDate());
+}
+
+/** Start of window `slot` on local calendar day `day` (see localDay): the first
+ *  instant whose wall clock reads that day at or after the slot's start hour — or
+ *  null when the clock skips the whole window. */
+function slotStart(day: number, slot: number): Date | null {
+  const cal = new Date(day);
+  const y = cal.getUTCFullYear();
+  const m = cal.getUTCMonth();
+  const d = cal.getUTCDate();
+  const h = WINDOW_START_HOURS[slot];
+  const target = wallKey(y, m, d, h);
+  let r = new Date(y, m, d, h, 0, 0, 0);
+  if (wallKeyOf(r) !== target || r.getMinutes() !== 0) {
+    // The start hour falls in a DST gap. Engines resolve a skipped local time
+    // differently in edge cases, so find the gap's end directly: the first instant
+    // reading at/after the target (the wall clock is monotonic across a gap).
+    let lo = r.getTime() - 6 * HOUR_MS;
+    let hi = r.getTime() + 6 * HOUR_MS;
+    while (hi - lo > 1) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (wallKeyOf(new Date(mid)) >= target) hi = mid;
+      else lo = mid;
+    }
+    r = new Date(hi);
+  }
+  const inWindow =
+    r.getFullYear() === y && r.getMonth() === m && r.getDate() === d && slotOfHour(r.getHours()) === slot;
+  return inWindow ? r : null;
+}
+
+/** Start of the window containing `d`. */
 export function windowStart(d: Date): Date {
+  const start = slotStart(localDay(d), slotOfHour(d.getHours()));
+  if (start && start.getTime() <= d.getTime()) return start;
+  // Unreachable for real zones (d itself lies in that window); keep it total.
   const r = new Date(d);
-  r.setHours(windowStartHour(d.getHours()), 0, 0, 0);
+  r.setMinutes(0, 0, 0);
   return r;
 }
 
-/** Start of the window immediately after `ws` (a window start), rolling the day. */
+/** Start of the window immediately after the one containing `ws` (normally a
+ *  window start), rolling the day. Always strictly later than `ws`. */
 export function nextWindowStart(ws: Date): Date {
-  const idx = WINDOW_START_HOURS.indexOf(ws.getHours());
-  const r = new Date(ws);
-  if (idx === WINDOW_START_HOURS.length - 1) {
-    r.setDate(r.getDate() + 1);
-    r.setHours(WINDOW_START_HOURS[0], 0, 0, 0);
-  } else {
-    r.setHours(WINDOW_START_HOURS[idx + 1], 0, 0, 0);
+  let day = localDay(ws);
+  let slot = slotOfHour(ws.getHours());
+  for (let i = 0; i < SLOT_SCAN_LIMIT; i++) {
+    if (++slot === WINDOW_START_HOURS.length) {
+      slot = 0;
+      day += DAY_MS;
+    }
+    const s = slotStart(day, slot);
+    if (s && s.getTime() > ws.getTime()) return s;
   }
-  return r;
+  return new Date(ws.getTime() + 3 * HOUR_MS);
 }
 
-/** Start of the window immediately before `ws` (a window start), rolling the day. */
+/** Start of the window immediately before the one containing `ws`, rolling the
+ *  day. Always strictly earlier than `ws`. */
 export function prevWindowStart(ws: Date): Date {
-  const idx = WINDOW_START_HOURS.indexOf(ws.getHours());
-  const r = new Date(ws);
-  if (idx <= 0) {
-    r.setDate(r.getDate() - 1);
-    r.setHours(WINDOW_START_HOURS[WINDOW_START_HOURS.length - 1], 0, 0, 0);
-  } else {
-    r.setHours(WINDOW_START_HOURS[idx - 1], 0, 0, 0);
+  let day = localDay(ws);
+  let slot = slotOfHour(ws.getHours());
+  for (let i = 0; i < SLOT_SCAN_LIMIT; i++) {
+    if (--slot < 0) {
+      slot = WINDOW_START_HOURS.length - 1;
+      day -= DAY_MS;
+    }
+    const s = slotStart(day, slot);
+    if (s && s.getTime() < ws.getTime()) return s;
   }
-  return r;
+  return new Date(ws.getTime() - 3 * HOUR_MS);
 }
 
 export interface RotationResult {

@@ -13,6 +13,13 @@ const { autoUpdater } = require("electron-updater");
 const DIST = path.join(__dirname, "..", "dist");
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 
+// electron-builder's portable target sets these for the unpacked app it runs.
+// The portable .exe is built from the same win-unpacked dir as the installer, so
+// it carries the same app-update.yml — but it must never auto-install: that
+// would silently run the NSIS SETUP on quit and turn a portable copy into an
+// installed one. See setupAutoUpdates.
+const IS_PORTABLE = !!(process.env.PORTABLE_EXECUTABLE_DIR || process.env.PORTABLE_EXECUTABLE_FILE);
+
 // Minimal MIME map for the assets the SPA serves. fs reads are asar-aware, so this
 // works whether the app is packaged (app.asar) or run from an unpacked dir.
 const MIME = {
@@ -43,6 +50,32 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
+/** True for URLs inside the app: the app:// bundle, or the dev server in dev. */
+function isAppUrl(url) {
+  try {
+    const u = new URL(url);
+    if (u.protocol === "app:" && u.host === "bundle") return true;
+    return !!DEV_SERVER_URL && u.origin === new URL(DEV_SERVER_URL).origin;
+  } catch {
+    return false;
+  }
+}
+
+/** The GitHub releases page this build updates from, read from the bundled
+ *  app-update.yml (so stable and beta each point at their own repo). */
+function releasesPageUrl() {
+  try {
+    const yml = fs.readFileSync(path.join(process.resourcesPath, "app-update.yml"), "utf8");
+    const field = (name) => new RegExp(`^${name}:\\s*['"]?([^'"\\s]+)`, "m").exec(yml)?.[1];
+    const owner = field("owner");
+    const repo = field("repo");
+    if (owner && repo) return `https://github.com/${owner}/${repo}/releases/latest`;
+  } catch {
+    /* fall through */
+  }
+  return null;
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1440,
@@ -65,6 +98,16 @@ function createWindow() {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url)) shell.openExternal(url);
     return { action: "deny" };
+  });
+
+  // Never navigate the window away from the app itself. A file dropped outside
+  // the replay screen, or a plain link, would otherwise replace the SPA (e.g.
+  // with file://…) and leave no way back short of restarting. Reloads don't
+  // raise will-navigate, so they are unaffected.
+  win.webContents.on("will-navigate", (event, url) => {
+    if (isAppUrl(url)) return;
+    event.preventDefault();
+    if (/^https?:\/\//.test(url)) shell.openExternal(url);
   });
 
   if (DEV_SERVER_URL) {
@@ -109,8 +152,9 @@ function createWindow() {
 
 // --- auto-update against the GitHub repository's Releases ---------------------
 function setupAutoUpdates() {
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // Portable: only look, never download or install (see IS_PORTABLE).
+  autoUpdater.autoDownload = !IS_PORTABLE;
+  autoUpdater.autoInstallOnAppQuit = !IS_PORTABLE;
 
   // Stable and beta are SEPARATE apps that publish to SEPARATE GitHub repos
   // (stable -> registre-des-armees, beta -> registre-des-armees-beta). Each build
@@ -159,6 +203,22 @@ function setupAutoUpdates() {
     }
   });
 
+  if (IS_PORTABLE) {
+    autoUpdater.on("update-available", async (info) => {
+      const url = releasesPageUrl();
+      const { response } = await dialog.showMessageBox({
+        type: "info",
+        buttons: url ? ["Open download page", "Later"] : ["OK"],
+        defaultId: 0,
+        cancelId: url ? 1 : 0,
+        title: "Update available",
+        message: `Registre des Armées ${info.version} is available.`,
+        detail: "This portable copy can't update itself. Download the new portable .exe (or the installer) from the releases page.",
+      });
+      if (url && response === 0) shell.openExternal(url);
+    });
+  }
+
   autoUpdater.on("error", (err) => {
     // Never let an update check crash the app (offline, no releases yet, etc.).
     console.warn("auto-update check failed:", err == null ? "unknown" : err.message);
@@ -166,7 +226,9 @@ function setupAutoUpdates() {
 
   // Packaged builds only — dev runs have no real version to compare.
   if (app.isPackaged) {
-    autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+    // checkForUpdatesAndNotify's "downloaded" OS notification means nothing
+    // when nothing is downloaded; the portable dialog above covers it instead.
+    (IS_PORTABLE ? autoUpdater.checkForUpdates() : autoUpdater.checkForUpdatesAndNotify()).catch(() => {});
   }
 }
 

@@ -61,8 +61,9 @@ def main() -> None:
         "vertical_step": VERTICAL_STEP,
         "supported_counts": list(range(1, MAX_STARS + 1)),
     }
+    # Pin CRLF (what is committed) so regenerating on any platform is byte-stable.
     (OUTPUT_ROOT / "metadata.json").write_text(
-        json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
+        json.dumps(metadata, indent=2) + "\n", encoding="utf-8", newline="\r\n"
     )
 
     print(f"Generated command-star assets in {OUTPUT_ROOT.relative_to(PROJECT_ROOT)}")

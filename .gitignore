@@ -15,7 +15,12 @@ __pycache__/
 # Local investigation scratch (replays, samples, throwaway scripts)
 /work_in_progress/
 
-# Replay-corpus statistics: regenerated from a local folder of .replay files, large
-# (parse cache + per-unit fact tables), and derived from data that is not in the repo.
-/reports/replay_stats/
+# Pipeline reports: the tools/*.py builders write merge warnings, manifests and
+# validation summaries here, and reports/replay_stats/ holds replay-corpus statistics
+# (large, derived from a local folder of .replay files that is not in the repo).
+/reports/
+
+# Leftovers of an interrupted tools/build_army_corps_catalog.py staging swap.
+/assets/army_corps_by_theatre.staging/
+/assets/army_corps_by_theatre.old/
 

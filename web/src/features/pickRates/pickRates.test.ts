@@ -193,6 +193,14 @@ describe("rosterMatches", () => {
     expect(rosterMatches(null, { totalSourceRows: 1 })).toBe(false);
   });
 
+  it("is false for a season with no stamp, which the loader reads as {}", () => {
+    const unstamped = { ...season, unitDataVersion: {} };
+    expect(rosterMatches(unstamped, { totalSourceRows: 25668, factionCount: 297 })).toBe(false);
+    // …so a card the corps never fielded reads "no data", not "never picked".
+    const rate = unitPickRate(corpsPickRates(unstamped, "solid"), "absent", opts({ rosterMatches: false }));
+    expect(rate).toEqual({ kind: "unknown" });
+  });
+
   it("ignores extra keys the app's version stamp may gain later", () => {
     expect(rosterMatches(season, { totalSourceRows: 25668, factionCount: 297, corpsListed: 297 })).toBe(true);
   });
@@ -226,6 +234,19 @@ describe("confidence and labels", () => {
     expect(longLabel(rate)).toBe("Picked in 17 of 22 builds (77%)");
     // The compact form never carries a percentage — the bar encodes it.
     expect(shortLabel(rate)).toBe("17/22");
+  });
+
+  it("never prints a percentage on the other side of a tier or bucket break", () => {
+    const rate = (builds: number, n: number) =>
+      ({ kind: "data", builds, n, pct: (100 * builds) / n, copies: 1 }) as const;
+    // 84.8% is short of auto-include, so it must not read "85%".
+    expect(longLabel(rate(84, 99))).toBe("Picked in 84 of 99 builds (84%)");
+    expect(tierOf(rate(84, 99), THRESHOLDS)).toBe("core");
+    expect(bucketOf(rate(84, 99), THRESHOLDS)).toBe("contested");
+    // One build short of all of them is not "100%".
+    expect(longLabel(rate(199, 200))).toBe("Picked in 199 of 200 builds (99%)");
+    // A real pick never reads as "0%".
+    expect(longLabel(rate(1, 250))).toBe("Picked in 1 of 250 builds (<1%)");
   });
 });
 

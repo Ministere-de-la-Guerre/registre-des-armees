@@ -1,7 +1,61 @@
 // Shared local-time formatting for the roll/rotation popups (General times, Corps
 // roll, TOW Generate times). All read the same windowed clock, so they present it
 // identically.
-import { nextWindowStart } from "../state/rotation";
+import { useEffect, useState } from "react";
+import { nextWindowStart, windowStart } from "../state/rotation";
+
+export interface RollClock {
+  /** Wall clock, refreshed every minute — for relative times ("in 2 h"). */
+  now: Date;
+  /** Reference time for the window searches. Moves only when the clock enters a
+   *  new window, so an open popup re-runs its (year-long) search once per window
+   *  rather than on every tick. */
+  searchNow: Date;
+}
+
+function sameWindow(a: Date, b: Date): boolean {
+  return windowStart(a).getTime() === windowStart(b).getTime();
+}
+
+/** Live clock for an open roll popup. Ticks on each minute boundary (window starts
+ *  always sit on one) and when the page becomes visible again, e.g. after sleep. */
+export function useRollClock(): RollClock {
+  const [clock, setClock] = useState<RollClock>(() => {
+    const d = new Date();
+    return { now: d, searchNow: d };
+  });
+
+  useEffect(() => {
+    const tick = () =>
+      setClock((c) => {
+        const d = new Date();
+        return { now: d, searchNow: sameWindow(d, c.searchNow) ? c.searchNow : d };
+      });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      clearTimeout(timer);
+      // A little past the boundary so the new minute/window is already current.
+      const ms = 60_000 - (Date.now() % 60_000) + 50;
+      timer = setTimeout(() => {
+        tick();
+        schedule();
+      }, ms);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      tick();
+      schedule(); // timers may have been throttled or frozen while hidden
+    };
+    schedule();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
+  return clock;
+}
 
 export type RollDirection = "now" | "future" | "past" | null;
 

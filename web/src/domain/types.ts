@@ -17,6 +17,11 @@ export interface Placement {
 export interface UnitStats {
   accuracy: number | null;
   reloadSkill: number | null;
+  /** Rounds carried. 0 for melee units and generals without a gun. */
+  ammo: number | null;
+  /** The unit's firearm (musket / rifle / carbine) name; null when it has none
+   *  (melee cavalry, unarmed generals, artillery). */
+  firearm: string | null;
   morale: number | null;
   meleeAttack: number | null;
   meleeDefense: number | null;

@@ -63,7 +63,9 @@ export function OfflinePanel({ onClose, factionName, allFactionKeys }: OfflinePa
   const refresh = () => {
     void isStoragePersisted().then(setPersisted);
     void storageEstimate().then(setUsage);
-    void listOfflineFactions().then((f) => setOfflineFactions(f.sort()));
+    listOfflineFactions()
+      .then((f) => setOfflineFactions(f.sort()))
+      .catch(() => setOfflineFactions([]));
     setSaveCount(repo.list().length);
   };
 
@@ -76,8 +78,12 @@ export function OfflinePanel({ onClose, factionName, allFactionKeys }: OfflinePa
   };
 
   const freeFaction = async (key: string) => {
-    await removeFactionOffline(key);
-    setOfflineFactions((prev) => prev.filter((k) => k !== key));
+    try {
+      await removeFactionOffline(key);
+      setOfflineFactions((prev) => prev.filter((k) => k !== key));
+    } catch (e) {
+      setStatus(`Couldn't remove ${factionName(key)}: ${String(e)}`);
+    }
   };
 
   const remaining = allFactionKeys.filter((k) => !offlineFactions.includes(k)).length;
@@ -88,10 +94,20 @@ export function OfflinePanel({ onClose, factionName, allFactionKeys }: OfflinePa
     // Persist first: without it iOS can evict the whole cache we're about to fill.
     await requestPersistentStorage().then(setPersisted);
     setDownloadAll({ progress: { index: 0, total: allFactionKeys.length, factionKey: "" }, cancelRequested: false });
-    const result = await downloadAllFactionsOffline(allFactionKeys, loadFaction, {
-      onProgress: (progress) => setDownloadAll((s) => ({ progress, cancelRequested: s?.cancelRequested ?? false })),
-      shouldCancel: () => cancelRef.current,
-    });
+    let result;
+    try {
+      result = await downloadAllFactionsOffline(allFactionKeys, loadFaction, {
+        onProgress: (progress) => setDownloadAll((s) => ({ progress, cancelRequested: s?.cancelRequested ?? false })),
+        shouldCancel: () => cancelRef.current,
+      });
+    } catch (e) {
+      // Per-faction errors are collected inside; this is the Cache API itself
+      // failing. Never leave the panel stuck on the progress bar.
+      setDownloadAll(null);
+      refresh();
+      setStatus(`Download stopped: ${String(e)}`);
+      return;
+    }
     setDownloadAll(null);
     refresh();
     const parts = [`${result.downloaded} downloaded`];
@@ -121,7 +137,12 @@ export function OfflinePanel({ onClose, factionName, allFactionKeys }: OfflinePa
       return;
     }
     setSaveCount(repo.list().length);
-    setStatus(`Imported ${summary.imported} build${summary.imported === 1 ? "" : "s"}${summary.skipped ? `, skipped ${summary.skipped}` : ""}.`);
+    const parts = [`Imported ${summary.imported} build${summary.imported === 1 ? "" : "s"}`];
+    // A restore never reverts edits made since the backup was taken.
+    if (summary.keptNewer)
+      parts.push(`kept ${summary.keptNewer} newer ${summary.keptNewer === 1 ? "copy" : "copies"} already on this device`);
+    if (summary.skipped) parts.push(`skipped ${summary.skipped}`);
+    setStatus(`${parts.join(", ")}.${summary.error ? ` ${summary.error}` : ""}`);
   };
 
   return (

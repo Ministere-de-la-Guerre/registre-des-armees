@@ -32,7 +32,7 @@ export function makeUnit(partial: Partial<UnitCard> = {}): UnitCard {
     icon: null,
     commandStarStrip: null,
     guerrillaBadge: null,
-    stats: { accuracy: 50, reloadSkill: 40, morale: 8, meleeAttack: 10, meleeDefense: 12, chargeBonus: 6 },
+    stats: { accuracy: 50, reloadSkill: 40, ammo: 40, firearm: null, morale: 8, meleeAttack: 10, meleeDefense: 12, chargeBonus: 6 },
     abilities: {
       canFormSquare: true,
       hasStamina: false,

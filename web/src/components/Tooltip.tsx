@@ -88,9 +88,17 @@ export function Tooltip({
 
   // Peek dismissal: tap outside it, or scroll anywhere. (Tapping the card itself is
   // handled by onClick below.) Listeners attach on the next frame so the very
-  // gesture that opened the card doesn't immediately close it.
+  // gesture that opened the card doesn't immediately close it. The latest onDismiss
+  // is read through a ref, so a parent passing a fresh function each render doesn't
+  // re-subscribe (and re-disarm) the listeners every render.
+  const onDismissRef = useRef(onDismiss);
+  useLayoutEffect(() => {
+    onDismissRef.current = onDismiss;
+  });
+  const dismissible = !!onDismiss;
   useEffect(() => {
-    if (!peek || !onDismiss) return;
+    if (!peek || !dismissible) return;
+    const dismiss = () => onDismissRef.current?.();
     let armed = false;
     const arm = requestAnimationFrame(() => (armed = true));
     const onPointerDown = (e: PointerEvent) => {
@@ -102,9 +110,9 @@ export function Tooltip({
       // card just flickers. Let the medallion handle its own taps; only truly
       // outside taps (empty space, buttons, chrome) dismiss the peek.
       if (e.target instanceof Element && e.target.closest(".medallion")) return;
-      onDismiss();
+      dismiss();
     };
-    const onScroll = () => armed && onDismiss();
+    const onScroll = () => armed && dismiss();
     window.addEventListener("pointerdown", onPointerDown, true);
     window.addEventListener("scroll", onScroll, true);
     return () => {
@@ -112,18 +120,21 @@ export function Tooltip({
       window.removeEventListener("pointerdown", onPointerDown, true);
       window.removeEventListener("scroll", onScroll, true);
     };
-  }, [peek, onDismiss]);
+  }, [peek, dismissible]);
 
   // Stat order depends on what the unit actually does. Combat generals report their
   // underlying unit class so they read like the unit they lead.
   const cls = card.underlyingUnitClass || card.unitClass;
   const s = card.stats;
   const shoots = card.range !== null; // has a ranged weapon
+  // Melee units and generals carry 0 ammunition: no row for them.
+  const ammo = s.ammo ? s.ammo : null;
   let rows: Row[];
   if (cls.startsWith("artillery")) {
     rows = [
       { k: "Range", v: card.range },
       { k: "Accuracy", v: s.accuracy },
+      { k: "Ammo", v: ammo },
       { k: "Melee def", v: s.meleeDefense },
       { k: "Morale", v: s.morale },
     ];
@@ -141,6 +152,7 @@ export function Tooltip({
       { k: "Range", v: card.range },
       { k: "Accuracy", v: s.accuracy },
       { k: "Reload", v: s.reloadSkill },
+      { k: "Ammo", v: ammo },
       { k: "Melee atk", v: s.meleeAttack },
       { k: "Melee def", v: s.meleeDefense },
       { k: "Morale", v: s.morale },

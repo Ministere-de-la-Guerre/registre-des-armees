@@ -288,24 +288,36 @@ export function findTowCorpsCombinationTime(
   };
 }
 
+/** The source corps a selected card needs rolled, or null when it needs none.
+ *  Staff generals need none: `ToWFgenerals` offers every staff general in every
+ *  window whatever corps rolled. Combat generals and plain units (including a
+ *  combat general sitting in the staff slot) need their corps. */
+function requiredSourceCorpsId(key: string | null | undefined, index: RosterIndex): string | null {
+  const card = key ? index.byKey.get(key) : undefined;
+  if (!card || isLegacyTowStaffGeneral(card)) return null;
+  return card.towSourceCorpsId ?? null;
+}
+
 /** Distinct source-corps ids the build's units actually draw from, in first-seen
  *  order. This is the roll a player must land to field the current selection —
- *  independent of whatever is toggled in the Corps roll menu. */
+ *  independent of whatever is toggled in the Corps roll menu. Staff generals are
+ *  left out (always offered), so a commander from a fifth corps doesn't count. */
 export function towSourceCorpsIdsInBuild(build: BuildState, index: RosterIndex): string[] {
   const ids: string[] = [];
-  const add = (key: string | undefined) => {
-    const id = key ? index.byKey.get(key)?.towSourceCorpsId ?? null : null;
+  const add = (key: string | null | undefined) => {
+    const id = requiredSourceCorpsId(key, index);
     if (id && !ids.includes(id)) ids.push(id);
   };
   for (const inst of build.instances) add(inst.unitKey);
-  add(build.staffSlotUnitKey ?? undefined);
+  add(build.staffSlotUnitKey);
   return ids;
 }
 
 export interface TowCorpsCeiling {
   /** Distinct source-corps ids the build draws from, in first-seen order. */
   order: string[];
-  /** Selected copies per source-corps id (staff slot included). */
+  /** Selected copies per source-corps id (staff slot included; staff generals,
+   *  which need no corps rolled, are not counted). */
   counts: Map<string, number>;
   /** The first ≤4 corps — the still-rollable "kept" set. */
   kept: Set<string>;
@@ -323,7 +335,7 @@ export function towCorpsCeiling(build: BuildState, index: RosterIndex): TowCorps
   const order = towSourceCorpsIdsInBuild(build, index);
   const counts = new Map<string, number>();
   const tally = (key: string | null | undefined) => {
-    const id = key ? index.byKey.get(key)?.towSourceCorpsId ?? null : null;
+    const id = requiredSourceCorpsId(key, index);
     if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
   };
   for (const inst of build.instances) tally(inst.unitKey);
@@ -334,23 +346,26 @@ export function towCorpsCeiling(build: BuildState, index: RosterIndex): TowCorps
 
 /** True when `card` falls beyond the 4-corps roll: it is already selected in a corps
  *  past the kept four, or it belongs to a new corps that would open a fifth. Cards
- *  with no source corps (non-TOW) are never over. */
+ *  with no source corps (non-TOW) and staff generals (always offered) are never over. */
 export function isCardOverCorpsCeiling(card: UnitCard, ceiling: TowCorpsCeiling): boolean {
   const id = card.towSourceCorpsId;
-  if (!id) return false;
+  if (!id || isLegacyTowStaffGeneral(card)) return false;
   if (ceiling.counts.has(id)) return !ceiling.kept.has(id);
   return ceiling.count >= LEGACY_TOW_MAX_SOURCE_CORPS;
 }
 
 /** Distinct combat-general unitKeys the build actually uses, in first-seen order.
  *  Staff generals are excluded: the legacy TOW roll offers every staff general in
- *  every window, so only combat generals constrain which window works. */
+ *  every window, so only combat generals constrain which window works. A combat
+ *  general commanding from the staff slot must be rolled like any other. */
 export function towCombatGeneralKeysInBuild(build: BuildState, index: RosterIndex): string[] {
   const keys: string[] = [];
-  for (const inst of build.instances) {
-    const card = index.byKey.get(inst.unitKey);
+  const add = (key: string | null | undefined) => {
+    const card = key ? index.byKey.get(key) : undefined;
     if (card && isLegacyTowCombatGeneral(card) && !keys.includes(card.unitKey)) keys.push(card.unitKey);
-  }
+  };
+  for (const inst of build.instances) add(inst.unitKey);
+  add(build.staffSlotUnitKey);
   return keys;
 }
 
