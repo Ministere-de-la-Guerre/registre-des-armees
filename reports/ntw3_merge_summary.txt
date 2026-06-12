@@ -1,0 +1,66 @@
+NTW3 army-builder merge summary
+project_root: C:\Users\M0obo\Desktop\NTW3 Build Files\Needed Files for Unit
+tsv_directory: C:\Users\M0obo\Desktop\NTW3 Build Files\Needed Files for Unit\source\tables
+icon_directory: C:\Users\M0obo\Desktop\NTW3 Build Files\Needed Files for Unit\assets\icons
+
+Input TSVs:
+- localisation.loc.tsv: rows=58274, unique_key=58226, exact_duplicates=44, conflict_keys=4, metadata_rows_removed=1
+- mp_general_command_ratings.tsv: rows=9361, unique_unit_key=7828, exact_duplicates=1521, conflict_keys=12, metadata_rows_removed=1
+- ntw3_battle_entities.tsv: rows=49, unique_key=49, exact_duplicates=0, conflict_keys=0, metadata_rows_removed=1
+- ntw3_land_projectiles.tsv: rows=67, unique_key=67, exact_duplicates=0, conflict_keys=0, metadata_rows_removed=1
+- ntw3_land_units.tsv: rows=31504, unique_key=26746, exact_duplicates=1723, conflict_keys=3031, metadata_rows_removed=1
+- ntw3_unit_stats_land.tsv: rows=31504, unique_key=26746, exact_duplicates=635, conflict_keys=3872, metadata_rows_removed=1
+- units_to_exclusive_faction_permissions.tsv: rows=25668, unique_key=25652, exact_duplicates=0, conflict_keys=0, metadata_rows_removed=1
+- gun_type_to_projectiles.tsv: rows=131, unique_gun_type=63, exact_duplicates=0, conflict_keys=0, metadata_rows_removed=1
+
+Icons by extension:
+- .tga: 14502
+
+Final output:
+rows: 22658
+unique_unit_keys: 22642
+unique_faction_keys: 297
+resolved_unit_names: 22656
+unresolved_unit_names: 2
+units_with_ACDV_tags: 19875
+units_without_ACDV_tags: 2783
+resolved_speed_codes: 21854
+speed_codes: C1=452, C2=543, C3=1355, C4=2718, C5=321, F1=29, F2=246, F3=499, F4=440, F5=251, F6=99, G1=13, G2=293, G3=683, G4=638, G5=192, G6=42, GS1=23, GS2=47, GS3=6, H1=72, H2=418, H3=118, L1=608, L2=2104, L3=4025, L4=3082, L5=1462, L6=320, S1=193, S2=451, S3=111
+unmapped_speed_entities: gun_crew | gun_crew | artillery_horse
+resolved_ranges: 16052
+ranges_by_selection_method: cannon_round_shot=1973, direct_projectile_match=13872, howitzer_shell=149, mortar_shell=2, rocket_projectile=4, unicorn_shell=52
+unresolved_weapon_keys: carbine
+unresolved_gun_types: 
+missing_projectile_keys: 
+ambiguous_projectile_selections: 0
+units_with_command_stars: 6516
+resolved_icons: 22658
+unresolved_icons: 0
+ambiguous_icons: 0
+icon_matches_by_method: icon_name_exact_stem=219, tow_base_reuse=9984, uniform_table_exact=1172, uniform_table_first_declared=26, unit_key_body_suffix=11257
+duplicate_conflict_rows: 14093
+merge_unexpectedly_multiplied_records: no
+
+Warnings by type:
+- duplicate_conflict: 14093
+- missing_army_corps_name: 1
+- missing_division_tag: 2767
+- missing_land_stats: 796
+- missing_land_unit: 3010
+- missing_unit_name: 2
+- rounded_down_men_display: 1976
+- unmapped_speed_entity: 804
+- unresolved_weapon: 92
+
+Representative validation rows:
+- infantry: ntw3_inf_grena_001_006_0210
+- grenadier: ntw3_inf_grena_001_006_0210
+- skirmisher: ntw3_inf_skirm_001_999_4901
+- cavalry: ntw3_cav_heavy_001_999_2338
+- artillery: ntw3_art_foot_001_012_0483
+- howitzer: ntw3_art_foot_214_999_0535
+- general: ntw3_gen_staff_001_0_0540
+- commander: ntw3_cav_light_214_018_1397_com_1463
+- tow: ntw3_inf_line_081_030_2438_tow_032_com_3016
+
+database_complete: no
