@@ -22,8 +22,11 @@ unique_unit_keys: 22642
 unique_faction_keys: 297
 resolved_unit_names: 22658
 unresolved_unit_names: 0
-units_with_ACDV_tags: 19875
-units_without_ACDV_tags: 2783
+units_with_division_placements: 20582
+placements_from_ACDV_tags: 19875
+placements_from_verified_overrides: 8
+placements_inferred_in_final_division: 699
+army_corps_combat_units_without_placement: 0
 resolved_speed_codes: 21854
 speed_codes: C1=452, C2=543, C3=1355, C4=2718, C5=321, F1=29, F2=246, F3=499, F4=440, F5=251, F6=99, G1=13, G2=293, G3=683, G4=638, G5=192, G6=42, GS1=23, GS2=47, GS3=6, H1=72, H2=418, H3=118, L1=608, L2=2104, L3=4025, L4=3082, L5=1462, L6=320, S1=193, S2=451, S3=111
 unmapped_speed_entities: gun_crew | gun_crew | artillery_horse
@@ -44,10 +47,9 @@ merge_unexpectedly_multiplied_records: no
 Warnings by type:
 - duplicate_conflict: 14093
 - missing_army_corps_name: 1
-- missing_division_tag: 2767
 - missing_land_stats: 796
 - missing_land_unit: 3010
-- rounded_down_men_display: 1976
+- rounded_down_men_display: 1998
 - unmapped_speed_entity: 804
 
 Representative validation rows:

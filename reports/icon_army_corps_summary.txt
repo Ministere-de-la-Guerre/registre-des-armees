@@ -2,8 +2,8 @@ NTW3 icon organization by army corps
 database_rows: 22658
 army_corps_directories: 247
 copied_files: 22658
-division_rows: 9948
-unassigned_rows: 1705
+division_rows: 10655
+unassigned_rows: 998
 tow_rows: 11005
 duplicate_destinations_skipped: 0
 renamed_collision_copies: 0

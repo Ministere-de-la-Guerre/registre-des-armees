@@ -55,11 +55,24 @@ UNIT_NAME_OVERRIDES = {
     "ntw3_gen_staff_285_2_0600_tow_057": "Ferdinand von Wintzingerode",
 }
 
+# In-game placement confirmed for Bonaparte / Italie.C. This explicit seed is
+# needed because every card in its fifth division lacks an ACDV tag; the general
+# final-division fallback can then resolve the remaining untagged corps cards.
+DIVISION_PLACEMENT_OVERRIDES = {
+    ("ntw3_ac_a03_x5_080", "ntw3_art_foot_080_006_0206"): (5, 1),
+    ("ntw3_ac_a03_x5_080", "ntw3_art_foot_080_006_0207"): (5, 1),
+    ("ntw3_ac_a03_x5_080", "ntw3_art_foot_080_006_0209"): (5, 1),
+    ("ntw3_ac_a03_x5_080", "ntw3_art_foot_080_006_0209_com_0308"): (5, 1),
+    ("ntw3_ac_a03_x5_080", "ntw3_art_horse_080_002_0704"): (5, 2),
+    ("ntw3_ac_a03_x5_080", "ntw3_art_horse_080_005_0703"): (5, 2),
+    ("ntw3_ac_a03_x5_080", "ntw3_inf_line_080_999_2437"): (5, 3),
+    ("ntw3_ac_a03_x5_080", "ntw3_inf_skirm_080_999_4755"): (5, 3),
+}
+
 WARNING_COLUMNS = [
     "warning_type", "unit_key", "faction_key", "source_file", "source_row",
     "reference_value", "details",
 ]
-
 SPEED_MAP = {
     **{f"inf_gren_v{i}": f"G{i}" for i in range(1, 7)},
     **{f"inf_line_v{i}": f"L{i}" for i in range(1, 7)},
@@ -71,8 +84,15 @@ SPEED_MAP = {
 }
 
 DIVISION_RE = re.compile(r"ACDV(\d+)B(\d+)")
+COMMANDER_SUFFIX_RE = re.compile(r"_com_\d+$")
 ABILITY_LINE_RE = re.compile(r"^\s*Abilit(?:y|ies):\s*([^\\\r\n]+)", re.IGNORECASE)
 ICON_EXTENSIONS = {".tga", ".png", ".jpg", ".jpeg", ".webp"}
+SAPPER_RE = re.compile(
+    r"sappers?|sapeurs?|sappeurs?|sap[eé]ri|pioniere|pionier|pioneers?|"
+    r"engineers?|ingenj[oö]r|artificers?|artífices|zapadores|gastadores",
+    re.IGNORECASE,
+)
+MARINE_RE = re.compile(r"marins?|marines?", re.IGNORECASE)
 
 
 def blank(value: object) -> bool:
@@ -81,6 +101,84 @@ def blank(value: object) -> bool:
 
 def text_value(value: object) -> str:
     return "" if blank(value) else str(value)
+
+
+def resolve_stats(
+    unit_key: str, stats_lookup: dict[str, pd.Series]
+) -> tuple[pd.Series | None, str]:
+    stats = stats_lookup.get(unit_key)
+    if stats is not None:
+        return stats, "unit"
+    if COMMANDER_SUFFIX_RE.search(unit_key):
+        base_key = COMMANDER_SUFFIX_RE.sub("", unit_key)
+        base_stats = stats_lookup.get(base_key)
+        if base_stats is not None:
+            return base_stats, "base_unit"
+    return None, ""
+
+
+def final_division_category(row: pd.Series) -> str:
+    unit_key = text_value(row.get("unit_key"))
+    unit_name = text_value(row.get("unit_name"))
+    unit_class = text_value(row.get("unit_class"))
+    if unit_key.startswith(("ntw3_art_foot_", "ntw3_art_fixed_")) or unit_class in {
+        "artillery_foot", "artillery_fixed"
+    }:
+        return "foot_artillery"
+    if unit_key.startswith("ntw3_art_horse_") or unit_class == "artillery_horse":
+        return "horse_artillery"
+    if unit_key.startswith("ntw3_inf_skirm_") or SAPPER_RE.search(unit_name) or MARINE_RE.search(unit_name):
+        return "specialists"
+    return ""
+
+
+def infer_final_division_placements(output: pd.DataFrame) -> set[tuple[str, str]]:
+    inferred: set[tuple[str, str]] = set()
+
+    for (faction_key, unit_key), (division_id, brigade_id) in DIVISION_PLACEMENT_OVERRIDES.items():
+        mask = (output["faction_key"] == faction_key) & (output["unit_key"] == unit_key)
+        output.loc[mask, ["division_brigade_code", "division_id", "brigade_id"]] = (
+            f"ACDV{division_id}B{brigade_id}", str(division_id), str(brigade_id)
+        )
+        output.loc[mask, "__placement_source"] = "verified_override"
+
+    for faction_key, indexes in output.groupby("faction_key").groups.items():
+        if not text_value(faction_key).startswith("ntw3_ac_"):
+            continue
+        corps = output.loc[indexes]
+        placed = corps.loc[corps["division_id"] != ""].copy()
+        if placed.empty:
+            continue
+        placed["__division_number"] = pd.to_numeric(placed["division_id"], errors="coerce")
+        final_division = int(placed["__division_number"].max())
+        final_rows = placed.loc[placed["__division_number"] == final_division].copy()
+        final_rows["__brigade_number"] = pd.to_numeric(final_rows["brigade_id"], errors="coerce")
+        final_brigade = int(final_rows["__brigade_number"].max())
+
+        category_brigades: dict[str, int] = {}
+        for category in ("foot_artillery", "horse_artillery", "specialists"):
+            matches = final_rows.loc[final_rows.apply(final_division_category, axis=1) == category]
+            if not matches.empty:
+                category_brigades[category] = int(matches["__brigade_number"].mode().iloc[0])
+        category_brigades.setdefault("foot_artillery", 1)
+        category_brigades.setdefault("horse_artillery", min(2, final_brigade))
+        category_brigades.setdefault("specialists", final_brigade)
+
+        unresolved = corps.loc[
+            (corps["division_id"] == "") & (corps["is_general"] != "true")
+        ]
+        for index, row in unresolved.iterrows():
+            category = final_division_category(row)
+            if not category:
+                continue
+            brigade_id = category_brigades[category]
+            output.loc[index, ["division_brigade_code", "division_id", "brigade_id"]] = (
+                f"ACDV{final_division}B{brigade_id}", str(final_division), str(brigade_id)
+            )
+            output.loc[index, "__placement_source"] = "inferred_final_division"
+            inferred.add((text_value(faction_key), text_value(row["unit_key"])))
+
+    return inferred
 
 
 def add_warning(
@@ -175,6 +273,33 @@ def make_lookup(frame: pd.DataFrame, key: str) -> dict[str, pd.Series]:
         for _, row in frame.iterrows()
         if not blank(row.get(key))
     }
+
+
+def consensus_value_lookup(
+    frame: pd.DataFrame, key_column: str, value_column: str
+) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for raw_key, group in frame.groupby(key_column, dropna=False, sort=False):
+        key = text_value(raw_key)
+        values = {
+            text_value(value) for value in group[value_column]
+            if not blank(value)
+        }
+        if key and len(values) == 1:
+            result[key] = values.pop()
+    return result
+
+
+def first_value_lookup(
+    frame: pd.DataFrame, key_column: str, value_column: str
+) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for _, row in frame.iterrows():
+        key = text_value(row.get(key_column))
+        value = text_value(row.get(value_column))
+        if key and value and key not in result:
+            result[key] = value
+    return result
 
 
 def localisation_value(
@@ -481,7 +606,13 @@ def write_summary(
     lines.extend(["", "Icons by extension:"])
     lines.extend(f"- {extension}: {count}" for extension, count in sorted(icon_extensions.items()))
     resolved_names = int((output["unit_name"] != "").sum())
-    with_tags = int((output["division_brigade_code"] != "").sum())
+    with_placements = int((output["division_brigade_code"] != "").sum())
+    placement_sources = Counter(output["__placement_source"].loc[output["__placement_source"] != ""])
+    unresolved_corps = int((
+        output["faction_key"].str.startswith("ntw3_ac_")
+        & output["division_brigade_code"].eq("")
+        & output["is_general"].ne("true")
+    ).sum())
     lines.extend([
         "", "Final output:",
         f"rows: {len(output)}",
@@ -489,8 +620,11 @@ def write_summary(
         f"unique_faction_keys: {output['faction_key'].nunique()}",
         f"resolved_unit_names: {resolved_names}",
         f"unresolved_unit_names: {len(output) - resolved_names}",
-        f"units_with_ACDV_tags: {with_tags}",
-        f"units_without_ACDV_tags: {len(output) - with_tags}",
+        f"units_with_division_placements: {with_placements}",
+        f"placements_from_ACDV_tags: {placement_sources['localisation_tag']}",
+        f"placements_from_verified_overrides: {placement_sources['verified_override']}",
+        f"placements_inferred_in_final_division: {placement_sources['inferred_final_division']}",
+        f"army_corps_combat_units_without_placement: {unresolved_corps}",
         f"resolved_speed_codes: {int((output['speed_code'] != '').sum())}",
         "speed_codes: " + ", ".join(f"{key}={value}" for key, value in sorted(speed_counts.items())),
         "unmapped_speed_entities: " + " | ".join(sorted({
@@ -561,6 +695,12 @@ def main() -> None:
 
     land_lookup = make_lookup(clean["ntw3_land_units.tsv"], "key")
     stats_lookup = make_lookup(clean["ntw3_unit_stats_land.tsv"], "key")
+    consensus_men = consensus_value_lookup(
+        frames["ntw3_unit_stats_land.tsv"], "key", "men"
+    )
+    first_declared_men = first_value_lookup(
+        frames["ntw3_unit_stats_land.tsv"], "key", "men"
+    )
     loc_lookup = make_lookup(clean["localisation.loc.tsv"], "key")
     rating_lookup = make_lookup(clean["mp_general_command_ratings.tsv"], "unit_key")
     projectile_lookup = make_lookup(clean["ntw3_land_projectiles.tsv"], "key")
@@ -594,7 +734,7 @@ def main() -> None:
                         details="Allowed permission has no unambiguous land-unit row.")
             continue
         if unit_key not in unit_cache:
-            stats = stats_lookup.get(unit_key)
+            stats, stats_source = resolve_stats(unit_key, stats_lookup)
             if stats is None:
                 add_warning(warnings, "missing_land_stats", unit_key=unit_key,
                             source_file="ntw3_unit_stats_land.tsv", reference_value=unit_key,
@@ -617,11 +757,10 @@ def main() -> None:
             tag = DIVISION_RE.search(description)
             if tag:
                 division_code, division_id, brigade_id = tag.group(0), tag.group(1), tag.group(2)
+                placement_source = "localisation_tag"
             else:
                 division_code = division_id = brigade_id = ""
-                add_warning(warnings, "missing_division_tag", unit_key=unit_key,
-                            source_file="localisation.loc.tsv", reference_value=text_value(unit.get("unit_description_text")),
-                            details="Resolved description contains no ACDV<division>B<brigade> tag." if description else "Description did not resolve.")
+                placement_source = ""
 
             speed_code, speed_entity, entity_refs = resolve_speed(stats, battle_keys)
             if not speed_code:
@@ -642,6 +781,11 @@ def main() -> None:
             unit_class = text_value(unit.get("class"))
             men_raw = text_value(stats.get("men")) if stats is not None else ""
             men_display = ""
+            if unit_class.casefold() == "general" and "_gen_staff_" in unit_key and not men_raw:
+                men_raw = "32"
+            elif unit_class.casefold() == "general" and not men_raw:
+                base_key = COMMANDER_SUFFIX_RE.sub("", unit_key)
+                men_raw = consensus_men.get(base_key) or first_declared_men.get(base_key, "")
             if men_raw:
                 try:
                     men_display = numeric_display(men_raw)
@@ -669,6 +813,7 @@ def main() -> None:
                 "division_brigade_code": division_code,
                 "division_id": division_id,
                 "brigade_id": brigade_id,
+                "__placement_source": placement_source,
                 "base_mp_cost": text_value(unit.get("multiplayer_cost")),
                 "unit_cap": text_value(unit.get("total_cap_mp")),
                 "range": range_value,
@@ -711,6 +856,7 @@ def main() -> None:
                     else ""
                 ),
                 "__gun_type": text_value(stats.get("gun_type")) if stats is not None else "",
+                "__stats_source": stats_source,
             }
         row = dict(unit_cache[unit_key])
         row["faction_key"] = faction_key
@@ -734,7 +880,25 @@ def main() -> None:
 
     output = pd.DataFrame(output_rows, dtype=object)
     if output.empty:
-        output = pd.DataFrame(columns=OUTPUT_COLUMNS + ["__gun_type"])
+        output = pd.DataFrame(
+            columns=OUTPUT_COLUMNS + ["__gun_type", "__placement_source", "__stats_source"]
+        )
+
+    infer_final_division_placements(output)
+    unresolved_corps = output.loc[
+        output["faction_key"].str.startswith("ntw3_ac_")
+        & output["division_brigade_code"].eq("")
+        & output["is_general"].ne("true")
+    ]
+    for _, row in unresolved_corps.iterrows():
+        add_warning(
+            warnings,
+            "missing_division_tag",
+            unit_key=text_value(row["unit_key"]),
+            faction_key=text_value(row["faction_key"]),
+            source_file="localisation.loc.tsv",
+            details="Army-corps combat unit has no ACDV tag and did not match a final-division convention.",
+        )
 
     # ToW records frequently duplicate the base unit exactly while omitting a separate
     # icon file. Reuse only the icon from the exact key obtained by removing _tow_###.

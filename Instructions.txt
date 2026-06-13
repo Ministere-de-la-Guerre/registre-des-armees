@@ -190,6 +190,12 @@ men_raw = raw database value
 men_display = men_raw / 2
 ```
 
+When a General-class commander variant has no direct stats row, remove its trailing
+`_com_<digits>` suffix and inherit `men_raw` from that regular base unit. When a
+`_gen_staff_` card still has no source count, use 32 raw men so its final displayed
+count remains the verified 16. If duplicate base-unit stats disagree on `men`, use
+the first declared source row deterministically.
+
 Keep both fields.
 
 If dividing by two produces a non-integer result, preserve it and log it for review.
@@ -319,7 +325,16 @@ Preserve the raw division number.
 
 Do not add one.
 
-If no tag exists, leave the fields blank.
+For a genuine `ntw3_ac_*` army-corps faction, apply the final-division convention
+when a non-general card has no tag:
+
+* foot and fixed artillery join the foot-artillery brigade of the highest numbered division;
+* horse artillery joins the horse-artillery brigade of that division;
+* skirmishers, sappers, and marines join that division's final brigade.
+
+Use a narrowly scoped verified override when every card in a final division lacks a
+tag and the division number therefore cannot be inferred from other cards. Leave
+staff generals and non-army-corps records blank when no tag exists.
 
 ## Cost and cap
 

@@ -182,6 +182,20 @@ Only faction keys containing `_ac_` receive brigade or division discounts. Place
 is parsed strictly from `ACDV<division>B<brigade>`; the raw numeric division and
 brigade IDs are used for pricing.
 
+Verified in-game placements may be recorded as narrowly scoped build overrides when
+the supplied localisation omits its ACDV tag. For `ntw3_ac_a03_x5_080`
+(`12. Bonaparte / Italie.C`), the fifth and final division is:
+
+- `ACDV5B1`: 12-, 4-, and 8-pound foot artillery, including the 8-pound battery's
+  combat-general variant.
+- `ACDV5B2`: 8- and 4-pound horse artillery.
+- `ACDV5B3`: Sapeurs and Tirailleurs.
+
+For genuine `ntw3_ac_*` army corps, untagged non-general cards then use the verified
+final-division convention. Foot and fixed artillery join the foot-artillery brigade, horse
+artillery joins the horse-artillery brigade, and skirmishers, sappers, and marines
+join the final brigade. Staff generals remain unplaced at the army-corps root.
+
 For every recruitable, tagged, non-general row in a group:
 
 ```text
@@ -222,7 +236,10 @@ every army corps; there are no corps-specific exceptions or override table.
 Every General-class unit whose key contains `_gen_staff_` has a final in-game men
 count of 16. The generated `men_display` field and `UnitCard.final_men_count` both
 enforce 16 for all staff generals, including rows with missing raw men data. The
-original `men_raw` value is preserved for source auditing and classification.
+generator records 32 raw men when a staff-general source row is missing. Combat
+general variants with missing stats inherit the raw and displayed men counts from
+their regular base unit after removing the `_com_<digits>` suffix. If duplicate base
+stats disagree on that count, the first declared source row is used deterministically.
 
 The build app has one corps-command/staff slot. A true staff general can occupy it,
 and a combat general may be moved from a division into that slot. A combat general

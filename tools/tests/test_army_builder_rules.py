@@ -198,6 +198,16 @@ class LimitTests(unittest.TestCase):
         self.assertEqual(sourced.final_men_count, 16)
         self.assertEqual(missing_source.final_men_count, 16)
 
+    def test_generated_general_rows_all_have_source_backed_or_forced_men(self) -> None:
+        csv_path = Path(__file__).resolve().parents[2] / "ntw3_army_builder_units.csv"
+        with csv_path.open(newline="", encoding="utf-8-sig") as handle:
+            unresolved = [
+                row for row in csv.DictReader(handle)
+                if row["is_general"] == "true" and not row["men_raw"]
+            ]
+
+        self.assertEqual(unresolved, [])
+
     def test_staff_and_combat_general_caps_are_independent(self) -> None:
         faction = "ntw3_ac_test_x7_001"
         staff = card("staff", faction=faction, unit_class="general", men=32)
@@ -270,6 +280,66 @@ class LimitTests(unittest.TestCase):
 
 
 class AssetMappingTests(unittest.TestCase):
+    def test_bonaparte_italie_c_final_division_placements(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        expected = {
+            "ntw3_art_foot_080_006_0206": "ACDV5B1",
+            "ntw3_art_foot_080_006_0207": "ACDV5B1",
+            "ntw3_art_foot_080_006_0209": "ACDV5B1",
+            "ntw3_art_foot_080_006_0209_com_0308": "ACDV5B1",
+            "ntw3_art_horse_080_002_0704": "ACDV5B2",
+            "ntw3_art_horse_080_005_0703": "ACDV5B2",
+            "ntw3_inf_line_080_999_2437": "ACDV5B3",
+            "ntw3_inf_skirm_080_999_4755": "ACDV5B3",
+        }
+        with (root / "ntw3_army_builder_units.csv").open(
+            newline="", encoding="utf-8-sig"
+        ) as handle:
+            rows = {
+                row["unit_key"]: row
+                for row in csv.DictReader(handle)
+                if row["faction_key"] == "ntw3_ac_a03_x5_080"
+            }
+
+        for unit_key, placement in expected.items():
+            self.assertEqual(rows[unit_key]["division_brigade_code"], placement)
+
+    def test_all_army_corps_combat_cards_have_placements(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        with (root / "ntw3_army_builder_units.csv").open(
+            newline="", encoding="utf-8-sig"
+        ) as handle:
+            unresolved = [
+                row for row in csv.DictReader(handle)
+                if row["faction_key"].startswith("ntw3_ac_")
+                and row["is_general"] != "true"
+                and not row["division_brigade_code"]
+            ]
+
+        self.assertEqual(unresolved, [])
+
+    def test_guard_marines_use_the_final_brigade_of_the_final_division(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        with (root / "ntw3_army_builder_units.csv").open(
+            newline="", encoding="utf-8-sig"
+        ) as handle:
+            rows = list(csv.DictReader(handle))
+
+        for faction_key, unit_key in (
+            ("ntw3_ac_a06_x4_105", "ntw3_inf_line_105_999_2648"),
+            ("ntw3_ac_a08_x5_114", "ntw3_inf_line_114_999_5979"),
+        ):
+            corps = [row for row in rows if row["faction_key"] == faction_key]
+            marine = next(row for row in corps if row["unit_key"] == unit_key)
+            final_division = max(int(row["division_id"]) for row in corps if row["division_id"])
+            final_brigade = max(
+                int(row["brigade_id"])
+                for row in corps
+                if row["division_id"] == str(final_division)
+            )
+            self.assertEqual(int(marine["division_id"]), final_division)
+            self.assertEqual(int(marine["brigade_id"]), final_brigade)
+
     def test_guerrilla_cards_reference_reusable_badge_overlay(self) -> None:
         root = Path(__file__).resolve().parents[2]
         badge_path = "assets/ui/guerrilla_badge/guerrilla_badge.png"
