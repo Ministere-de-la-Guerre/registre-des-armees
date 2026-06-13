@@ -38,6 +38,7 @@ OUTPUT_COLUMNS = [
     "men_display", "speed_code", "speed_entity_key", "division_brigade_code",
     "division_id", "brigade_id", "base_mp_cost", "unit_cap", "range",
     "weapon_key", "projectile_key", "range_selection_method", "command_stars",
+    "command_star_icon_path", "command_star_strip_path", "command_star_layout",
     "is_general", "is_commander_variant", "is_tow_variant", "icon_name",
     "icon_filename", "icon_path", "icon_match_method",
     "accuracy", "reload_skill", "morale", "melee_attack", "melee_defense",
@@ -647,6 +648,16 @@ def main() -> None:
                 "projectile_key": projectile_key,
                 "range_selection_method": range_method,
                 "command_stars": text_value(rating.get("command_stars")) if rating is not None else "",
+                "command_star_icon_path": (
+                    "assets/ui/command_stars/star_gold.png" if rating is not None and not blank(rating.get("command_stars")) else ""
+                ),
+                "command_star_strip_path": (
+                    f"assets/ui/command_stars/vertical/command_stars_{text_value(rating.get('command_stars'))}.png"
+                    if rating is not None and not blank(rating.get("command_stars")) else ""
+                ),
+                "command_star_layout": (
+                    "vertical_left" if rating is not None and not blank(rating.get("command_stars")) else ""
+                ),
                 "is_general": str(unit_class.casefold() == "general").lower(),
                 "is_commander_variant": str("_com_" in unit_key).lower(),
                 "is_tow_variant": str("_tow_" in unit_key).lower(),

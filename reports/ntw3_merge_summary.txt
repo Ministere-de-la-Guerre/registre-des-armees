@@ -1,7 +1,7 @@
 NTW3 army-builder merge summary
-project_root: C:\Users\M0obo\Desktop\NTW3 Build Files\Needed Files for Unit
-tsv_directory: C:\Users\M0obo\Desktop\NTW3 Build Files\Needed Files for Unit\source\tables
-icon_directory: C:\Users\M0obo\Desktop\NTW3 Build Files\Needed Files for Unit\assets\icons
+project_root: C:\Users\M0obo\Desktop\Registre des Armees
+tsv_directory: C:\Users\M0obo\Desktop\Registre des Armees\source\tables
+icon_directory: C:\Users\M0obo\Desktop\Registre des Armees\assets\icons
 
 Input TSVs:
 - localisation.loc.tsv: rows=58274, unique_key=58226, exact_duplicates=44, conflict_keys=4, metadata_rows_removed=1

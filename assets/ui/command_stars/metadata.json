@@ -1,0 +1,23 @@
+{
+  "rating_source": "db/mp_general_command_ratings_tables/mp_general_command_ratings.command_stars",
+  "original_pack": "Napoleon Total War/data/data.pack",
+  "silver_internal_path": "ui/frontend ui/skins/army_card_star.tga",
+  "gold_internal_path": "ui/frontend ui/skins/spanish_skin/army_card_star.tga",
+  "preferred_app_asset": "assets/ui/command_stars/star_gold.png",
+  "strip_pattern": "assets/ui/command_stars/vertical/command_stars_{command_stars}.png",
+  "layout": "vertical_left",
+  "compact_star_width": 10,
+  "compact_star_height": 10,
+  "vertical_step": 9,
+  "supported_counts": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ]
+}
