@@ -17,40 +17,43 @@ Icons by extension:
 - .tga: 14502
 
 Final output:
-rows: 22658
-unique_unit_keys: 22642
+rows: 25668
+unique_unit_keys: 25652
 unique_faction_keys: 297
-resolved_unit_names: 22658
+resolved_unit_names: 25668
 unresolved_unit_names: 0
-units_with_division_placements: 20582
-placements_from_ACDV_tags: 19875
+units_with_division_placements: 23755
+placements_from_ACDV_tags: 22812
 placements_from_verified_overrides: 8
-placements_inferred_in_final_division: 699
-army_corps_combat_units_without_placement: 0
-resolved_speed_codes: 21854
-speed_codes: C1=452, C2=543, C3=1355, C4=2718, C5=321, F1=29, F2=246, F3=499, F4=440, F5=251, F6=99, G1=13, G2=293, G3=683, G4=638, G5=192, G6=42, GS1=23, GS2=47, GS3=6, H1=72, H2=418, H3=118, L1=608, L2=2104, L3=4025, L4=3082, L5=1462, L6=320, S1=193, S2=451, S3=111
+placements_reused_support_division: 123
+placements_created_support_division: 608
+placements_inherited_base_unit: 201
+army_corps_combat_units_without_placement: 1
+resolved_speed_codes: 21863
+speed_codes: C1=452, C2=543, C3=1355, C4=2720, C5=321, F1=29, F2=246, F3=500, F4=440, F5=251, F6=99, G1=13, G2=293, G3=683, G4=639, G5=192, G6=42, GS1=23, GS2=47, GS3=6, H1=72, H2=418, H3=118, L1=608, L2=2106, L3=4026, L4=3082, L5=1462, L6=320, S1=193, S2=451, S3=113
 unmapped_speed_entities: gun_crew | gun_crew | artillery_horse
-resolved_ranges: 16052
-ranges_by_selection_method: cannon_round_shot=1973, direct_projectile_match=13872, howitzer_shell=149, mortar_shell=2, rocket_projectile=4, unicorn_shell=52
+resolved_ranges: 16063
+ranges_by_selection_method: cannon_round_shot=1976, direct_projectile_match=13880, howitzer_shell=149, mortar_shell=2, rocket_projectile=4, unicorn_shell=52
 unresolved_weapon_keys:
 unresolved_gun_types:
 missing_projectile_keys:
 ambiguous_projectile_selections: 0
-units_with_command_stars: 6516
-resolved_icons: 22658
+units_with_command_stars: 7505
+resolved_icons: 25668
 unresolved_icons: 0
 ambiguous_icons: 0
-icon_matches_by_method: icon_name_exact_stem=219, tow_base_reuse=9984, uniform_table_exact=1172, uniform_table_first_declared=26, unit_key_body_suffix=11257
-duplicate_conflict_rows: 14093
+icon_matches_by_method: icon_name_exact_stem=227, tow_base_reuse=11626, uniform_table_exact=568, uniform_table_first_declared=38, unit_key_body_suffix=13209
+duplicate_conflict_rows: 8027
 merge_unexpectedly_multiplied_records: no
 
 Warnings by type:
-- duplicate_conflict: 14093
+- duplicate_conflict: 8027
 - missing_army_corps_name: 1
-- missing_land_stats: 796
-- missing_land_unit: 3010
-- rounded_down_men_display: 1998
-- unmapped_speed_entity: 804
+- missing_division_tag: 1
+- missing_land_stats: 3795
+- resolved_duplicate_first_occurrence: 3035
+- rounded_down_men_display: 2460
+- unmapped_speed_entity: 3805
 
 Representative validation rows:
 - infantry: ntw3_inf_grena_001_006_0210

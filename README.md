@@ -35,7 +35,7 @@ the lower-right edge of their portrait. This is a global per-card rule for every
 corps and ToW roster. It applies equally to ordinary units, artillery, combat
 generals, and staff generals. The supplied in-game reference is the
 **10-point Platov / Atamanstvo** corps in Russia 1812
-(`ntw3_ac_b11_r5_189`). In that roster, 39 of 56 selectable cards carry the badge,
+(`ntw3_ac_b11_r5_189`). In that roster, 46 of 63 selectable cards carry the badge,
 including Cossack cavalry, commander variants, and three artillery cards.
 
 The app must render this as a card overlay whenever the selected CSV row has:
@@ -247,6 +247,12 @@ placed there remains a combat-general card for its identity, cost, stars, ACDV
 completion, and underlying-unit cap, but it does not count against the corps'
 combat-general cap. The slot can contain only one general.
 
+A unit may be led by at most one combat general, even across different commander
+variants of the same base unit (its shared cap group). The unit's own cap can permit
+several copies, but only one of them carries a general: `check_known_limits` reports a
+`combat_general_max:<faction>:<base_unit>` violation when more than one combat-general
+variant of the same base unit is selected, and the build app blocks the second.
+
 Reusable validation represents this placement with the zero-based
 `staff_slot_index` argument to `check_known_limits`. Without that explicit placement,
 combat generals are treated as division generals and count against the combat cap.
@@ -263,7 +269,7 @@ the same time. Do not reproduce NTW3's random combat-general rolls. Combat-gener
 caps restrict how many cards may be selected; they do not restrict which cards the
 user may browse. Staff generals are also always displayed when available.
 
-For example, `ntw3_ac_b11_r5_189` exposes all 15 Platov combat-general commander
+For example, `ntw3_ac_b11_r5_189` exposes all 18 Platov combat-general commander
 variants simultaneously, alongside Matvei Platov as its staff general.
 `UnitCatalog.cards_for_faction()` returns the complete unrandomized card list.
 
@@ -312,6 +318,73 @@ python -m unittest discover -s tools/tests -v
 - `tools/army_builder_rules.py`
 - `tools/validate_army_builder_rules.py`
 - `tools/build_army_corps_catalog.py`
+- `tools/build_web_data.py`
 
 The original NTW3 installation is treated as read-only. Build outputs and extracted
 copies are written only inside this repository.
+
+## Division And Support-Division Inference
+
+`build_ntw3_army_builder_database.py` resolves the division/brigade of every
+army-corps card and records the decision in the `placement_source` column:
+
+- `localisation_tag` — explicit `ACDV<d>B<b>` tag in the localisation.
+- `verified_override` — a narrowly-scoped in-game-confirmed seed
+  (`DIVISION_PLACEMENT_OVERRIDES`, e.g. Bonaparte / Italie.C division 5).
+- `inferred_existing_support_division` — the highest tagged division already
+  contains artillery, so untagged support cards join it.
+- `inferred_new_support_division` — the highest tagged division is combat-only,
+  so a **new** support division is created *after* it (this fixes artillery that
+  was previously merged into the preceding infantry/cavalry division).
+- `inherited_base_unit` — a `_com_<digits>` commander variant with no tag
+  inherits its base unit's placement (important for artillery combat generals).
+- `reserve_support_division` — division `0` (`ACDV0B*`) is the game's reserve/support
+  division. When a corps has one, all of its reserve support (the division-0 tagged
+  artillery plus any untagged support) consolidates there, organised by category
+  brigade, and the web remap (`build_web_data.py`) displays it *after* every combat
+  division. Divisional artillery tagged into a combat division (e.g. `ACDV4B4`) is
+  untouched and stays with its division.
+
+Within a support division: foot/fixed artillery → brigade 1, horse artillery →
+brigade 2, skirmishers/sappers/marines → the final brigade. The generator reports
+`ambiguous_support_division`, `commander_base_placement_disagreement`, and
+`unplaced_commander_with_placed_base` warnings rather than guessing silently.
+
+## Flag Transparency
+
+The selection and post-selection flags already carry correct alpha. The earlier
+"white background" on the Denmark, Mamluk and Nauendorf flags was a white CSS
+backdrop showing through their transparent regions, now removed. For any future
+source flag that genuinely uses white as a transparency key, add its
+`faction_key` to `FLAG_WHITE_KEY_FACTIONS` in `tools/build_web_data.py`; a
+border-flood-fill keys only the background and preserves interior white details.
+
+## Web App
+
+A desktop-first **React + TypeScript + Vite** army builder lives in `web/`.
+
+```text
+cd web
+npm install
+npm run build:data   # regenerate web/public/data + PNG assets from the CSV/catalog
+npm run dev          # dev server
+npm test             # Vitest (rules parity, build/blocking, filters, saves, ordering, data)
+npm run lint
+npm run build        # tsc + production build
+```
+
+Data architecture (raw inputs stay separate from generated outputs):
+
+1. **Raw import / adapter** — `tools/build_web_data.py` converts
+   `ntw3_army_builder_units.csv` + `army_corps_catalog.json` into normalized
+   per-faction JSON under `web/public/data/` and converts `.tga` icons to PNG.
+2. **Validation / normalization** — `web/src/data/load.ts` (unknown fields
+   ignored, missing fields defaulted).
+3. **Versioned domain models** — `web/src/domain/`.
+4. **Rules engine** — `web/src/rules/rules.ts` (TypeScript port of
+   `tools/army_builder_rules.py`, with parity tests).
+5. **React UI** — `web/src/components/`.
+6. **Save persistence** — `web/src/state/storage.ts` defines a `StorageAdapter`
+   interface (localStorage + in-memory adapters); `web/src/state/saves.ts` is the
+   versioned `BuildRepository`. Components never touch `localStorage` directly, so
+   a future desktop `.exe` can swap in a filesystem/SQLite/IndexedDB adapter.

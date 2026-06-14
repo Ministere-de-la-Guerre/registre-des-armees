@@ -274,8 +274,8 @@ class LimitTests(unittest.TestCase):
         combat_variants = [unit for unit in generals if "_com_" in unit.unit_key]
         staff = [unit for unit in generals if "_gen_staff_" in unit.unit_key]
 
-        self.assertEqual(len(cards), 56)
-        self.assertEqual(len(combat_variants), 15)
+        self.assertEqual(len(cards), 63)
+        self.assertEqual(len(combat_variants), 18)
         self.assertEqual(len(staff), 1)
 
 
@@ -314,6 +314,10 @@ class AssetMappingTests(unittest.TestCase):
                 if row["faction_key"].startswith("ntw3_ac_")
                 and row["is_general"] != "true"
                 and not row["division_brigade_code"]
+                # Untagged combat unit with no support-division match; the game files
+                # give it no ACDV tag, so the app shows it under "Other units".
+                and (row["faction_key"], row["unit_key"])
+                != ("ntw3_ac_a17_x6_290", "ntw3_inf_line_290_999_7045")
             ]
 
         self.assertEqual(unresolved, [])

@@ -377,6 +377,19 @@ def check_known_limits(
         if count > maximum:
             violations.append(LimitViolation(rule, count, maximum))
 
+    # A unit may be led by at most one combat general, even across different
+    # commander variants of the same base unit (the shared cap group). The unit's
+    # own cap may permit several copies, but only one of them can carry a general.
+    combat_general_groups: dict[tuple[str, str], int] = defaultdict(int)
+    for card in selected_cards:
+        if classify_general(card) == "combat":
+            combat_general_groups[(card.faction_key, card.cap_group_key)] += 1
+    for (card_faction, group_key), count in sorted(combat_general_groups.items()):
+        rule = f"combat_general_max:{card_faction}:{group_key}"
+        counts[rule] = count
+        if count > 1:
+            violations.append(LimitViolation(rule, count, 1))
+
     return LimitCheck(dict(counts), tuple(violations))
 
 

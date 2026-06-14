@@ -1,0 +1,92 @@
+import type { UnitCard } from "../domain/types";
+import { MAX_TOTAL_UNIT_CARDS } from "../rules/rules";
+import type { BuildState, BuildSummary as Summary, RosterIndex } from "../state/build";
+import { Medallion } from "./Medallion";
+
+/** The build tray: the staff slot (commander), then one medallion per selected
+ *  copy in a single line, padded with empty slots up to the 31-card maximum. Each
+ *  copy is independently removable (right-click). Running totals live in the top
+ *  bar; only the Clear-build action remains here. Mirrors the game's unit bar. */
+export function BottomTray({
+  index,
+  build,
+  summary,
+  onRemoveInstance,
+  onClearStaff,
+  onClearBuild,
+  onDetails,
+  onHover,
+  onHoverEnd,
+}: {
+  index: RosterIndex;
+  build: BuildState;
+  summary: Summary;
+  onRemoveInstance: (instanceId: string) => void;
+  onClearStaff: () => void;
+  onClearBuild: () => void;
+  onDetails: (card: UnitCard) => void;
+  onHover: (card: UnitCard, anchor: DOMRect) => void;
+  onHoverEnd: () => void;
+}) {
+  const { totalCards } = summary;
+  const staffCard = build.staffSlotUnitKey ? index.byKey.get(build.staffSlotUnitKey) : undefined;
+
+  const instances = build.instances
+    .map((inst) => ({ inst, card: index.byKey.get(inst.unitKey) }))
+    .filter((e): e is { inst: { id: string; unitKey: string }; card: UnitCard } => Boolean(e.card));
+
+  // The staff slot counts toward the 31-card limit; the single line shows the
+  // remaining copies plus empty slots so the whole army fits one row.
+  const emptyCount = Math.max(0, MAX_TOTAL_UNIT_CARDS - totalCards);
+  const hasBuild = build.instances.length > 0 || build.staffSlotUnitKey !== null;
+
+  return (
+    <div className="tray">
+      <div className="staffslot">
+        <span className="slot-label">Staff slot (commander)</span>
+        {staffCard ? (
+          <Medallion
+            card={staffCard}
+            inStaffSlot
+            hideName
+            onClick={() => onDetails(staffCard)}
+            onContextMenu={onClearStaff}
+            onHover={onHover}
+            onHoverEnd={onHoverEnd}
+          />
+        ) : (
+          <div className="empty">Empty — “Set commander” on any general</div>
+        )}
+      </div>
+
+      <div className="slots" aria-label="Selected units">
+        {instances.map(({ inst, card }) => (
+          <Medallion
+            key={inst.id}
+            card={card}
+            selected
+            hideName
+            onClick={() => onDetails(card)}
+            onContextMenu={() => onRemoveInstance(inst.id)}
+            onHover={onHover}
+            onHoverEnd={onHoverEnd}
+          />
+        ))}
+        {Array.from({ length: emptyCount }).map((_, i) => (
+          <span className="empty-oval" key={i} aria-hidden />
+        ))}
+      </div>
+
+      <div className="totals">
+        <button
+          className="btn small clear-build"
+          disabled={!hasBuild}
+          onClick={onClearBuild}
+          title="Remove every card and clear the staff slot"
+        >
+          Clear build
+        </button>
+      </div>
+    </div>
+  );
+}

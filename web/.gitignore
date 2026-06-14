@@ -1,0 +1,9 @@
+node_modules
+dist
+coverage
+*.local
+.vite
+
+# Generated browser data (rebuild with `npm run build:data`)
+public/data
+public/assets
