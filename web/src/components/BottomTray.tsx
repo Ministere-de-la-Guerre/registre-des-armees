@@ -43,7 +43,7 @@ export function BottomTray({
   return (
     <div className="tray">
       <div className="staffslot">
-        <span className="slot-label">Staff slot (commander)</span>
+        <span className="slot-label">Commander</span>
         {staffCard ? (
           <Medallion
             card={staffCard}

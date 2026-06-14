@@ -150,10 +150,14 @@ export function evaluateAdd(
     }
   }
 
-  const next = [...cards, card];
-  const price = calculateArmyCost(next, index.roster.cards, index.roster.factionKey);
-  if (price.finalCost > MAX_BUILD_COST) {
-    return { reason: `Would exceed ${MAX_BUILD_COST.toLocaleString()} cost limit.` };
+  // You must afford the unit *before* any formation it completes is discounted: the
+  // limit applies to the current (already-discounted) cost plus the new unit's full
+  // price. Discounts already earned from completed brigades/divisions still count,
+  // but a discount the new unit itself would trigger is not pre-credited — matching
+  // the in-game recruitment block.
+  const currentFinal = calculateArmyCost(cards, index.roster.cards, index.roster.factionKey).finalCost;
+  if (currentFinal + card.cost > MAX_BUILD_COST) {
+    return { reason: `Would exceed ${MAX_BUILD_COST.toLocaleString()} cost limit (before discount).` };
   }
 
   return null;

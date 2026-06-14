@@ -29,11 +29,11 @@ placements_reused_support_division: 123
 placements_created_support_division: 608
 placements_inherited_base_unit: 201
 army_corps_combat_units_without_placement: 1
-resolved_speed_codes: 21863
-speed_codes: C1=452, C2=543, C3=1355, C4=2720, C5=321, F1=29, F2=246, F3=500, F4=440, F5=251, F6=99, G1=13, G2=293, G3=683, G4=639, G5=192, G6=42, GS1=23, GS2=47, GS3=6, H1=72, H2=418, H3=118, L1=608, L2=2106, L3=4026, L4=3082, L5=1462, L6=320, S1=193, S2=451, S3=113
+resolved_speed_codes: 25656
+speed_codes: C1=614, C2=576, C3=1510, C4=3209, C5=521, F1=29, F2=277, F3=561, F4=506, F5=290, F6=107, G1=13, G2=340, G3=808, G4=773, G5=255, G6=54, GS1=33, GS2=57, GS3=16, H1=74, H2=478, H3=145, L1=656, L2=2417, L3=4692, L4=3787, L5=1701, L6=343, S1=212, S2=486, S3=116
 unmapped_speed_entities: gun_crew | gun_crew | artillery_horse
-resolved_ranges: 16063
-ranges_by_selection_method: cannon_round_shot=1976, direct_projectile_match=13880, howitzer_shell=149, mortar_shell=2, rocket_projectile=4, unicorn_shell=52
+resolved_ranges: 18780
+ranges_by_selection_method: cannon_round_shot=2236, direct_projectile_match=16301, howitzer_shell=157, mortar_shell=2, rocket_projectile=6, unicorn_shell=78
 unresolved_weapon_keys:
 unresolved_gun_types:
 missing_projectile_keys:
@@ -50,10 +50,9 @@ Warnings by type:
 - duplicate_conflict: 8027
 - missing_army_corps_name: 1
 - missing_division_tag: 1
-- missing_land_stats: 3795
 - resolved_duplicate_first_occurrence: 3035
-- rounded_down_men_display: 2460
-- unmapped_speed_entity: 3805
+- rounded_down_men_display: 2462
+- unmapped_speed_entity: 12
 
 Representative validation rows:
 - infantry: ntw3_inf_grena_001_006_0210

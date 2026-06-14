@@ -191,9 +191,10 @@ input::placeholder { color: #6f7888; }
   text-align: center; font-family: var(--serif); font-size: 10px; color: #aeb7c4; padding: 4px;
   background: linear-gradient(#2a313c, #1c222b);
 }
-.medallion.selected .oval { border-color: var(--gold-bright); box-shadow: 0 0 0 2px var(--gold-bright), 0 0 14px rgba(243, 210, 113, 0.5); }
-.medallion.staff .oval { border-color: var(--azure); box-shadow: 0 0 0 2px var(--azure), 0 0 14px rgba(90, 162, 230, 0.5); }
-.medallion.dimmed, .medallion.blocked { opacity: 0.3; filter: grayscale(0.85); }
+/* Selection is shown by the count badge, not a heavy ring. A unit you can no longer
+   add (cap reached, unaffordable, limit hit) is simply dimmed/unavailable. */
+.medallion.staff .oval { border-color: var(--azure); box-shadow: 0 0 0 1px var(--azure); }
+.medallion.dimmed, .medallion.blocked { opacity: 0.32; filter: grayscale(0.85); }
 .medallion.blocked .oval { cursor: not-allowed; }
 
 /* Men count above the oval frame (own stacking context), never clipped. */
@@ -248,6 +249,8 @@ input::placeholder { color: #6f7888; }
 .chip { font-size: 11px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line-2); background: transparent; color: var(--text); }
 .chip:hover { border-color: var(--gold-deep); }
 .chip.on { background: var(--gold-bright); color: #20160a; font-weight: 600; border-color: var(--gold-bright); }
+.chip.off { opacity: 0.28; cursor: default; }
+.chip.off:hover { border-color: var(--line-2); }
 .tri { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; font-size: 12px; margin-bottom: 5px; }
 .tri .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 6px; overflow: hidden; }
 .tri .seg button { background: transparent; color: var(--text); border: none; font-size: 10px; padding: 2px 7px; }
@@ -280,7 +283,7 @@ input::placeholder { color: #6f7888; }
   flex: none; height: var(--tray-h); display: flex; align-items: center; gap: 12px;
   background: var(--bg-2); border-top: 1px solid var(--gold-deep); padding: 8px 14px;
 }
-.tray .staffslot { flex: none; width: 150px; border-right: 1px solid var(--line); padding-right: 12px; display: flex; flex-direction: column; gap: 4px; }
+.tray .staffslot { flex: none; width: 92px; border-right: 1px solid var(--line); padding-right: 10px; display: flex; flex-direction: column; gap: 4px; }
 .tray .slot-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-soft); }
 .tray .staffslot .empty {
   flex: 1; border: 1px dashed var(--line-2); border-radius: var(--radius); display: flex; align-items: center;
@@ -290,18 +293,17 @@ input::placeholder { color: #6f7888; }
    width — no horizontal scroll, no wrapping. */
 .tray .slots {
   flex: 1; min-width: 0; display: flex; flex-wrap: nowrap; align-items: center;
-  gap: 4px; padding: 2px 0;
+  gap: 3px; padding: 2px 0;
 }
-.tray .slots > * { flex: 1 1 0; min-width: 0; max-width: 56px; }
+.tray .slots > * { flex: 1 1 0; min-width: 0; max-width: 66px; }
 .tray .slots .empty-oval { height: 46px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line-2); }
 .tray .medallion { width: auto; }
 .tray .medallion .oval { border-width: 2px; }
-.tray .medallion.selected .oval {
-  border-color: var(--gold-bright);
-  box-shadow: 0 0 0 1px var(--gold-bright), 0 3px 8px rgba(0, 0, 0, 0.5);
-}
-.tray .medallion.staff .oval { border-color: var(--azure); box-shadow: 0 0 0 1px var(--azure); }
+/* No selection ring in the tray — being in the tray already means selected. */
+.tray .medallion.staff .oval { box-shadow: none; }
 .tray .medallion .men { top: -6px; font-size: 9px; padding: 0 4px; }
+/* The commander portrait sits in its own slot; keep it the same size as a tray unit. */
+.tray .staffslot .medallion { width: 58px; flex: none; }
 .tray .totals { flex: none; display: flex; gap: 8px; align-items: center; padding-left: 12px; border-left: 1px solid var(--line); }
 .tray .clear-build { border-color: var(--bad-deep); color: var(--bad); }
 .tray .clear-build:hover:not(:disabled) { background: var(--bad-deep); color: #fff; }

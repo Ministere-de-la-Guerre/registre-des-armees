@@ -15,18 +15,38 @@ describe("evaluateAdd blocking", () => {
     expect(evaluateAdd(idx, full, idx.byKey.get("a")!, 5)?.reason).toMatch(/full/i);
   });
 
-  it("allows a discount-completing copy that keeps final cost within 10,000", () => {
+  it("allows a copy whose base cost reaches exactly 10,000", () => {
     const a = makeUnit({ unitKey: "a", cost: 5000, cap: 2, groupCap: 2 });
     const idx = indexRoster(makeRoster([a]));
-    // One selected; adding the 2nd completes the brigade (−100) -> 9900, affordable.
+    // One selected (5000); adding the 2nd reaches 10,000 base — exactly at the cap.
     expect(evaluateAdd(idx, b(["a"]), a, 5)).toBeNull();
   });
 
-  it("blocks a card that would push final cost over 10,000", () => {
+  it("blocks a card that would push *base* (pre-discount) cost over 10,000", () => {
     const a = makeUnit({ unitKey: "a", cost: 5000, cap: 2, groupCap: 2, placement: { division: 1, brigade: 1 } });
     const bcard = makeUnit({ unitKey: "bb", cost: 6000, cap: 1, groupCap: 1, placement: { division: 1, brigade: 2 } });
     const idx = indexRoster(makeRoster([a, bcard]));
     expect(evaluateAdd(idx, b(["a"]), bcard, 5)?.reason).toMatch(/10,000/);
+  });
+
+  it("blocks a copy whose current cost + price exceeds 10,000 (no earned discount yet)", () => {
+    // Adding `sol` would complete the brigade and rebate it under 10,000, but with no
+    // discount yet earned the running cost is 9,500 + 600 = 10,100, so it is blocked.
+    const a = makeUnit({ unitKey: "a", cost: 9500, cap: 1, groupCap: 1, placement: { division: 1, brigade: 1 } });
+    const sol = makeUnit({ unitKey: "sol", cost: 600, cap: 1, groupCap: 1, placement: { division: 1, brigade: 1 } });
+    const idx = indexRoster(makeRoster([a, sol]));
+    expect(evaluateAdd(idx, b(["a"]), sol, 5)?.reason).toMatch(/before discount/i);
+  });
+
+  it("allows a copy that fits once already-earned formation discounts are applied", () => {
+    // Two completed brigades earn discounts that pull the running cost under 10,000,
+    // so a unit whose *base* total would be 10,100 is still affordable (current
+    // discounted cost 8,820 + 1,100 = 9,920). Mirrors the Toutchkov / Soulima case.
+    const p = makeUnit({ unitKey: "p", cost: 1500, cap: 3, groupCap: 3, placement: { division: 1, brigade: 1 } });
+    const q = makeUnit({ unitKey: "q", cost: 1500, cap: 3, groupCap: 3, placement: { division: 1, brigade: 2 } });
+    const z = makeUnit({ unitKey: "z", cost: 1100, cap: 1, groupCap: 1, placement: { division: 1, brigade: 3 } });
+    const idx = indexRoster(makeRoster([p, q, z]));
+    expect(evaluateAdd(idx, b(["p", "p", "p", "q", "q", "q"]), z, 5)).toBeNull();
   });
 
   it("blocks the same combat general twice (one general per unit)", () => {

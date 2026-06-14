@@ -113,7 +113,8 @@ export function Medallion({
           </span>
         ) : qty > 1 ? (
           <span className="qty">{qty}</span>
-        ) : selected && qty <= 1 ? (
+        ) : selected && qty <= 1 && !hideName ? (
+          // No checkmark in the tray — being in the tray already means selected.
           <span className="checkmark" aria-hidden>✓</span>
         ) : null}
         <span className="coststrip">

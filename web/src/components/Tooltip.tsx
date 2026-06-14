@@ -11,12 +11,10 @@ interface Row {
 export function Tooltip({
   card,
   anchor,
-  qtyInBuild = 0,
   blockReason,
 }: {
   card: UnitCard;
   anchor: DOMRect;
-  qtyInBuild?: number;
   blockReason?: string | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -35,20 +33,39 @@ export function Tooltip({
     setPos({ left, top });
   }, [anchor, card]);
 
-  const rows: Row[] = [
-    { k: "Cap", v: card.groupCap > 0 ? card.groupCap : null },
-    { k: "In build", v: card.groupCap > 0 ? qtyInBuild : null },
-    { k: "Cap left", v: card.groupCap > 0 ? Math.max(0, card.groupCap - qtyInBuild) : null },
-    { k: "Men", v: card.finalMen },
-    { k: "Range", v: card.range },
-    { k: "Accuracy", v: card.stats.accuracy },
-    { k: "Reload", v: card.stats.reloadSkill },
-    { k: "Morale", v: card.stats.morale },
-    { k: "Melee atk", v: card.stats.meleeAttack },
-    { k: "Melee def", v: card.stats.meleeDefense },
-    { k: "Charge", v: card.stats.chargeBonus },
-    { k: "Stars", v: card.commandStars },
-  ].filter((r) => r.v !== null);
+  // Stat order depends on what the unit actually does. Combat generals report their
+  // underlying unit class so they read like the unit they lead.
+  const cls = card.underlyingUnitClass || card.unitClass;
+  const s = card.stats;
+  const shoots = card.range !== null; // has a ranged weapon
+  let rows: Row[];
+  if (cls.startsWith("artillery")) {
+    rows = [
+      { k: "Range", v: card.range },
+      { k: "Accuracy", v: s.accuracy },
+      { k: "Melee def", v: s.meleeDefense },
+      { k: "Morale", v: s.morale },
+    ];
+  } else if (cls.startsWith("cavalry") && !shoots) {
+    // Melee cavalry (no firearm).
+    rows = [
+      { k: "Melee atk", v: s.meleeAttack },
+      { k: "Charge", v: s.chargeBonus },
+      { k: "Melee def", v: s.meleeDefense },
+      { k: "Morale", v: s.morale },
+    ];
+  } else {
+    // Infantry, skirmishers, and ranged cavalry — anything that shoots but isn't artillery.
+    rows = [
+      { k: "Range", v: card.range },
+      { k: "Accuracy", v: s.accuracy },
+      { k: "Reload", v: s.reloadSkill },
+      { k: "Melee atk", v: s.meleeAttack },
+      { k: "Melee def", v: s.meleeDefense },
+      { k: "Morale", v: s.morale },
+    ];
+  }
+  rows = rows.filter((r) => r.v !== null);
 
   const abilities = ABILITY_KEYS.filter((k) => card.abilities[k]);
 

@@ -105,7 +105,9 @@ def text_value(value: object) -> str:
 
 
 def resolve_stats(
-    unit_key: str, stats_lookup: dict[str, pd.Series]
+    unit_key: str,
+    stats_lookup: dict[str, pd.Series],
+    stats_first_lookup: dict[str, pd.Series] | None = None,
 ) -> tuple[pd.Series | None, str]:
     stats = stats_lookup.get(unit_key)
     if stats is not None:
@@ -115,6 +117,19 @@ def resolve_stats(
         base_stats = stats_lookup.get(base_key)
         if base_stats is not None:
             return base_stats, "base_unit"
+    # The strict unique lookup drops a key whose stats row is an ambiguous duplicate
+    # (balance-edited rows that conflict only on cost/cap), leaving the unit with no
+    # Men, speed entity, or combat stats at all. The game loads the first occurrence
+    # of a duplicate key, so fall back to that first-declared row to recover the full
+    # stat block (Men, speed, accuracy, …) deterministically.
+    if stats_first_lookup is not None:
+        first = stats_first_lookup.get(unit_key)
+        if first is not None:
+            return first, "first_occurrence"
+        if COMMANDER_SUFFIX_RE.search(unit_key):
+            base_first = stats_first_lookup.get(COMMANDER_SUFFIX_RE.sub("", unit_key))
+            if base_first is not None:
+                return base_first, "base_first_occurrence"
     return None, ""
 
 
@@ -841,6 +856,13 @@ def main() -> None:
 
     land_lookup = make_lookup(clean["ntw3_land_units.tsv"], "key")
     stats_lookup = make_lookup(clean["ntw3_unit_stats_land.tsv"], "key")
+    # First-declared (game-loaded) stats row per key, used to recover units the strict
+    # unique lookup dropped as ambiguous duplicates (see resolve_stats).
+    stats_first_lookup: dict[str, pd.Series] = {}
+    for _, _row in frames["ntw3_unit_stats_land.tsv"].iterrows():
+        _k = text_value(_row.get("key"))
+        if _k and _k not in stats_first_lookup:
+            stats_first_lookup[_k] = _row
     consensus_men = consensus_value_lookup(
         frames["ntw3_unit_stats_land.tsv"], "key", "men"
     )
@@ -880,7 +902,7 @@ def main() -> None:
                         details="Allowed permission has no unambiguous land-unit row.")
             continue
         if unit_key not in unit_cache:
-            stats, stats_source = resolve_stats(unit_key, stats_lookup)
+            stats, stats_source = resolve_stats(unit_key, stats_lookup, stats_first_lookup)
             if stats is None:
                 add_warning(warnings, "missing_land_stats", unit_key=unit_key,
                             source_file="ntw3_unit_stats_land.tsv", reference_value=unit_key,

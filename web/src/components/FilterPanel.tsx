@@ -149,19 +149,25 @@ export function FilterPanel({
         <div className="filter-section">
           <h4>Speed / movement</h4>
           {SPEED_FAMILIES.map((family) => {
-            const present = family.filter((s) => speeds.includes(s));
-            if (present.length === 0) return null;
+            // Show the whole family row (e.g. L1–L6) when the army has any of it; codes
+            // the army lacks are shown disabled. Entirely-absent families are skipped
+            // so the rows below shift up.
+            if (!family.some((s) => speeds.includes(s))) return null;
             return (
               <div className="chip-wrap speed-row" key={family[0]}>
-                {present.map((s) => (
-                  <button
-                    key={s}
-                    className={`chip${filters.speeds.includes(s) ? " on" : ""}`}
-                    onClick={() => onChange({ ...filters, speeds: toggleInArray(filters.speeds, s) })}
-                  >
-                    {s}
-                  </button>
-                ))}
+                {family.map((s) => {
+                  const present = speeds.includes(s);
+                  return (
+                    <button
+                      key={s}
+                      className={`chip${filters.speeds.includes(s) ? " on" : ""}${present ? "" : " off"}`}
+                      disabled={!present}
+                      onClick={() => onChange({ ...filters, speeds: toggleInArray(filters.speeds, s) })}
+                    >
+                      {s}
+                    </button>
+                  );
+                })}
               </div>
             );
           })}

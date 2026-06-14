@@ -333,7 +333,6 @@ export function Builder({
         <Tooltip
           card={hovered.card}
           anchor={hovered.anchor}
-          qtyInBuild={qtyOf(hovered.card.unitKey)}
           blockReason={blockReasons.get(hovered.card.unitKey) ?? null}
         />
       )}
@@ -351,7 +350,7 @@ export function Builder({
 }
 
 function UnplacedMedallion({ card, h }: { card: UnitCard; h: MedallionHandlers }) {
-  const blocked = h.isBlocked(card) && !h.isSelected(card.unitKey);
+  const blocked = h.isBlocked(card);
   return (
     <Medallion
       card={card}

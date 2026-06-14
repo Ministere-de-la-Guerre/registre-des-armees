@@ -31,7 +31,9 @@ export interface MedallionHandlers {
 }
 
 function UnitMedallion({ card, h }: { card: UnitCard; h: MedallionHandlers }) {
-  const blocked = h.isBlocked(card) && !h.isSelected(card.unitKey);
+  // Dim anything that can no longer be added (cap reached, unaffordable, limit hit),
+  // even when already selected — there is no separate "selected" highlight any more.
+  const blocked = h.isBlocked(card);
   return (
     <Medallion
       card={card}
