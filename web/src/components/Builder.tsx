@@ -13,6 +13,8 @@ import {
   effectiveCap,
   emptyBuild,
   evaluateAdd,
+  evaluateStaffSet,
+  groupQtyOf,
   indexRoster,
   makeInstanceId,
   qtyOf as qtyOfBuild,
@@ -41,7 +43,7 @@ export function Builder({
   const index = useMemo(() => indexRoster(roster), [roster]);
   const [build, setBuild] = useState<BuildState>(emptyBuild);
   const [filters, setFilters] = useState<FilterState>(defaultFilters);
-  const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
+  const [density, setDensity] = useState<"comfortable" | "compact">("compact");
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [detail, setDetail] = useState<UnitCard | null>(null);
   const [hovered, setHovered] = useState<{ card: UnitCard; anchor: DOMRect } | null>(null);
@@ -73,14 +75,28 @@ export function Builder({
     return m;
   }, [index, build, combatCap, roster.cards]);
 
+  // Staff-slot generals are blocked separately: assigning one must not exceed cost.
+  const staffBlockReasons = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const c of roster.cards) {
+      if (c.isGeneral && c.generalKind === "staff") {
+        m.set(c.unitKey, evaluateStaffSet(index, build, c)?.reason ?? null);
+      }
+    }
+    return m;
+  }, [index, build, roster.cards]);
+
   // --- selection helpers ---
   const qtyOf = (key: string) => qtyOfBuild(build, key);
+  const groupQty = (card: UnitCard) => groupQtyOf(index, build, card.capGroupKey);
   const isSelected = (key: string) => qtyOf(key) > 0 || build.staffSlotUnitKey === key;
   const inStaffSlot = (key: string) => build.staffSlotUnitKey === key;
+  // At cap when the whole shared cap group (base + combat-general variants) is full.
   const atCapOf = (card: UnitCard) => {
     const cap = effectiveCap(index, card);
-    return cap > 0 && qtyOf(card.unitKey) >= cap;
+    return cap > 0 && groupQty(card) >= cap;
   };
+  const staffBlocked = (card: UnitCard) => staffBlockReasons.get(card.unitKey) != null;
   const isDimmed = (card: UnitCard) => isFilterActive(filters) && !matchesCard(card, filters);
   const isBlocked = (card: UnitCard) => blockReasons.get(card.unitKey) != null;
 
@@ -96,11 +112,20 @@ export function Builder({
   const removeInstance = (id: string) =>
     setBuild((b) => ({ ...b, instances: b.instances.filter((i) => i.id !== id) }));
 
-  const toggleStaff = (card: UnitCard) =>
+  const toggleStaff = (card: UnitCard) => {
+    // Setting (not clearing) a general that would push cost over the limit is blocked.
+    if (build.staffSlotUnitKey !== card.unitKey) {
+      const reason = staffBlockReasons.get(card.unitKey);
+      if (reason) {
+        setMessage(reason);
+        return;
+      }
+    }
     setBuild((b) => {
       if (b.staffSlotUnitKey === card.unitKey) return { ...b, staffSlotUnitKey: null };
       return { ...b, instances: b.instances.filter((i) => i.unitKey !== card.unitKey), staffSlotUnitKey: card.unitKey };
     });
+  };
 
   const clearStaff = () => setBuild((b) => ({ ...b, staffSlotUnitKey: null }));
   const clearBuild = () => {
@@ -113,7 +138,9 @@ export function Builder({
     inStaffSlot,
     isDimmed,
     isBlocked,
+    staffBlocked,
     qtyOf,
+    groupQtyOf: groupQty,
     atCapOf,
     onAdd: tryAdd,
     onDetails: setDetail,
@@ -355,6 +382,7 @@ function UnplacedMedallion({ card, h }: { card: UnitCard; h: MedallionHandlers }
     <Medallion
       card={card}
       qty={h.qtyOf(card.unitKey)}
+      capCount={h.groupQtyOf(card)}
       selected={h.isSelected(card.unitKey)}
       dimmed={h.isDimmed(card)}
       blocked={blocked}

@@ -58,6 +58,16 @@ export function qtyOf(build: BuildState, unitKey: string): number {
   return build.instances.reduce((n, i) => (i.unitKey === unitKey ? n + 1 : n), 0);
 }
 
+/** Selected copies sharing a card's cap group (base unit + its combat-general
+ *  variants). Used for the shared-cap badge so every member shows the group's
+ *  usage, e.g. one base + one combat general both read 2/2. */
+export function groupQtyOf(index: RosterIndex, build: BuildState, capGroupKey: string): number {
+  return build.instances.reduce((n, i) => {
+    const c = index.byKey.get(i.unitKey);
+    return c && c.capGroupKey === capGroupKey ? n + 1 : n;
+  }, 0);
+}
+
 export interface ExpandedBuild {
   cards: UnitCard[];
   staffSlotIndex: number | null;
@@ -160,6 +170,25 @@ export function evaluateAdd(
     return { reason: `Would exceed ${MAX_BUILD_COST.toLocaleString()} cost limit (before discount).` };
   }
 
+  return null;
+}
+
+/** Returns a blocking reason if assigning `card` to the staff slot would break
+ *  the 10,000 cost limit, or null when it may be selected. A general already in
+ *  the slot is never blocked (so it can be cleared). */
+export function evaluateStaffSet(index: RosterIndex, build: BuildState, card: UnitCard): AddBlock | null {
+  if (build.staffSlotUnitKey === card.unitKey) return null;
+  const next: BuildState = {
+    ...build,
+    // Mirror toggleStaff: selecting from the grid removes any loose copies.
+    instances: build.instances.filter((i) => i.unitKey !== card.unitKey),
+    staffSlotUnitKey: card.unitKey,
+  };
+  const { cards } = expandBuild(index, next);
+  const finalCost = calculateArmyCost(cards, index.roster.cards, index.roster.factionKey).finalCost;
+  if (finalCost > MAX_BUILD_COST) {
+    return { reason: `Would exceed ${MAX_BUILD_COST.toLocaleString()} cost limit.` };
+  }
   return null;
 }
 

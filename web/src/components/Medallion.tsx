@@ -24,6 +24,10 @@ const ABBR: Record<string, string> = {
 export interface MedallionProps {
   card: UnitCard;
   qty?: number;
+  /** Copies taken across the shared cap group (base + combat-general variants);
+   *  drives the cap badge so every group member shows the group's usage. Defaults
+   *  to `qty` when not supplied. */
+  capCount?: number;
   selected?: boolean;
   inStaffSlot?: boolean;
   dimmed?: boolean;
@@ -40,6 +44,7 @@ export interface MedallionProps {
 export function Medallion({
   card,
   qty = 0,
+  capCount,
   selected = false,
   inStaffSlot = false,
   dimmed = false,
@@ -54,6 +59,7 @@ export function Medallion({
   const [failed, setFailed] = useState(false);
   const icon = assetUrl(card.icon);
   const badge = assetUrl(card.guerrillaBadge);
+  const capShown = capCount ?? qty;
 
   return (
     <div
@@ -90,9 +96,19 @@ export function Medallion({
         }
       }}
     >
-      {/* Men count sits above the frame (own stacking context) so the oval's
-          overflow clip never hides it. */}
+      {/* Men count and the cap/qty badge sit above the frame (own stacking
+          context) so the oval's overflow clip never hides them. */}
       {card.finalMen != null && <span className="men">{card.finalMen}</span>}
+      {card.groupCap > 0 && !hideName ? (
+        <span className={`qty cap${atCap ? " full" : ""}`} title={`${capShown} of ${card.groupCap} taken`}>
+          {capShown}/{card.groupCap}
+        </span>
+      ) : qty > 1 ? (
+        <span className="qty">{qty}</span>
+      ) : selected && qty <= 1 && !hideName ? (
+        // No checkmark in the tray — being in the tray already means selected.
+        <span className="checkmark" aria-hidden>✓</span>
+      ) : null}
       <div className="oval">
         {icon && !failed ? (
           <img className="icon" src={icon} alt="" loading="lazy" onError={() => setFailed(true)} />
@@ -107,16 +123,6 @@ export function Medallion({
           </span>
         ) : null}
         {badge && <img className="guerrilla" src={badge} alt="Guerrilla deployment" loading="lazy" />}
-        {card.groupCap > 0 && !hideName ? (
-          <span className={`qty cap${atCap ? " full" : ""}`} title={`${qty} of ${card.groupCap} taken`}>
-            {qty}/{card.groupCap}
-          </span>
-        ) : qty > 1 ? (
-          <span className="qty">{qty}</span>
-        ) : selected && qty <= 1 && !hideName ? (
-          // No checkmark in the tray — being in the tray already means selected.
-          <span className="checkmark" aria-hidden>✓</span>
-        ) : null}
         <span className="coststrip">
           <span className="cost">{card.cost.toLocaleString()}</span>
         </span>

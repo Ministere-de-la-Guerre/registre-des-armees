@@ -22,7 +22,9 @@ export interface MedallionHandlers {
   inStaffSlot: (key: string) => boolean;
   isDimmed: (card: UnitCard) => boolean;
   isBlocked: (card: UnitCard) => boolean;
+  staffBlocked: (card: UnitCard) => boolean;
   qtyOf: (key: string) => number;
+  groupQtyOf: (card: UnitCard) => number;
   atCapOf: (card: UnitCard) => boolean;
   onAdd: (card: UnitCard) => void;
   onDetails: (card: UnitCard) => void;
@@ -38,6 +40,7 @@ function UnitMedallion({ card, h }: { card: UnitCard; h: MedallionHandlers }) {
     <Medallion
       card={card}
       qty={h.qtyOf(card.unitKey)}
+      capCount={h.groupQtyOf(card)}
       selected={h.isSelected(card.unitKey)}
       inStaffSlot={h.inStaffSlot(card.unitKey)}
       dimmed={h.isDimmed(card)}
@@ -79,6 +82,7 @@ export function BuilderGrid({
               selected={handlers.inStaffSlot(g.unitKey)}
               inStaffSlot={handlers.inStaffSlot(g.unitKey)}
               dimmed={handlers.isDimmed(g)}
+              blocked={!handlers.inStaffSlot(g.unitKey) && handlers.staffBlocked(g)}
               onClick={() => onStaffToggle(g)}
               onContextMenu={() => handlers.onDetails(g)}
               onHover={handlers.onHover}

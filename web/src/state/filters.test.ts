@@ -51,6 +51,26 @@ describe("ordinary filters (dimming, not removal)", () => {
     expect(matchesCard(artGeneral, f)).toBe(false); // treated as artillery
   });
 
+  it("category filter includes combat generals by their base unit type", () => {
+    const f = { ...defaultFilters(), categories: ["infantry" as const] };
+    const infGeneral = makeUnit({
+      unitClass: "general", underlyingUnitClass: "infantry_line",
+      isGeneral: true, generalKind: "combat",
+    });
+    const cavGeneral = makeUnit({
+      unitClass: "general", underlyingUnitClass: "cavalry_light",
+      isGeneral: true, generalKind: "combat",
+    });
+    const staff = makeUnit({ unitClass: "general", isGeneral: true, generalKind: "staff" });
+    expect(matchesCard(infGeneral, f)).toBe(true); // infantry-led combat general matches
+    expect(matchesCard(cavGeneral, f)).toBe(false); // cavalry-led one does not
+    expect(matchesCard(staff, f)).toBe(false); // staff generals have no base unit
+    // The Generals category still matches all generals.
+    const g = { ...defaultFilters(), categories: ["generals" as const] };
+    expect(matchesCard(infGeneral, g)).toBe(true);
+    expect(matchesCard(staff, g)).toBe(true);
+  });
+
   it("ability tri-state filters", () => {
     const f = defaultFilters();
     f.abilities.canFormSquare = "yes";

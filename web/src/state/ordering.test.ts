@@ -32,6 +32,19 @@ describe("commander-beside-base ordering", () => {
   });
 });
 
+describe("brigade cross-type ordering", () => {
+  it("orders infantry/skirmishers, then cavalry, then foot guns, then horse guns", () => {
+    const skirm = makeUnit({ unitKey: "sk", unitClass: "infantry_skirmishers", underlyingUnitClass: "infantry_skirmishers", capGroupKey: "sk", baseUnitKey: "sk", cost: 300 });
+    const line = makeUnit({ unitKey: "ln", unitClass: "infantry_line", underlyingUnitClass: "infantry_line", capGroupKey: "ln", baseUnitKey: "ln", cost: 200 });
+    const cav = makeUnit({ unitKey: "cv", unitClass: "cavalry_light", underlyingUnitClass: "cavalry_light", capGroupKey: "cv", baseUnitKey: "cv", cost: 500 });
+    const foot = makeUnit({ unitKey: "ft", unitClass: "artillery_foot", underlyingUnitClass: "artillery_foot", capGroupKey: "ft", baseUnitKey: "ft", cost: 400 });
+    const horse = makeUnit({ unitKey: "hr", unitClass: "artillery_horse", underlyingUnitClass: "artillery_horse", capGroupKey: "hr", baseUnitKey: "hr", cost: 600 });
+    const ordered = orderBrigadeCards([horse, cav, foot, line, skirm]).map((c) => c.unitKey);
+    // Infantry by cost desc (skirmisher most expensive → first), then cav, foot, horse.
+    expect(ordered).toEqual(["sk", "ln", "cv", "ft", "hr"]);
+  });
+});
+
 describe("staff-general sorting", () => {
   it("sorts by command stars desc, unrated last", () => {
     const s2 = makeUnit({ unitKey: "s2", commandStars: 2, isGeneral: true, generalKind: "staff" });

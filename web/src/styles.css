@@ -210,8 +210,10 @@ input::placeholder { color: #6f7888; }
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.8)); display: flex; justify-content: center;
   padding: 9px 2px 3px; font-size: 11px;
 }
+/* Cap/qty badge sits above the oval frame (own stacking context) so the round
+   overflow clip never covers it — it reads over the top of the border. */
 .medallion .qty {
-  position: absolute; left: 2px; top: 2px; background: var(--azure); color: #fff; font-weight: 700;
+  position: absolute; left: 0; top: -6px; z-index: 6; background: var(--azure); color: #fff; font-weight: 700;
   font-size: 11px; border-radius: 50%; width: 19px; height: 19px; display: flex; align-items: center;
   justify-content: center; border: 1px solid #fff;
 }

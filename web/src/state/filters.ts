@@ -88,6 +88,28 @@ export function broadCategory(card: UnitCard): BroadCategory {
   return "other";
 }
 
+function classCategory(cls: string): BroadCategory | null {
+  if (cls.startsWith("infantry")) return "infantry";
+  if (cls.startsWith("cavalry")) return "cavalry";
+  if (cls.startsWith("artillery")) return "artillery";
+  return null;
+}
+
+/** Every broad category a card belongs to. Combat generals belong to "generals"
+ *  *and* to their base unit's category, so the Infantry/Cavalry/Artillery filters
+ *  include the combat general that leads such a unit. */
+export function broadCategoriesOf(card: UnitCard): BroadCategory[] {
+  if (card.isGeneral) {
+    const cats: BroadCategory[] = ["generals"];
+    if (card.generalKind === "combat") {
+      const base = classCategory(card.underlyingUnitClass || "");
+      if (base) cats.push(base);
+    }
+    return cats;
+  }
+  return [broadCategory(card)];
+}
+
 /** Stat-class of a card (using underlying class so combat generals filter like
  *  their base unit). Null for cards with no combat-stat class (e.g. staff). */
 export function statClassOf(card: UnitCard): StatClass | null {
@@ -181,7 +203,7 @@ export function matchesCard(card: UnitCard, f: FilterState): boolean {
     }
   }
   if (f.classes.length && !f.classes.includes(card.unitClass)) return false;
-  if (f.categories.length && !f.categories.includes(broadCategory(card))) return false;
+  if (f.categories.length && !broadCategoriesOf(card).some((c) => f.categories.includes(c))) return false;
   if (f.speeds.length && (!card.speedCode || !f.speeds.includes(card.speedCode))) return false;
   if (f.divisions.length && (card.placement === null || !f.divisions.includes(card.placement.division))) return false;
   if (f.brigades.length && (card.placement === null || !f.brigades.includes(card.placement.brigade))) return false;

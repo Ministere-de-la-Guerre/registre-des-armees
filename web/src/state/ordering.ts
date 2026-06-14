@@ -3,8 +3,23 @@
 // Within a brigade, each base unit and its commander variants stay together:
 // expensive commanders to the left of the base, then the base, then cheaper/equal
 // commanders to the right. Staff generals sort by command stars.
+//
+// Across groups in a brigade the game orders by broad unit type (left to right):
+// infantry & skirmishers, then cavalry, then foot artillery, then horse artillery.
+// Within one type, more expensive units come first (cost-desc, like in-game).
 
 import type { UnitCard } from "../domain/types";
+
+/** Broad type rank used to order groups within a brigade. Combat generals use
+ *  their underlying unit class, so they sort beside the unit they lead. */
+function brigadeTypeRank(card: UnitCard): number {
+  const cls = card.underlyingUnitClass || card.unitClass;
+  if (cls.startsWith("infantry")) return 0; // includes skirmishers
+  if (cls.startsWith("cavalry")) return 1;
+  if (cls === "artillery_horse") return 3;
+  if (cls.startsWith("artillery")) return 2; // foot (and fixed)
+  return 4;
+}
 
 /** Tie-break order used within a base/commander side and for group anchors:
  *  cost desc, stars desc, rated before unrated, name, unit key. */
@@ -38,11 +53,12 @@ export function orderBrigadeCards(cards: UnitCard[]): UnitCard[] {
     ordered.push({ anchor: base ?? expensive[0] ?? cheaper[0], cards: groupCards });
   }
 
-  // Order groups: keep unit classes together, then by the anchor's within-side rank.
+  // Order groups by broad type (infantry, cavalry, foot guns, horse guns), then
+  // by the anchor's within-side rank (cost desc) inside each type.
   ordered.sort((g1, g2) => {
-    const c1 = g1.anchor.underlyingUnitClass || g1.anchor.unitClass;
-    const c2 = g2.anchor.underlyingUnitClass || g2.anchor.unitClass;
-    if (c1 !== c2) return c1.localeCompare(c2);
+    const r1 = brigadeTypeRank(g1.anchor);
+    const r2 = brigadeTypeRank(g2.anchor);
+    if (r1 !== r2) return r1 - r2;
     return compareWithinSide(g1.anchor, g2.anchor);
   });
 
