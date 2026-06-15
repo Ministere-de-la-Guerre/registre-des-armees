@@ -388,3 +388,11 @@ Data architecture (raw inputs stay separate from generated outputs):
    interface (localStorage + in-memory adapters); `web/src/state/saves.ts` is the
    versioned `BuildRepository`. Components never touch `localStorage` directly, so
    a future desktop `.exe` can swap in a filesystem/SQLite/IndexedDB adapter.
+
+## Credits
+
+The application icon (`web/build/icon.ico`) features **"Napoleonic Eagle" by
+Sodacan** ([Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Napoleonic_Eagle.svg)),
+licensed under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/).
+The eagle is unmodified, composited onto a coloured background; the resulting
+icon is distributed under CC BY-SA 3.0. See `web/build/ICON_CREDIT.txt`.

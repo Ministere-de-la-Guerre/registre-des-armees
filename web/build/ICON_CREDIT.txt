@@ -1,0 +1,15 @@
+App icon attribution
+====================
+
+The eagle in the application icon is:
+
+  "Napoleonic Eagle" by Sodacan (Wikimedia Commons)
+  https://commons.wikimedia.org/wiki/File:Napoleonic_Eagle.svg
+  Licensed under Creative Commons Attribution-ShareAlike 3.0 (CC BY-SA 3.0)
+  https://creativecommons.org/licenses/by-sa/3.0/
+
+Modification: the eagle artwork is unchanged; it has been placed on a coloured
+rounded-square background to form the application icon (see make_icon.py).
+
+Because the icon incorporates a CC BY-SA 3.0 work, the icon itself
+(icon.ico / icon_*.png) is distributed under CC BY-SA 3.0.

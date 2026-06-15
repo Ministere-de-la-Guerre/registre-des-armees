@@ -33,15 +33,17 @@ describe("commander-beside-base ordering", () => {
 });
 
 describe("brigade cross-type ordering", () => {
-  it("orders infantry/skirmishers, then cavalry, then foot guns, then horse guns", () => {
+  it("orders infantry/skirmishers, then cavalry, then artillery (foot+horse by cost)", () => {
     const skirm = makeUnit({ unitKey: "sk", unitClass: "infantry_skirmishers", underlyingUnitClass: "infantry_skirmishers", capGroupKey: "sk", baseUnitKey: "sk", cost: 300 });
     const line = makeUnit({ unitKey: "ln", unitClass: "infantry_line", underlyingUnitClass: "infantry_line", capGroupKey: "ln", baseUnitKey: "ln", cost: 200 });
     const cav = makeUnit({ unitKey: "cv", unitClass: "cavalry_light", underlyingUnitClass: "cavalry_light", capGroupKey: "cv", baseUnitKey: "cv", cost: 500 });
-    const foot = makeUnit({ unitKey: "ft", unitClass: "artillery_foot", underlyingUnitClass: "artillery_foot", capGroupKey: "ft", baseUnitKey: "ft", cost: 400 });
+    const footHi = makeUnit({ unitKey: "ft2", unitClass: "artillery_foot", underlyingUnitClass: "artillery_foot", capGroupKey: "ft2", baseUnitKey: "ft2", cost: 700 });
     const horse = makeUnit({ unitKey: "hr", unitClass: "artillery_horse", underlyingUnitClass: "artillery_horse", capGroupKey: "hr", baseUnitKey: "hr", cost: 600 });
-    const ordered = orderBrigadeCards([horse, cav, foot, line, skirm]).map((c) => c.unitKey);
-    // Infantry by cost desc (skirmisher most expensive → first), then cav, foot, horse.
-    expect(ordered).toEqual(["sk", "ln", "cv", "ft", "hr"]);
+    const footLo = makeUnit({ unitKey: "ft", unitClass: "artillery_foot", underlyingUnitClass: "artillery_foot", capGroupKey: "ft", baseUnitKey: "ft", cost: 400 });
+    const ordered = orderBrigadeCards([horse, cav, footLo, line, skirm, footHi]).map((c) => c.unitKey);
+    // Infantry by cost desc, then cavalry, then foot+horse guns interleaved by cost
+    // (foot 700, horse 600, foot 400) — not all foot before all horse.
+    expect(ordered).toEqual(["sk", "ln", "cv", "ft2", "hr", "ft"]);
   });
 });
 
