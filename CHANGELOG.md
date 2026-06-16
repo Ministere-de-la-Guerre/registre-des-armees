@@ -4,6 +4,15 @@ All notable changes to the Registre des Armées desktop app are recorded here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and the
 project follows the version in `web/package.json`.
 
+## [1.2.2] — 2026-06-16
+
+### Changed
+- The build tray's Commander portrait now scales to the exact same size as the
+  selected-unit slots at any window size, instead of staying a fixed width. Its
+  "Commander" label and the divider line are kept.
+- The "Clear build" button is now narrower (label stacked on two lines), giving the
+  unit row a little more width, and is vertically centred with the icon row.
+
 ## [1.2.1] — 2026-06-15
 
 ### Changed

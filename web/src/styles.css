@@ -285,29 +285,38 @@ input::placeholder { color: #6f7888; }
   flex: none; height: var(--tray-h); display: flex; align-items: center; gap: 12px;
   background: var(--bg-2); border-top: 1px solid var(--gold-deep); padding: 8px 14px;
 }
-.tray .staffslot { flex: none; width: 92px; border-right: 1px solid var(--line); padding-right: 10px; display: flex; flex-direction: column; gap: 4px; }
-.tray .slot-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-soft); }
-.tray .staffslot .empty {
-  flex: 1; border: 1px dashed var(--line-2); border-radius: var(--radius); display: flex; align-items: center;
-  justify-content: center; text-align: center; font-size: 11px; color: var(--text-soft); padding: 4px;
-}
-/* All selected-unit slots share one line, shrinking equally to fit the available
-   width — no horizontal scroll, no wrapping. */
+.tray .slot-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-soft); white-space: nowrap; }
+/* The commander cell and every selected-unit slot share one line, shrinking equally
+   to fit the available width — no horizontal scroll, no wrapping. Ovals bottom-align
+   so the commander label can sit above its portrait without offsetting the row. */
 .tray .slots {
   flex: 1; min-width: 0; display: flex; flex-wrap: nowrap; align-items: center;
   gap: 3px; padding: 2px 0;
 }
 .tray .slots > * { flex: 1 1 0; min-width: 0; max-width: 66px; }
-.tray .slots .empty-oval { height: 46px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line-2); }
+/* Commander cell: a normal flex slot, so its portrait is always exactly one unit
+   wide. The label is taken out of flow (absolutely placed above the portrait) so the
+   cell stays the same height as a unit slot and the whole row centres in the tray —
+   keeping the Clear-build button centred to the icon row, not just the container. */
+.tray .slots > .staff-cell { position: relative; display: flex; flex-direction: column; align-items: center; }
+.tray .slots > .staff-cell .slot-label {
+  position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+  margin-bottom: 1px; overflow: visible;
+}
+.tray .slots > .staff-cell .medallion { width: 100%; }
+/* Thin divider setting the commander apart from the selected units (replaces the
+   old staff-slot border). */
+.tray .staff-div { flex: 0 0 1px; align-self: stretch; background: var(--line); margin: 2px 6px; }
+.tray .slots .empty-oval { width: 100%; aspect-ratio: 0.84 / 1; border-radius: 50%; background: var(--panel); border: 1px solid var(--line-2); }
 .tray .medallion { width: auto; }
 .tray .medallion .oval { border-width: 2px; }
 /* No selection ring in the tray — being in the tray already means selected. */
 .tray .medallion.staff .oval { box-shadow: none; }
 .tray .medallion .men { top: -6px; font-size: 9px; padding: 0 4px; }
-/* The commander portrait sits in its own slot; keep it the same size as a tray unit. */
-.tray .staffslot .medallion { width: 58px; flex: none; }
-.tray .totals { flex: none; display: flex; gap: 8px; align-items: center; padding-left: 12px; border-left: 1px solid var(--line); }
-.tray .clear-build { border-color: var(--bad-deep); color: var(--bad); }
+.tray .totals { flex: none; display: flex; gap: 8px; align-items: center; padding-left: 8px; border-left: 1px solid var(--line); }
+/* Stack the label on two lines so the button stays narrow and the unit row gets
+   more width. */
+.tray .clear-build { display: flex; flex-direction: column; line-height: 1.05; padding: 3px 8px; border-color: var(--bad-deep); color: var(--bad); }
 .tray .clear-build:hover:not(:disabled) { background: var(--bad-deep); color: #fff; }
 .tray-mini .name { display: none; }
 .tray-mini { width: 54px; }

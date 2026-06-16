@@ -42,24 +42,27 @@ export function BottomTray({
 
   return (
     <div className="tray">
-      <div className="staffslot">
-        <span className="slot-label">Commander</span>
-        {staffCard ? (
-          <Medallion
-            card={staffCard}
-            inStaffSlot
-            hideName
-            onClick={() => onDetails(staffCard)}
-            onContextMenu={onClearStaff}
-            onHover={onHover}
-            onHoverEnd={onHoverEnd}
-          />
-        ) : (
-          <div className="empty">Empty — “Set commander” on any general</div>
-        )}
-      </div>
-
+      {/* The commander rides in the same flex row as the unit slots so its portrait
+          is always exactly one slot wide, at any resolution. The label and the
+          divider that follows keep it visually set apart as its own staff slot. */}
       <div className="slots" aria-label="Selected units">
+        <div className="staff-cell">
+          <span className="slot-label">Commander</span>
+          {staffCard ? (
+            <Medallion
+              card={staffCard}
+              inStaffSlot
+              hideName
+              onClick={() => onDetails(staffCard)}
+              onContextMenu={onClearStaff}
+              onHover={onHover}
+              onHoverEnd={onHoverEnd}
+            />
+          ) : (
+            <span className="empty-oval" title="“Set commander” on any general" aria-hidden />
+          )}
+        </div>
+        <span className="staff-div" aria-hidden />
         {instances.map(({ inst, card }) => (
           <Medallion
             key={inst.id}
@@ -84,7 +87,8 @@ export function BottomTray({
           onClick={onClearBuild}
           title="Remove every card and clear the staff slot"
         >
-          Clear build
+          <span>Clear</span>
+          <span>build</span>
         </button>
       </div>
     </div>
