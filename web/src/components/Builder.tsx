@@ -272,13 +272,15 @@ export function Builder({
             <div className="lbl">Squares</div>
             <div className="val">{summary.totalSquares}</div>
           </div>
-          <div className="hstat" title={summary.price.germanStates ? "German states ×1.5 discount" : "Completed-formation discount"}>
-            <div className="lbl">Discount{summary.price.germanStates ? " ×1.5" : ""}</div>
-            <div className="val">−{summary.price.appliedDiscount.toLocaleString()}</div>
-          </div>
           <div className="hstat">
             <div className="lbl">Cost / {MAX_BUILD_COST.toLocaleString()}</div>
             <div className={`val cost${overCost ? " over" : ""}`}>{summary.price.finalCost.toLocaleString()}</div>
+          </div>
+          <div className="hstat" title="Gold still available before the cost limit">
+            <div className="lbl">Gold left</div>
+            <div className={`val cost${overCost ? " over" : ""}`}>
+              {Math.max(0, MAX_BUILD_COST - summary.price.finalCost).toLocaleString()}
+            </div>
           </div>
         </div>
         <span className="spacer" style={{ flex: 1 }} />

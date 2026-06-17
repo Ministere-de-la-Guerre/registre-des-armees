@@ -1,7 +1,7 @@
 {
   "name": "registre-des-armees",
   "private": true,
-  "version": "1.2.4",
+  "version": "1.2.5",
   "type": "module",
   "description": "NTW3 army-builder desktop-first web app.",
   "main": "electron/main.cjs",
