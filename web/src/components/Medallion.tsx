@@ -34,6 +34,9 @@ export interface MedallionProps {
   blocked?: boolean;
   atCap?: boolean;
   hideName?: boolean;
+  /** Show the speed/movement code (e.g. L4) as a badge in the top-left corner.
+   *  Used in the build tray where the cap badge is hidden. */
+  showSpeed?: boolean;
   onClick?: () => void;
   onContextMenu?: () => void;
   onHover?: (card: UnitCard, anchor: DOMRect) => void;
@@ -51,6 +54,7 @@ export function Medallion({
   blocked = false,
   atCap = false,
   hideName = false,
+  showSpeed = false,
   onClick,
   onContextMenu,
   onHover,
@@ -101,6 +105,9 @@ export function Medallion({
       {/* Men count and the cap/qty badge sit above the frame (own stacking
           context) so the oval's overflow clip never hides them. */}
       {card.finalMen != null && <span className="men">{card.finalMen}</span>}
+      {showSpeed && card.speedCode && (
+        <span className="speed" title={`Speed ${card.speedCode}`}>{card.speedCode}</span>
+      )}
       {card.groupCap > 0 && !hideName ? (
         <span className={`qty cap${atCap ? " full" : ""}`} title={`${capShown} of ${card.groupCap} taken`}>
           {capShown}/{card.groupCap}

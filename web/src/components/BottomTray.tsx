@@ -69,6 +69,7 @@ export function BottomTray({
             card={card}
             selected
             hideName
+            showSpeed
             onClick={() => onDetails(card)}
             onContextMenu={() => onRemoveInstance(inst.id)}
             onHover={onHover}
@@ -87,8 +88,7 @@ export function BottomTray({
           onClick={onClearBuild}
           title="Remove every card and clear the staff slot"
         >
-          <span>Clear</span>
-          <span>build</span>
+          <span>Clear</span> <span>build</span>
         </button>
       </div>
     </div>

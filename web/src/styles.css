@@ -205,6 +205,13 @@ input::placeholder { color: #6f7888; }
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 .medallion.selected .men { border-color: var(--gold); }
+/* Speed/movement code badge — same pill as the men count, anchored top-left. */
+.medallion .speed {
+  position: absolute; top: -7px; left: 2px; z-index: 6;
+  background: var(--panel-3); color: #fff; font-size: 9.5px; font-weight: 700;
+  border: 1px solid var(--line-2); border-radius: 6px; padding: 0 5px; line-height: 15px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
 .medallion .coststrip {
   position: absolute; left: 0; right: 0; bottom: 0;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.8)); display: flex; justify-content: center;
@@ -282,6 +289,7 @@ input::placeholder { color: #6f7888; }
 
 /* --- bottom tray --- */
 .tray {
+  position: relative;
   flex: none; height: var(--tray-h); display: flex; align-items: center; gap: 12px;
   background: var(--bg-2); border-top: 1px solid var(--gold-deep); padding: 8px 14px;
 }
@@ -313,10 +321,30 @@ input::placeholder { color: #6f7888; }
 /* No selection ring in the tray — being in the tray already means selected. */
 .tray .medallion.staff .oval { box-shadow: none; }
 .tray .medallion .men { top: -6px; font-size: 9px; padding: 0 4px; }
-.tray .totals { flex: none; display: flex; gap: 8px; align-items: center; padding-left: 8px; border-left: 1px solid var(--line); }
-/* Stack the label on two lines so the button stays narrow and the unit row gets
-   more width. */
-.tray .clear-build { display: flex; flex-direction: column; line-height: 1.05; padding: 3px 8px; border-color: var(--bad-deep); color: var(--bad); }
+.tray .medallion .speed { top: -6px; font-size: 9px; padding: 0 4px; }
+/* Let the cost label escape the round clip so the grey frame sits purely behind it
+   and never crops the digits: the portrait image keeps the oval clip via its own
+   border-radius, while the oval stops clipping its overlay children. */
+.tray .medallion .oval { overflow: visible; }
+.tray .medallion .oval img.icon,
+.tray .medallion .oval .fallback { border-radius: 50%; }
+/* Drop the coin glyph and the gradient strip — just the gold number, lifted above
+   the frame with a shadow for legibility. */
+.tray .medallion .coststrip { background: none; padding: 0; z-index: 6; bottom: 1px; }
+.tray .medallion .cost { gap: 0; font-weight: 800; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9); }
+.tray .medallion .cost::before { display: none; }
+/* Float the Clear-build action above the tray's top-right corner so it no longer
+   eats horizontal space in the row — the unit slots reclaim that width and render
+   each portrait a touch larger without enlarging the tray itself. */
+.tray .totals {
+  position: absolute; right: 16px; top: 0; transform: translateY(calc(-100% - 3px));
+  display: flex; gap: 8px; align-items: center; z-index: 7;
+}
+.tray .clear-build {
+  display: flex; flex-direction: row; gap: 4px; line-height: 1.05; padding: 3px 10px;
+  border-color: var(--bad-deep); color: var(--bad); background: var(--bg-2);
+  border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+}
 .tray .clear-build:hover:not(:disabled) { background: var(--bad-deep); color: #fff; }
 .tray-mini .name { display: none; }
 .tray-mini { width: 54px; }

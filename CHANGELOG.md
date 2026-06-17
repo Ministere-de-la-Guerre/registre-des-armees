@@ -4,6 +4,21 @@ All notable changes to the Registre des Armées desktop app are recorded here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and the
 project follows the version in `web/package.json`.
 
+## [1.2.4] — 2026-06-17
+
+### Changed
+- The build tray's "Clear build" button now floats as a tab on the top-right corner
+  above the tray rectangle (its right edge meeting the scrollbar), freeing horizontal
+  space so each selected-unit portrait renders slightly larger without enlarging the
+  tray.
+- Selected-unit cost numbers in the tray drop the gold coin glyph — just the bolded
+  gold figure remains — and the oval's grey frame now sits fully behind the number
+  instead of clipping it.
+
+### Added
+- Selected units in the tray now show a speed/movement code badge (e.g. L4, C2) in
+  the top-left corner, matching the men-count badge style.
+
 ## [1.2.2] — 2026-06-16
 
 ### Changed
