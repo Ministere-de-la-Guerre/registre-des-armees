@@ -9,15 +9,17 @@ import {
 } from "../rules/rules";
 import {
   type BuildState,
+  addWouldExceedBudget,
+  autoPickCombatGenerals,
   combatCapOf,
   effectiveCap,
   emptyBuild,
   evaluateAdd,
-  evaluateStaffSet,
   groupQtyOf,
   indexRoster,
   makeInstanceId,
   qtyOf as qtyOfBuild,
+  staffSetWouldExceedBudget,
   summarize,
 } from "../state/build";
 import { type FilterState, defaultFilters, isFilterActive, isHiddenByGeneralSwitch, matchesCard } from "../state/filters";
@@ -75,13 +77,15 @@ export function Builder({
     return m;
   }, [index, build, combatCap, roster.cards]);
 
-  // Staff-slot generals are blocked separately: assigning one must not exceed cost.
-  const staffBlockReasons = useMemo(() => {
-    const m = new Map<string, string | null>();
+  // The 10,000 ceiling is soft: instead of blocking, we flag (red cost) any unit
+  // whose selection would push the build's total past it. Computed once per build.
+  const overBudgetCards = useMemo(() => {
+    const m = new Map<string, boolean>();
     for (const c of roster.cards) {
-      if (c.isGeneral && c.generalKind === "staff") {
-        m.set(c.unitKey, evaluateStaffSet(index, build, c)?.reason ?? null);
-      }
+      const over = c.isGeneral && c.generalKind === "staff"
+        ? staffSetWouldExceedBudget(index, build, c)
+        : addWouldExceedBudget(index, build, c);
+      m.set(c.unitKey, over);
     }
     return m;
   }, [index, build, roster.cards]);
@@ -96,9 +100,9 @@ export function Builder({
     const cap = effectiveCap(index, card);
     return cap > 0 && groupQty(card) >= cap;
   };
-  const staffBlocked = (card: UnitCard) => staffBlockReasons.get(card.unitKey) != null;
   const isDimmed = (card: UnitCard) => isFilterActive(filters) && !matchesCard(card, filters);
   const isBlocked = (card: UnitCard) => blockReasons.get(card.unitKey) != null;
+  const isOverBudget = (card: UnitCard) => overBudgetCards.get(card.unitKey) === true;
 
   const tryAdd = (card: UnitCard) => {
     const reason = blockReasons.get(card.unitKey);
@@ -113,14 +117,8 @@ export function Builder({
     setBuild((b) => ({ ...b, instances: b.instances.filter((i) => i.id !== id) }));
 
   const toggleStaff = (card: UnitCard) => {
-    // Setting (not clearing) a general that would push cost over the limit is blocked.
-    if (build.staffSlotUnitKey !== card.unitKey) {
-      const reason = staffBlockReasons.get(card.unitKey);
-      if (reason) {
-        setMessage(reason);
-        return;
-      }
-    }
+    // The cost ceiling is soft, so a commander can always be set (its cost just
+    // shows red when it pushes the total over). Other slot rules are unaffected.
     setBuild((b) => {
       if (b.staffSlotUnitKey === card.unitKey) return { ...b, staffSlotUnitKey: null };
       return { ...b, instances: b.instances.filter((i) => i.unitKey !== card.unitKey), staffSlotUnitKey: card.unitKey };
@@ -133,12 +131,31 @@ export function Builder({
     setBuild(emptyBuild());
   };
 
+  // Upgrade units already in the build by swapping a plain copy for the combat
+  // general of the same unit — the cheapest such swaps that fit the remaining cap,
+  // leaving any existing combat generals in place. Never adds new units.
+  const autoGeneralsAvailable = build.instances.length > 0 && combatGensUsed < combatCap;
+  const autoCombatGenerals = () => {
+    const { replacements } = autoPickCombatGenerals(index, build, combatCap);
+    if (replacements.length === 0) {
+      setMessage("No unit could be upgraded with a combat general.");
+      return;
+    }
+    const swap = new Map(replacements.map((r) => [r.instanceId, r.generalUnitKey]));
+    setBuild((b) => ({
+      ...b,
+      instances: b.instances.map((i) => (swap.has(i.id) ? { id: i.id, unitKey: swap.get(i.id)! } : i)),
+    }));
+    const n = replacements.length;
+    setMessage(`Upgraded ${n} unit${n === 1 ? "" : "s"} with the cheapest combat general${n === 1 ? "" : "s"}.`);
+  };
+
   const handlers: MedallionHandlers = {
     isSelected,
     inStaffSlot,
     isDimmed,
     isBlocked,
-    staffBlocked,
+    isOverBudget,
     qtyOf,
     groupQtyOf: groupQty,
     atCapOf,
@@ -194,13 +211,17 @@ export function Builder({
       const bk = `${c.placement.division}:${c.placement.brigade}`;
       selBrig.set(bk, (selBrig.get(bk) ?? 0) + 1);
     }
+    // A group counts as "complete" (green + discount badge) only when the price
+    // actually credits its discount — i.e. it was completed by affordable units.
+    // A group filled out only with over-budget units earns no discount, so it is
+    // not shown as complete even though every slot is selected.
     const divisionMeta = new Map<number, GroupMeta>();
     for (const [div, total] of totals.divisions) {
       const selected = selDiv.get(div) ?? 0;
       divisionMeta.set(div, {
         required: total.requiredCount,
         selected,
-        complete: selected >= total.requiredCount && total.requiredCount > 0,
+        complete: completedDiv.has(div),
         discount: completedDiv.get(div) ?? groupDiscount(total),
       });
     }
@@ -210,7 +231,7 @@ export function Builder({
       brigadeMeta.set(bk, {
         required: total.requiredCount,
         selected,
-        complete: selected >= total.requiredCount && total.requiredCount > 0,
+        complete: completedBrig.has(bk),
         discount: completedBrig.get(bk) ?? groupDiscount(total),
       });
     }
@@ -353,6 +374,8 @@ export function Builder({
         onRemoveInstance={removeInstance}
         onClearStaff={clearStaff}
         onClearBuild={clearBuild}
+        onAutoGenerals={autoCombatGenerals}
+        autoGeneralsDisabled={!autoGeneralsAvailable}
         onDetails={setDetail}
         onHover={(c, a) => setHovered({ card: c, anchor: a })}
         onHoverEnd={() => setHovered(null)}
@@ -388,6 +411,7 @@ function UnplacedMedallion({ card, h }: { card: UnitCard; h: MedallionHandlers }
       selected={h.isSelected(card.unitKey)}
       dimmed={h.isDimmed(card)}
       blocked={blocked}
+      overBudget={h.isOverBudget(card)}
       atCap={h.atCapOf(card)}
       onClick={() => h.onAdd(card)}
       onContextMenu={() => h.onDetails(card)}

@@ -22,7 +22,8 @@ export interface MedallionHandlers {
   inStaffSlot: (key: string) => boolean;
   isDimmed: (card: UnitCard) => boolean;
   isBlocked: (card: UnitCard) => boolean;
-  staffBlocked: (card: UnitCard) => boolean;
+  /** True when selecting the card would push the build past the 10,000 ceiling. */
+  isOverBudget: (card: UnitCard) => boolean;
   qtyOf: (key: string) => number;
   groupQtyOf: (card: UnitCard) => number;
   atCapOf: (card: UnitCard) => boolean;
@@ -45,6 +46,7 @@ function UnitMedallion({ card, h }: { card: UnitCard; h: MedallionHandlers }) {
       inStaffSlot={h.inStaffSlot(card.unitKey)}
       dimmed={h.isDimmed(card)}
       blocked={blocked}
+      overBudget={h.isOverBudget(card)}
       atCap={h.atCapOf(card)}
       onClick={() => h.onAdd(card)}
       onContextMenu={() => h.onDetails(card)}
@@ -82,7 +84,7 @@ export function BuilderGrid({
               selected={handlers.inStaffSlot(g.unitKey)}
               inStaffSlot={handlers.inStaffSlot(g.unitKey)}
               dimmed={handlers.isDimmed(g)}
-              blocked={!handlers.inStaffSlot(g.unitKey) && handlers.staffBlocked(g)}
+              overBudget={handlers.isOverBudget(g)}
               onClick={() => onStaffToggle(g)}
               onContextMenu={() => handlers.onDetails(g)}
               onHover={handlers.onHover}

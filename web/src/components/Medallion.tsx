@@ -32,6 +32,9 @@ export interface MedallionProps {
   inStaffSlot?: boolean;
   dimmed?: boolean;
   blocked?: boolean;
+  /** Selecting this unit would push the build past the 10,000 cost ceiling — its
+   *  cost is shown red as a warning (selection is still allowed). */
+  overBudget?: boolean;
   atCap?: boolean;
   hideName?: boolean;
   /** Show the speed/movement code (e.g. L4) as a badge in the top-left corner.
@@ -52,6 +55,7 @@ export function Medallion({
   inStaffSlot = false,
   dimmed = false,
   blocked = false,
+  overBudget = false,
   atCap = false,
   hideName = false,
   showSpeed = false,
@@ -133,7 +137,9 @@ export function Medallion({
         ) : null}
         {badge && <img className="guerrilla" src={badge} alt="Guerrilla deployment" loading="lazy" />}
         <span className="coststrip">
-          <span className="cost">{card.cost.toLocaleString()}</span>
+          <span className={`cost${overBudget ? " over" : ""}`} title={overBudget ? "Selecting this would exceed the 10,000 cost limit" : undefined}>
+            {card.cost.toLocaleString()}
+          </span>
         </span>
       </div>
       {!hideName && <div className="name" title={card.name}>{card.name}</div>}

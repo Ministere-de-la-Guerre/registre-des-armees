@@ -14,6 +14,8 @@ export function BottomTray({
   onRemoveInstance,
   onClearStaff,
   onClearBuild,
+  onAutoGenerals,
+  autoGeneralsDisabled,
   onDetails,
   onHover,
   onHoverEnd,
@@ -24,6 +26,8 @@ export function BottomTray({
   onRemoveInstance: (instanceId: string) => void;
   onClearStaff: () => void;
   onClearBuild: () => void;
+  onAutoGenerals: () => void;
+  autoGeneralsDisabled: boolean;
   onDetails: (card: UnitCard) => void;
   onHover: (card: UnitCard, anchor: DOMRect) => void;
   onHoverEnd: () => void;
@@ -82,6 +86,14 @@ export function BottomTray({
       </div>
 
       <div className="totals">
+        <button
+          className="btn small auto-generals"
+          disabled={autoGeneralsDisabled}
+          onClick={onAutoGenerals}
+          title="Fill the remaining combat-general slots with the cheapest generals for units already selected"
+        >
+          <span>Auto</span> <span>generals</span>
+        </button>
         <button
           className="btn small clear-build"
           disabled={!hasBuild}
