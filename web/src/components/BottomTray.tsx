@@ -16,6 +16,8 @@ export function BottomTray({
   onClearBuild,
   onAutoGenerals,
   autoGeneralsDisabled,
+  onResetGenerals,
+  resetGeneralsDisabled,
   onDetails,
   onHover,
   onHoverEnd,
@@ -28,6 +30,8 @@ export function BottomTray({
   onClearBuild: () => void;
   onAutoGenerals: () => void;
   autoGeneralsDisabled: boolean;
+  onResetGenerals: () => void;
+  resetGeneralsDisabled: boolean;
   onDetails: (card: UnitCard) => void;
   onHover: (card: UnitCard, anchor: DOMRect) => void;
   onHoverEnd: () => void;
@@ -90,9 +94,17 @@ export function BottomTray({
           className="btn small auto-generals"
           disabled={autoGeneralsDisabled}
           onClick={onAutoGenerals}
-          title="Fill the remaining combat-general slots with the cheapest generals for units already selected"
+          title="Upgrade selected units to combat generals where it lowers the build's cost (cost-reducing generals can complete a formation for its discount)"
         >
           <span>Auto</span> <span>generals</span>
+        </button>
+        <button
+          className="btn small reset-generals"
+          disabled={resetGeneralsDisabled}
+          onClick={onResetGenerals}
+          title="Replace every combat general with the plain unit it leads (the commander is left in place)"
+        >
+          <span>Reset</span> <span>generals</span>
         </button>
         <button
           className="btn small clear-build"

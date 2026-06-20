@@ -75,7 +75,9 @@ export function Medallion({
     <div
       className={`medallion${selected ? " selected" : ""}${inStaffSlot ? " staff" : ""}${
         dimmed ? " dimmed" : ""
-      }${blocked ? " blocked" : ""}${atCap ? " atcap" : ""}${hideName ? " tray-mini" : ""}`}
+      }${blocked ? " blocked" : ""}${overBudget ? " overbudget" : ""}${atCap ? " atcap" : ""}${
+        hideName ? " tray-mini" : ""
+      }`}
       role="button"
       tabIndex={0}
       aria-pressed={selected || inStaffSlot}

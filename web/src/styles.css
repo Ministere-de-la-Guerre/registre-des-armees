@@ -199,6 +199,12 @@ input::placeholder { color: #6f7888; }
 .medallion.staff .oval { border-color: var(--azure); box-shadow: 0 0 0 1px var(--azure); }
 .medallion.dimmed, .medallion.blocked { opacity: 0.32; filter: grayscale(0.85); }
 .medallion.blocked .oval { cursor: not-allowed; }
+/* Over-budget warning: selecting this unit would push the build past the 10,000
+   cost ceiling. The cost text already turns red (.cost.over); the portrait frame
+   turns red too so it reads at a glance. Only the oval's border/ring changes, so
+   the men, cap badge, cost, and name overlays stay fully visible. */
+.medallion.overbudget .oval,
+.medallion.overbudget:hover .oval { border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad), var(--shadow); }
 
 /* Men count above the oval frame (own stacking context), never clipped. */
 .medallion .men {
@@ -356,6 +362,12 @@ input::placeholder { color: #6f7888; }
   border-bottom-left-radius: 0; border-bottom-right-radius: 0;
 }
 .tray .auto-generals:hover:not(:disabled) { background: var(--gold-deep); color: #20160a; }
+.tray .reset-generals {
+  display: flex; flex-direction: row; gap: 4px; line-height: 1.05; padding: 3px 10px;
+  border-color: var(--line-2); color: var(--text); background: var(--bg-2);
+  border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+}
+.tray .reset-generals:hover:not(:disabled) { background: var(--panel-3); border-color: var(--gold-deep); }
 .tray-mini .name { display: none; }
 .tray-mini { width: 54px; }
 

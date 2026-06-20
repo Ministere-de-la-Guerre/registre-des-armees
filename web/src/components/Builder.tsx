@@ -16,9 +16,11 @@ import {
   emptyBuild,
   evaluateAdd,
   groupQtyOf,
+  hasCombatGeneralInstances,
   indexRoster,
   makeInstanceId,
   qtyOf as qtyOfBuild,
+  resetCombatGenerals,
   staffSetWouldExceedBudget,
   summarize,
 } from "../state/build";
@@ -138,7 +140,7 @@ export function Builder({
   const autoCombatGenerals = () => {
     const { replacements } = autoPickCombatGenerals(index, build, combatCap);
     if (replacements.length === 0) {
-      setMessage("No unit could be upgraded with a combat general.");
+      setMessage("No combat general would lower the build's cost.");
       return;
     }
     const swap = new Map(replacements.map((r) => [r.instanceId, r.generalUnitKey]));
@@ -148,6 +150,14 @@ export function Builder({
     }));
     const n = replacements.length;
     setMessage(`Upgraded ${n} unit${n === 1 ? "" : "s"} with the cheapest combat general${n === 1 ? "" : "s"}.`);
+  };
+
+  // Swap every combat general back to the plain unit it leads (commander untouched).
+  const resetGeneralsAvailable = hasCombatGeneralInstances(index, build);
+  const resetCombatGeneralsHandler = () => {
+    if (!resetGeneralsAvailable) return;
+    setBuild((b) => resetCombatGenerals(index, b));
+    setMessage("Reset combat generals to their base units.");
   };
 
   const handlers: MedallionHandlers = {
@@ -376,6 +386,8 @@ export function Builder({
         onClearBuild={clearBuild}
         onAutoGenerals={autoCombatGenerals}
         autoGeneralsDisabled={!autoGeneralsAvailable}
+        onResetGenerals={resetCombatGeneralsHandler}
+        resetGeneralsDisabled={!resetGeneralsAvailable}
         onDetails={setDetail}
         onHover={(c, a) => setHovered({ card: c, anchor: a })}
         onHoverEnd={() => setHovered(null)}

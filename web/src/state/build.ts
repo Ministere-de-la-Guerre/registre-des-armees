@@ -173,8 +173,10 @@ export function evaluateAdd(
 
 /** True when adding one copy of `card` would push the build's final cost past the
  *  10,000 ceiling. Selection is still allowed (the ceiling is soft); the grid uses
- *  this to colour the unit's cost red as a warning. Uses the same running-cost basis
- *  as recruitment: the new unit's full price on top of the current discounted total. */
+ *  this to colour the unit's cost (and portrait) red as a warning. Uses the same
+ *  face-value recruitment basis as the affordability replay: the new unit's full
+ *  price on top of the current discounted total (a discount the card itself would
+ *  trigger does not count toward affording it — matching the game). */
 export function addWouldExceedBudget(index: RosterIndex, build: BuildState, card: UnitCard): boolean {
   return priceBuild(index, build).finalCost + card.cost > MAX_BUILD_COST;
 }
@@ -198,9 +200,10 @@ export function staffSetWouldExceedBudget(index: RosterIndex, build: BuildState,
  *
  *  The check credits discounts already earned from groups completed *before* the
  *  current card, but NOT a discount the card itself would trigger — exactly the
- *  recruitment block of older versions. It is therefore order-sensitive, so the
- *  replay walks the cards in the order they were committed: the commander first
- *  (it anchors the army), then each unit in the order it was added. */
+ *  recruitment rule of the game: you must be able to afford a unit at its face-value
+ *  price on top of your current discounted total when you take it. It is therefore
+ *  order-sensitive, so the replay walks the cards in the order they were committed:
+ *  the commander first (it anchors the army), then each unit in the order it was added. */
 function affordableSubset(index: RosterIndex, cards: readonly UnitCard[]): UnitCard[] {
   const affordable: UnitCard[] = [];
   for (const card of cards) {
@@ -269,13 +272,20 @@ export interface AutoGeneralsResult {
  *  selected plain copy with the combat-general variant of the same unit — it never
  *  adds new units. Existing combat generals are left untouched.
  *
- *  A swap is rules-safe by construction: the general shares the unit's cap group
- *  and underlying class and replaces one copy, so the card count, shared cap, and
+ *  A swap is rules-safe by construction: the general shares the unit's cap group and
+ *  underlying class and replaces one copy, so the card count, shared cap, and
  *  artillery/cavalry class caps are all unchanged; it only spends one combat-general
- *  slot. We therefore fill the remaining combat-general cap with the swaps whose
- *  cost increase (general price − replaced unit price) is smallest, giving the
- *  cheapest resulting build. Units that already carry a combat general are skipped
- *  (a unit may be led by only one). */
+ *  slot. A combat general may cost *less or more* than the plain copy it replaces, and
+ *  a cheaper one lowers the running total — which can pull a formation-completing copy
+ *  back within face-value budget and so unlock that formation's (often large) discount.
+ *
+ *  The goal is therefore the *cheapest* build: we greedily commit, one slot at a time,
+ *  the swap that most lowers the final priced cost, and we stop as soon as no remaining
+ *  swap lowers it (a swap that would only make the build dearer — including one that
+ *  forfeits a discount — is never taken). This naturally takes the cost-reducing
+ *  generals (up to the cap), skips cost-increasing ones, and may take fewer combat
+ *  generals than the cap allows. Units that already carry a combat general are skipped
+ *  (a unit may have only one). */
 export function autoPickCombatGenerals(
   index: RosterIndex,
   build: BuildState,
@@ -305,24 +315,73 @@ export function autoPickCombatGenerals(
     general: UnitCard;
     delta: number;
   }
-  const byGroup = new Map<string, Candidate>();
+  const pool: Candidate[] = [];
+  const seenGroups = new Set<string>();
   for (const inst of build.instances) {
     const base = index.byKey.get(inst.unitKey);
     if (!base || base.isGeneral) continue;
     const group = base.capGroupKey;
-    if (groupsWithGeneral.has(group) || byGroup.has(group)) continue;
+    if (groupsWithGeneral.has(group) || seenGroups.has(group)) continue;
     const general = cheapestGeneral.get(group);
     if (!general) continue;
-    byGroup.set(group, { instanceId: inst.id, general, delta: general.cost - base.cost });
+    seenGroups.add(group);
+    pool.push({ instanceId: inst.id, general, delta: general.cost - base.cost });
   }
 
-  const candidates = [...byGroup.values()].sort(
-    (a, b) => a.delta - b.delta || a.general.cost - b.general.cost || a.general.unitKey.localeCompare(b.general.unitKey),
-  );
+  const applySwap = (b: BuildState, c: Candidate): BuildState => ({
+    ...b,
+    instances: b.instances.map((i) => (i.id === c.instanceId ? { id: i.id, unitKey: c.general.unitKey } : i)),
+  });
+
+  const chosen: AutoGeneralReplacement[] = [];
+  let working = build;
+  let workingFinal = priceBuild(index, working).finalCost;
+  for (let slot = 0; slot < remaining && pool.length > 0; slot++) {
+    let best: { idx: number; final: number; delta: number; key: string } | null = null;
+    for (let i = 0; i < pool.length; i++) {
+      const cand = pool[i];
+      const final = priceBuild(index, applySwap(working, cand)).finalCost;
+      if (final > workingFinal) continue; // never make the build dearer
+      const better =
+        !best ||
+        final < best.final ||
+        (final === best.final && cand.delta < best.delta) ||
+        (final === best.final && cand.delta === best.delta && cand.general.unitKey.localeCompare(best.key) < 0);
+      if (better) best = { idx: i, final, delta: cand.delta, key: cand.general.unitKey };
+    }
+    if (!best) break; // no remaining swap lowers (or holds) the cost; stop short of the cap
+    const cand = pool.splice(best.idx, 1)[0];
+    chosen.push({ instanceId: cand.instanceId, generalUnitKey: cand.general.unitKey });
+    working = applySwap(working, cand);
+    workingFinal = best.final;
+  }
+  return { replacements: chosen };
+}
+
+/** True when the build has at least one combat general occupying a unit slot (an
+ *  instance, not the commander). Drives the "reset generals" control. */
+export function hasCombatGeneralInstances(index: RosterIndex, build: BuildState): boolean {
+  return build.instances.some((inst) => {
+    const c = index.byKey.get(inst.unitKey);
+    return !!c && c.isGeneral && c.generalKind === "combat";
+  });
+}
+
+/** Replace every combat-general instance with the plain base unit it leads, undoing
+ *  auto-/manual combat-general assignments. The commander (staff slot) is untouched.
+ *  Always rules-safe: a base unit shares the general's cap group and class, so caps
+ *  and card count are unchanged, and it only frees combat-general slots. */
+export function resetCombatGenerals(index: RosterIndex, build: BuildState): BuildState {
   return {
-    replacements: candidates
-      .slice(0, remaining)
-      .map((c) => ({ instanceId: c.instanceId, generalUnitKey: c.general.unitKey })),
+    ...build,
+    instances: build.instances.map((inst) => {
+      const card = index.byKey.get(inst.unitKey);
+      if (card && card.isGeneral && card.generalKind === "combat") {
+        const base = index.byKey.get(card.baseUnitKey);
+        if (base) return { id: inst.id, unitKey: base.unitKey };
+      }
+      return inst;
+    }),
   };
 }
 
