@@ -22,7 +22,7 @@ Root files:
 
 - `README.md`: project documentation and the best source of rule provenance.
 - `docs/CHANGELOG.md`: release notes. It currently stops at 1.2.4 even though
-  `web/package.json` is 1.3.1.
+  `web/package.json` is 1.3.2.
 - `docs/Instructions.txt`: original/manual project instructions.
 - `docs/HANDOFF.md`: this file.
 - `data/generated/ntw3_army_builder_units.csv`: primary generated unit/corps database.
@@ -141,8 +141,10 @@ The app code lives in `web/src/`.
 - `state/ordering.ts`: unit-card ordering within staff/brigade groups.
 - `state/saves.ts`: versioned save/load repository.
 - `state/storage.ts`: storage abstraction over localStorage/in-memory fallback.
+- `state/rotation.ts`: in-game combat/staff general rotation predictor (seed,
+  PRNG, shuffle, pool ordering, nearest-window search). See its own section below.
 - `components/`: UI pieces for selection, builder grid, cards, details, filters,
-  bottom tray, and save/load controls.
+  bottom tray, save/load controls, and the `RotationModal` ("General times") popup.
 
 Data flow:
 
@@ -169,6 +171,9 @@ Data flow:
 - `placementSource`: provenance from the generator.
 - `isGeneral`, `isCommanderVariant`, `generalKind`
 - `underlyingUnitClass`: base unit class used for combat generals.
+- `rosterIndex`: 0-based source-roster (CSV) position, stamped by
+  `build_web_data.py` before the display sort. Only the rotation predictor uses it,
+  as a tiebreak for equal-cost generals.
 - `finalMen`: display men count; staff generals always show 16.
 - `stats` and `abilities`
 - `icon`, `commandStarStrip`, `guerrillaBadge`
@@ -392,6 +397,43 @@ would make the build dearer.
 `resetCombatGenerals()` reverses combat-general instances back to their base unit
 while leaving the staff slot untouched.
 
+## Combat & Staff General Rotation Predictor
+
+`web/src/state/rotation.ts` (+ `rotation.test.ts`) and
+`web/src/components/RotationModal.tsx` implement the "⏱ General times" popup
+(opened from a button in the `Builder` header). For each combat general in the
+build and the staff-slot commander, it shows the nearest local time (past or
+future) the game offers them in that corps's clock-seeded rotation.
+
+This is a faithful reimplementation of the in-game NTW3.Shuffle / NTW3AC.ACgenerals
+logic (from `ntw3.lua` / `ntw3ac.lua`), reverse-engineered and **verified against
+real in-game windows** (see the calibration fixtures in `rotation.test.ts`):
+
+- Seed: `floor(localHour / 2.8) * 10000 + (day * 100 + month)`. Uses the player's
+  LOCAL clock and ignores the year, so the rotation is annually periodic. There are
+  ~9 windows/day starting at local hours `[0, 3, 6, 9, 12, 14, 17, 20, 23]`.
+- PRNG: the Windows CRT `rand()`/`srand()` LCG (`state*214013 + 2531011`,
+  `RAND_MAX 32767`) — the game is a Win32 Lua 5.1 build. 5 warm-up draws, then a
+  Fisher-Yates shuffle, exactly as the Lua does.
+- Combat pool: all combat generals, ordered by arm **category (artillery → cavalry
+  → infantry) then ascending cost** (this is the engine's `RecruitableUnits` order,
+  confirmed in `source/tables/ntw3_land_units.tsv`). The window offers the first
+  `acSelectionGeneralMaxima(faction).combat` = `9 - rating + 2`. `rosterIndex` is
+  only a stable tiebreak for equal-cost, same-category pairs.
+- Staff pool: offered = the corps's permanent **commander (always available)** plus
+  one rotating shuffle pick (count 1) from the staff pool. When the roll picks the
+  commander himself only he shows. The commander is the corps NAMESAKE: the staff
+  general whose name matches the corps-title leader (text before "/", after
+  "NN. "), e.g. Dokhtourov, Osterman-Tolstoi — NOT necessarily the priciest staff
+  (Koutouzov/Miloradovitch are the rotating picks). Formation-named corps (e.g.
+  "Garde impériale") have no namesake staff, so the commander falls back to the
+  highest-cost staff (Napoleon). See `staffCommanderKey(pool, corpsName)`.
+
+The popup's "Offered right now" `<details>` lists the predicted current-window pool
+for quick cross-checking against the in-game recruit screen. Predictor accuracy
+depends on `UnitCard.cost`, `underlyingUnitClass` (category), and
+`armyCorpsName`; it does not require any new generated data beyond `rosterIndex`.
+
 ## Placement and Division Inference
 
 `build_ntw3_army_builder_database.py` writes placement provenance:
@@ -492,12 +534,14 @@ Release output:
 - `web/release/*.blockmap`
 - `web/release/_github_assets/` curated upload folder.
 
-For v1.3.1, `_github_assets` contains:
+For the current release (v1.3.2), `_github_assets` contains:
 
-- `RegistreDesArmees-Setup-1.3.1.exe`
-- `RegistreDesArmees-Setup-1.3.1.exe.blockmap`
-- `RegistreDesArmees-Portable-1.3.1.exe`
+- `RegistreDesArmees-Setup-1.3.2.exe`
+- `RegistreDesArmees-Setup-1.3.2.exe.blockmap`
+- `RegistreDesArmees-Portable-1.3.2.exe`
 - `latest.yml`
+
+v1.3.2 adds the combat & staff general rotation predictor (see its section above).
 
 Auto-update requires the installer, latest.yml, and blockmap attached to the
 GitHub Release tagged `v<version>`. The portable exe is for manual download.
