@@ -32,6 +32,7 @@ import { BuilderGrid, type DivisionGroup, type GroupMeta, type MedallionHandlers
 import { DetailsPanel } from "./DetailsPanel";
 import { FilterPanel } from "./FilterPanel";
 import { Medallion } from "./Medallion";
+import { RotationModal } from "./RotationModal";
 import { SaveLoadBar } from "./SaveLoadBar";
 import { Tooltip } from "./Tooltip";
 
@@ -53,6 +54,7 @@ export function Builder({
   const [hovered, setHovered] = useState<{ card: UnitCard; anchor: DOMRect } | null>(null);
   const [loadedSaved, setLoadedSaved] = useState<SavedBuild | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [rotationOpen, setRotationOpen] = useState(false);
 
   useEffect(() => {
     setBuild(emptyBuild());
@@ -323,6 +325,13 @@ export function Builder({
           />
           Combat generals
         </label>
+        <button
+          className="btn small"
+          onClick={() => setRotationOpen(true)}
+          title="When can I recruit each selected combat general? (in-game rotation times)"
+        >
+          ⏱ General times
+        </button>
         <button className="btn small" onClick={() => setFiltersOpen((o) => !o)}>
           {filtersOpen ? "Hide filters" : "Filters"}
         </button>
@@ -407,6 +416,9 @@ export function Builder({
           onSetCommander={detail.isGeneral ? () => toggleStaff(detail) : undefined}
           onClose={() => setDetail(null)}
         />
+      )}
+      {rotationOpen && (
+        <RotationModal index={index} roster={roster} build={build} onClose={() => setRotationOpen(false)} />
       )}
       {message && <div className="toast" role="status">{message}</div>}
     </div>

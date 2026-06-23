@@ -3,8 +3,8 @@
 This is the *raw data import / adapter* layer of the app's data architecture. It
 reads the existing source-of-truth files in the repository root:
 
-  - ntw3_army_builder_units.csv   (all allowed unit + army-corps combinations)
-  - army_corps_catalog.json       (theatre-grouped corps index with flags)
+  - data/generated/ntw3_army_builder_units.csv   (all allowed unit + army-corps combinations)
+  - data/generated/army_corps_catalog.json       (theatre-grouped corps index with flags)
 
 and produces, under ``web/public/``:
 
@@ -46,8 +46,9 @@ except ImportError:  # pragma: no cover - environment guard
 SCHEMA_VERSION = 1
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-UNITS_CSV = PROJECT_ROOT / "ntw3_army_builder_units.csv"
-CATALOG_JSON = PROJECT_ROOT / "army_corps_catalog.json"
+GENERATED_DATA = PROJECT_ROOT / "data" / "generated"
+UNITS_CSV = GENERATED_DATA / "ntw3_army_builder_units.csv"
+CATALOG_JSON = GENERATED_DATA / "army_corps_catalog.json"
 WEB_PUBLIC = PROJECT_ROOT / "web" / "public"
 OUT_DATA = WEB_PUBLIC / "data"
 OUT_ASSETS = WEB_PUBLIC / "assets"
@@ -342,6 +343,12 @@ def main() -> int:
                 c["division"] = remap[c["division"]]
                 if c["brigade"] is not None:
                     c["divisionBrigadeCode"] = f"ACDV{c['division']}B{c['brigade']}"
+        # Stamp the source roster order (CSV row order within the faction) BEFORE the
+        # display sort below. The in-game combat-general rotation shuffles the faction's
+        # general pool in this order, so the rotation predictor (web/src/state/rotation.ts)
+        # must reproduce it; the display sort would otherwise destroy it.
+        for i, c in enumerate(cards):
+            c["rosterIndex"] = i
         cards.sort(key=lambda c: (
             c["division"] if c["division"] is not None else 9999,
             c["brigade"] if c["brigade"] is not None else 9999,

@@ -187,7 +187,7 @@ class LimitTests(unittest.TestCase):
         self.assertEqual(ac_selection_general_maxima("ntw3_ac_test_x5_001").combat, 6)
 
     def test_every_real_ac_and_tow_faction_uses_nine_minus_n(self) -> None:
-        csv_path = Path(__file__).resolve().parents[2] / "ntw3_army_builder_units.csv"
+        csv_path = Path(__file__).resolve().parents[2] / "data" / "generated" / "ntw3_army_builder_units.csv"
         with csv_path.open(newline="", encoding="utf-8-sig") as handle:
             factions = {
                 row["faction_key"]
@@ -248,7 +248,7 @@ class LimitTests(unittest.TestCase):
         self.assertEqual(missing_source.final_men_count, 16)
 
     def test_generated_general_rows_all_have_source_backed_or_forced_men(self) -> None:
-        csv_path = Path(__file__).resolve().parents[2] / "ntw3_army_builder_units.csv"
+        csv_path = Path(__file__).resolve().parents[2] / "data" / "generated" / "ntw3_army_builder_units.csv"
         with csv_path.open(newline="", encoding="utf-8-sig") as handle:
             unresolved = [
                 row for row in csv.DictReader(handle)
@@ -316,7 +316,7 @@ class LimitTests(unittest.TestCase):
         self.assertEqual(violations[rule].maximum, 1)
 
     def test_platov_catalog_exposes_every_general_without_random_rolls(self) -> None:
-        csv_path = Path(__file__).resolve().parents[2] / "ntw3_army_builder_units.csv"
+        csv_path = Path(__file__).resolve().parents[2] / "data" / "generated" / "ntw3_army_builder_units.csv"
         catalog = UnitCatalog.from_csv(csv_path)
         cards = catalog.cards_for_faction("ntw3_ac_b11_r5_189")
         generals = [unit for unit in cards if unit.is_general]
@@ -341,7 +341,7 @@ class AssetMappingTests(unittest.TestCase):
             "ntw3_inf_line_080_999_2437": "ACDV5B3",
             "ntw3_inf_skirm_080_999_4755": "ACDV5B3",
         }
-        with (root / "ntw3_army_builder_units.csv").open(
+        with (root / "data" / "generated" / "ntw3_army_builder_units.csv").open(
             newline="", encoding="utf-8-sig"
         ) as handle:
             rows = {
@@ -355,7 +355,7 @@ class AssetMappingTests(unittest.TestCase):
 
     def test_all_army_corps_combat_cards_have_placements(self) -> None:
         root = Path(__file__).resolve().parents[2]
-        with (root / "ntw3_army_builder_units.csv").open(
+        with (root / "data" / "generated" / "ntw3_army_builder_units.csv").open(
             newline="", encoding="utf-8-sig"
         ) as handle:
             unresolved = [
@@ -373,7 +373,7 @@ class AssetMappingTests(unittest.TestCase):
 
     def test_guard_marines_use_the_final_brigade_of_the_final_division(self) -> None:
         root = Path(__file__).resolve().parents[2]
-        with (root / "ntw3_army_builder_units.csv").open(
+        with (root / "data" / "generated" / "ntw3_army_builder_units.csv").open(
             newline="", encoding="utf-8-sig"
         ) as handle:
             rows = list(csv.DictReader(handle))
@@ -396,7 +396,7 @@ class AssetMappingTests(unittest.TestCase):
     def test_guerrilla_cards_reference_reusable_badge_overlay(self) -> None:
         root = Path(__file__).resolve().parents[2]
         badge_path = "assets/ui/guerrilla_badge/guerrilla_badge.png"
-        with (root / "ntw3_army_builder_units.csv").open(
+        with (root / "data" / "generated" / "ntw3_army_builder_units.csv").open(
             newline="", encoding="utf-8-sig"
         ) as handle:
             rows = list(csv.DictReader(handle))

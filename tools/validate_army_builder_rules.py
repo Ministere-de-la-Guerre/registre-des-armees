@@ -15,8 +15,8 @@ from army_builder_rules import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-UNITS_CSV = ROOT / "ntw3_army_builder_units.csv"
-STAFF_CSV = ROOT / "staff_general_corps_placement.csv"
+UNITS_CSV = ROOT / "data" / "generated" / "ntw3_army_builder_units.csv"
+STAFF_CSV = ROOT / "data" / "staff_generals" / "staff_general_corps_placement.csv"
 REPORT = ROOT / "reports" / "army_builder_rules_validation.txt"
 
 

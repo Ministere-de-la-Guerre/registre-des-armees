@@ -4,9 +4,9 @@ App-ready NTW3 unit data, icons, source-table exports, and reproducible build to
 
 ## Main Data
 
-- `ntw3_army_builder_units.csv`: all allowed unit and army-corps combinations.
-- `staff_general_corps_placement.csv`: staff-general placement evidence at the project root.
-- `staff_general_corps_placement_with_stars.csv`: explicit star-ready staff-general copy.
+- `data/generated/ntw3_army_builder_units.csv`: all allowed unit and army-corps combinations.
+- `data/staff_generals/staff_general_corps_placement.csv`: staff-general placement evidence.
+- `data/staff_generals/staff_general_corps_placement_with_stars.csv`: explicit star-ready staff-general copy.
 - `assets/icons_by_army_corps/`: unit icons organized by corps key and division.
 - `assets/staff_general_icons_by_corps/`: staff-general portraits organized at corps root.
 
@@ -122,7 +122,7 @@ ToW icons are collected into their respective shared `TOW` folders.
 
 ## Army-Corps Flags And Theatres
 
-`army_corps_catalog.csv` and `army_corps_catalog.json` are the app-facing indexes for
+`data/generated/army_corps_catalog.csv` and `data/generated/army_corps_catalog.json` are the app-facing indexes for
 the army-corps selection screen. They map every recruitable `faction_key` to:
 
 - its Empire, Coalition, Theatres of War, or Custom Armies section;
@@ -376,7 +376,7 @@ npm run build        # tsc + production build
 Data architecture (raw inputs stay separate from generated outputs):
 
 1. **Raw import / adapter** — `tools/build_web_data.py` converts
-   `ntw3_army_builder_units.csv` + `army_corps_catalog.json` into normalized
+   `data/generated/ntw3_army_builder_units.csv` + `data/generated/army_corps_catalog.json` into normalized
    per-faction JSON under `web/public/data/` and converts `.tga` icons to PNG.
 2. **Validation / normalization** — `web/src/data/load.ts` (unknown fields
    ignored, missing fields defaulted).

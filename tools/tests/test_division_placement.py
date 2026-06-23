@@ -1,6 +1,6 @@
 """Tests for the robust final-support-division inference and commander
 inheritance in build_ntw3_army_builder_database.py. These read the generated
-ntw3_army_builder_units.csv (run the generator first)."""
+data/generated/ntw3_army_builder_units.csv (run the generator first)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ COM_RE = re.compile(r"_com_\d+$")
 
 
 def load_rows() -> list[dict]:
-    with (ROOT / "ntw3_army_builder_units.csv").open(newline="", encoding="utf-8-sig") as handle:
+    with (ROOT / "data" / "generated" / "ntw3_army_builder_units.csv").open(newline="", encoding="utf-8-sig") as handle:
         return list(csv.DictReader(handle))
 
 

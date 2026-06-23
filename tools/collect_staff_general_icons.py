@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DATABASE_PATH = PROJECT_ROOT / "ntw3_army_builder_units.csv"
+DATABASE_PATH = PROJECT_ROOT / "data" / "generated" / "ntw3_army_builder_units.csv"
 TABLE_DIR = PROJECT_ROOT / "source" / "tables"
 ORIGINAL_ICON_DIR = (
     PROJECT_ROOT
@@ -21,8 +21,8 @@ ORIGINAL_ICON_DIR = (
 )
 OUTPUT_DIR = PROJECT_ROOT / "assets" / "staff_general_icons_by_corps"
 PLACEMENT_REPORT = PROJECT_ROOT / "reports" / "staff_general_corps_placement.csv"
-ROOT_PLACEMENT_REPORT = PROJECT_ROOT / "staff_general_corps_placement.csv"
-ROOT_STAR_PLACEMENT_REPORT = PROJECT_ROOT / "staff_general_corps_placement_with_stars.csv"
+ROOT_PLACEMENT_REPORT = PROJECT_ROOT / "data" / "staff_generals" / "staff_general_corps_placement.csv"
+ROOT_STAR_PLACEMENT_REPORT = PROJECT_ROOT / "data" / "staff_generals" / "staff_general_corps_placement_with_stars.csv"
 INVENTORY_REPORT = PROJECT_ROOT / "reports" / "staff_general_original_icon_inventory.csv"
 SUMMARY_REPORT = PROJECT_ROOT / "reports" / "staff_general_corps_summary.md"
 
@@ -267,8 +267,8 @@ army-corps root rather than a division folder. ToW icons are kept together.
 
 - Organized copies: `assets/staff_general_icons_by_corps/`
 - Exact placement evidence: `reports/staff_general_corps_placement.csv`
-- Root-level placement CSV: `staff_general_corps_placement.csv`
-- Star-ready root CSV: `staff_general_corps_placement_with_stars.csv`
+- Staff placement CSV: `data/staff_generals/staff_general_corps_placement.csv`
+- Star-ready staff CSV: `data/staff_generals/staff_general_corps_placement_with_stars.csv`
 - Complete original icon inventory: `reports/staff_general_original_icon_inventory.csv`
 - Raw read-only extraction copies: `source/original_ntw3_v94_staff_general_icons/`
 """

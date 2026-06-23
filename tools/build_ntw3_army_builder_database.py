@@ -1262,7 +1262,8 @@ def main() -> None:
 
     output["placement_source"] = output["__placement_source"]
 
-    csv_path = PROJECT_ROOT / "ntw3_army_builder_units.csv"
+    csv_path = PROJECT_ROOT / "data" / "generated" / "ntw3_army_builder_units.csv"
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
     warning_path = REPORT_DIR / "ntw3_merge_warnings.csv"
     summary_path = REPORT_DIR / "ntw3_merge_summary.txt"
     output.loc[:, OUTPUT_COLUMNS].to_csv(csv_path, index=False, encoding="utf-8-sig")

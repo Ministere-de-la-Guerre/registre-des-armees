@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DATABASE_PATH = PROJECT_ROOT / "ntw3_army_builder_units.csv"
+DATABASE_PATH = PROJECT_ROOT / "data" / "generated" / "ntw3_army_builder_units.csv"
 OUTPUT_DIR = PROJECT_ROOT / "assets" / "icons_by_army_corps"
 MANIFEST_PATH = PROJECT_ROOT / "reports" / "icon_army_corps_manifest.csv"
 SUMMARY_PATH = PROJECT_ROOT / "reports" / "icon_army_corps_summary.txt"

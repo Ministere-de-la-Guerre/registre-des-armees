@@ -93,6 +93,7 @@ function normalizeCard(raw: Record<string, unknown>): UnitCard | null {
     capGroupKey: str(raw.capGroupKey) || unitKey,
     baseUnitKey: str(raw.baseUnitKey) || str(raw.capGroupKey) || unitKey,
     underlyingUnitClass: str(raw.underlyingUnitClass) || str(raw.unitClass),
+    rosterIndex: num(raw.rosterIndex) ?? 0,
     placementSource: strOrNull(raw.placementSource),
     icon: strOrNull(raw.icon),
     commandStarStrip: strOrNull(raw.commandStarStrip),

@@ -29,11 +29,11 @@ class ArmyCorpsCatalogTests(unittest.TestCase):
         self.assertEqual(display_numbers("[1812] 10. Rossiya"), (1812, 10))
 
     def test_catalog_covers_every_main_faction_with_44x22_flags(self) -> None:
-        with (ROOT / "ntw3_army_builder_units.csv").open(
+        with (ROOT / "data" / "generated" / "ntw3_army_builder_units.csv").open(
             newline="", encoding="utf-8-sig"
         ) as handle:
             main_factions = {row["faction_key"] for row in csv.DictReader(handle)}
-        with (ROOT / "army_corps_catalog.csv").open(
+        with (ROOT / "data" / "generated" / "army_corps_catalog.csv").open(
             newline="", encoding="utf-8-sig"
         ) as handle:
             catalog = list(csv.DictReader(handle))
@@ -48,7 +48,7 @@ class ArmyCorpsCatalogTests(unittest.TestCase):
                     self.assertEqual(image.size, (44, 22), path)
 
     def test_written_flags_are_post_selection_only(self) -> None:
-        with (ROOT / "army_corps_catalog.csv").open(
+        with (ROOT / "data" / "generated" / "army_corps_catalog.csv").open(
             newline="", encoding="utf-8-sig"
         ) as handle:
             rows = {row["faction_key"]: row for row in csv.DictReader(handle)}
@@ -71,7 +71,7 @@ class ArmyCorpsCatalogTests(unittest.TestCase):
                     self.assertEqual(image.size, (132, 66), path)
 
     def test_hessen_kassel_uses_clean_donor_only_on_main_screen(self) -> None:
-        with (ROOT / "army_corps_catalog.csv").open(
+        with (ROOT / "data" / "generated" / "army_corps_catalog.csv").open(
             newline="", encoding="utf-8-sig"
         ) as handle:
             rows = {row["faction_key"]: row for row in csv.DictReader(handle)}

@@ -23,7 +23,7 @@ army-corps root rather than a division folder. ToW icons are kept together.
 
 - Organized copies: `assets/staff_general_icons_by_corps/`
 - Exact placement evidence: `reports/staff_general_corps_placement.csv`
-- Root-level placement CSV: `staff_general_corps_placement.csv`
-- Star-ready root CSV: `staff_general_corps_placement_with_stars.csv`
+- Staff placement CSV: `data/staff_generals/staff_general_corps_placement.csv`
+- Star-ready staff CSV: `data/staff_generals/staff_general_corps_placement_with_stars.csv`
 - Complete original icon inventory: `reports/staff_general_original_icon_inventory.csv`
 - Raw read-only extraction copies: `source/original_ntw3_v94_staff_general_icons/`

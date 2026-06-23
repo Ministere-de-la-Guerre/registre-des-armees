@@ -89,6 +89,10 @@ export interface UnitCard {
   baseUnitKey: string;
   /** Combat generals report their base unit's class for filters + ordering. */
   underlyingUnitClass: string;
+  /** 0-based position in the source roster (CSV) order, before the display sort.
+   *  The in-game combat-general rotation shuffles the general pool in this order,
+   *  so the rotation predictor must sort the pool by this to reproduce the game. */
+  rosterIndex: number;
   /** How the division/brigade placement was decided (provenance). */
   placementSource: string | null;
   icon: string | null;

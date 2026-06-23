@@ -16,11 +16,12 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FLAGS = Path(r"C:\Users\M0obo\Desktop\NTW3 Files\9.4\graphic\ui\flags")
-MAIN_CSV = ROOT / "ntw3_army_builder_units.csv"
+GENERATED_DATA = ROOT / "data" / "generated"
+MAIN_CSV = GENERATED_DATA / "ntw3_army_builder_units.csv"
 FACTIONS_TSV = ROOT / "source" / "tables" / "ntw3_factions.tsv"
 OUTPUT = ROOT / "assets" / "army_corps_by_theatre"
-CATALOG_CSV = ROOT / "army_corps_catalog.csv"
-CATALOG_JSON = ROOT / "army_corps_catalog.json"
+CATALOG_CSV = GENERATED_DATA / "army_corps_catalog.csv"
+CATALOG_JSON = GENERATED_DATA / "army_corps_catalog.json"
 REPORT = ROOT / "reports" / "army_corps_catalog_validation.txt"
 
 CORPS_RE = re.compile(
