@@ -517,12 +517,16 @@ Key points:
 - `electron-updater` checks GitHub Releases when packaged.
 - Two update channels, selected per build from its own version string
   (`autoUpdater.allowPrerelease = /-/.test(app.getVersion())`):
-  - Stable build (`1.4.0`) -> `allowPrerelease=false`, follows `latest.yml`
-    (GitHub "Latest", never a Pre-release).
-  - Pre-release build (`1.4.0-beta.1`) -> `allowPrerelease=true`, follows
-    `beta.yml` (the beta line).
-  - `detectUpdateChannel` is left at its default (on) so a beta version emits
-    `beta.yml` and a stable version emits `latest.yml`; the two lines never mix.
+  - Stable build (`1.4.0`) -> `allowPrerelease=false`. The GitHub provider asks
+    for `/releases/latest`, which never returns a Pre-release, so it only sees
+    full releases.
+  - Pre-release build (`1.4.0-beta.1`) -> `allowPrerelease=true`. The provider
+    walks the full releases feed incl. Pre-release-flagged ones, so it follows
+    the beta line (and onto a newer stable if one ships).
+  - IMPORTANT: electron-builder's GitHub provider always writes `latest.yml`
+    (no `beta.yml`; `detectUpdateChannel` only affects generic/S3 providers, not
+    GitHub). Both channels ship a `latest.yml` — they stay separate by living in
+    different GitHub releases and by the Pre-release flag, not by file name.
 - A headless smoke mode exists via `SMOKE_TEST=<output-file>`.
 
 Build configuration is in `web/package.json`.
@@ -555,22 +559,31 @@ the GitHub Release tagged `v<version>`. The portable exe is for manual download.
 
 ### Channel-aware publishing
 
-The channel a build belongs to is decided entirely by the `version` in
-`web/package.json`:
+Both channels build the same way and **both emit `latest.yml`** (the GitHub
+provider has no `beta.yml`). The version's `-tag` decides which lane the *client*
+belongs to; the **GitHub Pre-release flag** is what keeps the two release sets
+apart. So the only differences are the version string and how you tick the boxes
+when creating the GitHub Release:
 
 - Full release: plain semver (`1.4.0`). `npm run desktop` emits `latest.yml`.
-  Publish the GitHub Release with **Pre-release unchecked** and **Set as latest**.
+  Create the GitHub Release with **Pre-release unchecked** and **Set as latest**.
   Upload `RegistreDesArmees-Setup-<v>.exe`, its `.blockmap`, and `latest.yml`.
-- Beta / pre-release: prerelease semver (`1.4.0-beta.1`). `npm run desktop`
-  emits `beta.yml`. Publish the GitHub Release with **Pre-release checked**
+- Beta / pre-release: prerelease semver (`1.4.0-beta.1`). `npm run desktop` also
+  emits `latest.yml`. Create the GitHub Release with **Pre-release checked**
   (do NOT "Set as latest"). Upload `RegistreDesArmees-Setup-<v>.exe`, its
-  `.blockmap`, and `beta.yml`.
+  `.blockmap`, and `latest.yml`.
 
-Each line only ever reads its own `.yml`, so a stable user never sees a beta and
-a beta user follows the beta line (and onto a newer stable if one ships).
-Migration: ship `1.4.0` as the full "Latest" release first — existing pre-1.4.0
-clients hardcode `allowPrerelease=true` and must move onto the new code via a
-full release before betas are published, or they could pick up a beta.
+The two `latest.yml` files never collide because they are attached to different
+GitHub releases (different tags). Stable clients (`allowPrerelease=false`) ask
+GitHub for `/releases/latest`, which never returns a Pre-release, so they only
+follow full releases. Beta clients (`allowPrerelease=true`) read the releases
+feed including Pre-releases, so they follow the beta line (and onto a newer
+stable if one ships). Migration: ship the next full release as **Latest** first —
+existing pre-1.3.3 clients hardcode `allowPrerelease=true` and must move onto the
+new code via a full release before betas are published, or they could pick up a
+beta. Curated upload sets live in `web/release/_github_assets/` (stable) and
+`web/release/_github_assets_beta/` (beta); each `npm run desktop` overwrites
+`web/release/`, so copy the set you want before building the other channel.
 
 ## Important Tests
 

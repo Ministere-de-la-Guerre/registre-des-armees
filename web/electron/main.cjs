@@ -112,20 +112,24 @@ function setupAutoUpdates() {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  // Two independent update channels, each build picks its own lane from its own
-  // version string (the source of truth is `version` in package.json):
-  //   • Stable build  (e.g. 1.4.0)        -> allowPrerelease=false. The GitHub
-  //     provider only consults /releases/latest, which never points at a
-  //     "Pre-release", so it reads latest.yml and follows the full-release line.
+  // Two independent update channels on the GitHub provider. electron-builder's
+  // GitHub provider ALWAYS writes `latest.yml` (it has no per-channel update file
+  // — `detectUpdateChannel`/`beta.yml` only apply to the generic/S3 providers),
+  // so both channels ship a `latest.yml`. They stay separate because each lives
+  // in a different GitHub release and each build only looks at the releases it is
+  // allowed to, decided from its own version string:
+  //   • Stable build  (e.g. 1.4.0)        -> allowPrerelease=false. The provider
+  //     asks GitHub for /releases/latest, which never returns a "Pre-release", so
+  //     a stable client only ever sees full releases.
   //   • Pre-release    (e.g. 1.4.0-beta.1) -> allowPrerelease=true. The provider
-  //     walks the releases feed and reads the channel file named after this
-  //     build's prerelease tag (beta.yml), following the beta line.
-  // detectUpdateChannel (default, on) is what makes a beta build emit beta.yml
-  // and a stable build emit latest.yml so the two lines never collide.
-  // Bootstrap caveat: a client only switches to this per-build behaviour once it
-  // is running a build that contains it. Existing pre-1.4.0 clients hardcoded
-  // allowPrerelease=true; ship 1.4.0 as the full "Latest" release first so they
-  // migrate onto the stable line before any beta is published.
+  //     walks the full releases feed incl. "Pre-release"-flagged ones, so a beta
+  //     client follows the beta line (and onto a newer stable if one ships).
+  // Publish accordingly: tick GitHub's "Pre-release" box for beta releases; leave
+  // it unticked + "Set as latest" for stable. That GitHub flag is the real switch
+  // — the build's -tag just decides which lane this client belongs to.
+  // Bootstrap caveat: a client only gets this behaviour once running a build that
+  // contains it. Pre-1.3.3 clients hardcoded allowPrerelease=true; ship the next
+  // full release as "Latest" so they migrate onto the stable line before betas.
   autoUpdater.allowPrerelease = /-/.test(app.getVersion());
 
   autoUpdater.on("update-downloaded", async (info) => {
