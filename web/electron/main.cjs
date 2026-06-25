@@ -111,11 +111,22 @@ function createWindow() {
 function setupAutoUpdates() {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
-  // Also pick up releases marked "Pre-release" on GitHub (we ship as pre-releases).
-  // NOTE: this only helps clients already running a build that has this flag — a
-  // client must update *to* such a build (via a full release or a manual install)
-  // once before pre-release auto-updates start reaching it.
-  autoUpdater.allowPrerelease = true;
+
+  // Two independent update channels, each build picks its own lane from its own
+  // version string (the source of truth is `version` in package.json):
+  //   • Stable build  (e.g. 1.4.0)        -> allowPrerelease=false. The GitHub
+  //     provider only consults /releases/latest, which never points at a
+  //     "Pre-release", so it reads latest.yml and follows the full-release line.
+  //   • Pre-release    (e.g. 1.4.0-beta.1) -> allowPrerelease=true. The provider
+  //     walks the releases feed and reads the channel file named after this
+  //     build's prerelease tag (beta.yml), following the beta line.
+  // detectUpdateChannel (default, on) is what makes a beta build emit beta.yml
+  // and a stable build emit latest.yml so the two lines never collide.
+  // Bootstrap caveat: a client only switches to this per-build behaviour once it
+  // is running a build that contains it. Existing pre-1.4.0 clients hardcoded
+  // allowPrerelease=true; ship 1.4.0 as the full "Latest" release first so they
+  // migrate onto the stable line before any beta is published.
+  autoUpdater.allowPrerelease = /-/.test(app.getVersion());
 
   autoUpdater.on("update-downloaded", async (info) => {
     const { response } = await dialog.showMessageBox({

@@ -515,7 +515,14 @@ Key points:
 - External HTTP(S) links open in the user's browser.
 - Single-instance lock focuses an existing window.
 - `electron-updater` checks GitHub Releases when packaged.
-- `autoUpdater.allowPrerelease = true` is enabled.
+- Two update channels, selected per build from its own version string
+  (`autoUpdater.allowPrerelease = /-/.test(app.getVersion())`):
+  - Stable build (`1.4.0`) -> `allowPrerelease=false`, follows `latest.yml`
+    (GitHub "Latest", never a Pre-release).
+  - Pre-release build (`1.4.0-beta.1`) -> `allowPrerelease=true`, follows
+    `beta.yml` (the beta line).
+  - `detectUpdateChannel` is left at its default (on) so a beta version emits
+    `beta.yml` and a stable version emits `latest.yml`; the two lines never mix.
 - A headless smoke mode exists via `SMOKE_TEST=<output-file>`.
 
 Build configuration is in `web/package.json`.
@@ -543,8 +550,27 @@ For the current release (v1.3.2), `_github_assets` contains:
 
 v1.3.2 adds the combat & staff general rotation predictor (see its section above).
 
-Auto-update requires the installer, latest.yml, and blockmap attached to the
-GitHub Release tagged `v<version>`. The portable exe is for manual download.
+Auto-update requires the installer, the channel `.yml`, and blockmap attached to
+the GitHub Release tagged `v<version>`. The portable exe is for manual download.
+
+### Channel-aware publishing
+
+The channel a build belongs to is decided entirely by the `version` in
+`web/package.json`:
+
+- Full release: plain semver (`1.4.0`). `npm run desktop` emits `latest.yml`.
+  Publish the GitHub Release with **Pre-release unchecked** and **Set as latest**.
+  Upload `RegistreDesArmees-Setup-<v>.exe`, its `.blockmap`, and `latest.yml`.
+- Beta / pre-release: prerelease semver (`1.4.0-beta.1`). `npm run desktop`
+  emits `beta.yml`. Publish the GitHub Release with **Pre-release checked**
+  (do NOT "Set as latest"). Upload `RegistreDesArmees-Setup-<v>.exe`, its
+  `.blockmap`, and `beta.yml`.
+
+Each line only ever reads its own `.yml`, so a stable user never sees a beta and
+a beta user follows the beta line (and onto a newer stable if one ships).
+Migration: ship `1.4.0` as the full "Latest" release first — existing pre-1.4.0
+clients hardcode `allowPrerelease=true` and must move onto the new code via a
+full release before betas are published, or they could pick up a beta.
 
 ## Important Tests
 
