@@ -536,19 +536,39 @@ Key points:
 - Renderer uses context isolation, no node integration, and sandbox enabled.
 - External HTTP(S) links open in the user's browser.
 - Single-instance lock focuses an existing window.
-- `electron-updater` checks GitHub Releases when packaged.
-- Two update channels, selected per build from its own version string
-  (`autoUpdater.allowPrerelease = /-/.test(app.getVersion())`):
-  - Stable build (`1.4.0`) -> `allowPrerelease=false`. The GitHub provider asks
-    for `/releases/latest`, which never returns a Pre-release, so it only sees
-    full releases.
-  - Pre-release build (`1.4.0-beta.1`) -> `allowPrerelease=true`. The provider
-    walks the full releases feed incl. Pre-release-flagged ones, so it follows
-    the beta line (and onto a newer stable if one ships).
-  - IMPORTANT: electron-builder's GitHub provider always writes `latest.yml`
-    (no `beta.yml`; `detectUpdateChannel` only affects generic/S3 providers, not
-    GitHub). Both channels ship a `latest.yml` — they stay separate by living in
-    different GitHub releases and by the Pre-release flag, not by file name.
+- `electron-updater` (installed: 6.8.9) checks GitHub Releases when packaged.
+- Stable and beta are **separate applications updating from separate repos.** This
+  is deliberate: with a single repo you cannot keep a beta off a newer stable.
+  `GitHubProvider.getLatestVersion()` (electron-updater 6.8.9) only blocks an
+  alpha-when-on-beta downgrade; a *stable* release is NOT excluded for a beta
+  client, and even forcing `autoUpdater.channel = "beta"` falls back to
+  `latest.yml` when the chosen stable release has no `beta.yml`. So a prerelease
+  client with `allowPrerelease=true` reading the same repo will roll forward onto
+  any newer full release. (This corrects the earlier note that claimed the GitHub
+  provider can't read `beta.yml` — it can; the real blocker is the version-
+  selection logic, which is why the split is by repo.)
+  - **Stable build** = package.json `build` field, `appId`
+    `fr.ministeredelaguerre.registredesarmees`, product "Registre des Armées",
+    publishes to repo `registre-des-armees`. `npm run desktop` /
+    `desktop:release`. Version is plain semver -> `allowPrerelease=false`.
+  - **Beta build** = `web/electron-builder.beta.cjs` (spreads the base config and
+    overrides), `appId` `…registredesarmees.beta`, product "Registre des Armées
+    Beta", own install dir + shortcut, publishes to repo `registre-des-armees-beta`.
+    `npm run desktop:beta` / `desktop:beta:release`. Version is a prerelease (e.g.
+    `1.3.5-beta.1`) -> `allowPrerelease=true`. It also sets `extraMetadata.name`
+    = `registre-des-armees-beta`, which gives the beta its own runtime app name —
+    so its `userData` folder (Electron's `app.getName()` falls back to the package
+    `name`) AND its `updaterCacheDirName` (`<name>-updater`) differ from stable.
+    Without that the two apps would share saved builds and the update-download
+    cache even with different appIds.
+  - Because the two apps have different `appId`/product names they install side by
+    side and never downgrade or overwrite each other, and because each bundles an
+    `app-update.yml` pointing at its own repo, neither ever sees the other's
+    releases. The runtime `autoUpdater.allowPrerelease = /-/.test(app.getVersion())`
+    is unchanged; the feed (repo) now does the channel separation.
+  - Caveat: clients already shipped under the OLD single-repo/shared-appId scheme
+    (≤ v1.3.4 stable and v1.3.3-beta.1) cannot be retro-fixed; they keep their old
+    update behavior. The split applies to builds made with the new beta config.
 - A headless smoke mode exists via `SMOKE_TEST=<output-file>`.
 
 Build configuration is in `web/package.json`.
@@ -586,31 +606,27 @@ the GitHub Release tagged `v<version>`. The portable exe is for manual download.
 
 ### Channel-aware publishing
 
-Both channels build the same way and **both emit `latest.yml`** (the GitHub
-provider has no `beta.yml`). The version's `-tag` decides which lane the *client*
-belongs to; the **GitHub Pre-release flag** is what keeps the two release sets
-apart. So the only differences are the version string and how you tick the boxes
-when creating the GitHub Release:
+The two channels are now **separate apps published to separate GitHub repos**, so
+each `latest.yml` lives in its own repo and the channels can never cross-update.
 
-- Full release: plain semver (`1.4.0`). `npm run desktop` emits `latest.yml`.
-  Create the GitHub Release with **Pre-release unchecked** and **Set as latest**.
-  Upload `RegistreDesArmees-Setup-<v>.exe`, its `.blockmap`, and `latest.yml`.
-- Beta / pre-release: prerelease semver (`1.4.0-beta.1`). `npm run desktop` also
-  emits `latest.yml`. Create the GitHub Release with **Pre-release checked**
-  (do NOT "Set as latest"). Upload `RegistreDesArmees-Setup-<v>.exe`, its
-  `.blockmap`, and `latest.yml`.
+- **Stable** -> repo `Ministere-de-la-Guerre/registre-des-armees`. Set the
+  package.json version to plain semver (e.g. `1.3.4`), `npm run desktop`
+  (local) or `desktop:release` (publish). Create/curate the GitHub Release on the
+  stable repo with **Set as latest** (Pre-release optional — the stable app uses
+  `allowPrerelease=false` and reads `/releases/latest`). Upload
+  `RegistreDesArmees-Setup-<v>.exe`, its `.blockmap`, and `latest.yml`.
+- **Beta** -> repo `Ministere-de-la-Guerre/registre-des-armees-beta` (must exist;
+  create it once). Set the version to a prerelease (e.g. `1.3.5-beta.1`),
+  `npm run desktop:beta` (local) or `desktop:beta:release` (publish, needs
+  `GH_TOKEN` with access to the beta repo). Artifacts are named
+  `RegistreDesArmeesBeta-Setup-<v>.exe` etc. Upload the Setup exe, its `.blockmap`,
+  and `latest.yml` to a Release on the **beta** repo. Because the beta repo holds
+  only betas, the beta app always picks the newest beta and never the stable line.
 
-The two `latest.yml` files never collide because they are attached to different
-GitHub releases (different tags). Stable clients (`allowPrerelease=false`) ask
-GitHub for `/releases/latest`, which never returns a Pre-release, so they only
-follow full releases. Beta clients (`allowPrerelease=true`) read the releases
-feed including Pre-releases, so they follow the beta line (and onto a newer
-stable if one ships). Migration: ship the next full release as **Latest** first —
-existing pre-1.3.3 clients hardcode `allowPrerelease=true` and must move onto the
-new code via a full release before betas are published, or they could pick up a
-beta. Curated upload sets live in `web/release/_github_assets/` (stable) and
-`web/release/_github_assets_beta/` (beta); each `npm run desktop` overwrites
-`web/release/`, so copy the set you want before building the other channel.
+Each `npm run desktop*` overwrites `web/release/`, so copy the set you want before
+building the other channel. Curated upload sets:
+`web/release/_github_assets/` (stable) and `web/release/_github_assets_beta/`
+(beta).
 
 ## Important Tests
 

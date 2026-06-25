@@ -17,7 +17,9 @@
     "electron": "electron .",
     "desktop:dir": "npm run build && electron-builder --win --dir --publish never",
     "desktop": "npm run build && electron-builder --win --publish never",
-    "desktop:release": "npm run build && electron-builder --win --publish always"
+    "desktop:release": "npm run build && electron-builder --win --publish always",
+    "desktop:beta": "npm run build && electron-builder --win --config electron-builder.beta.cjs --publish never",
+    "desktop:beta:release": "npm run build && electron-builder --win --config electron-builder.beta.cjs --publish always"
   },
   "dependencies": {
     "electron-updater": "^6.3.9",
