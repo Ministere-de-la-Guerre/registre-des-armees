@@ -25,16 +25,51 @@ not versions whose string contains a hyphen. The `-beta.N` suffix is cosmetic
 
 ## Release workflow (manual-draft, the default)
 
-> **Windows only.** The build must run on **Windows**. electron-builder can't
-> cross-build the NSIS `.exe` from Linux/WSL (no wine), so from WSL the build
-> step fails and `_github_assets*/` can't be populated — run it from a Windows
-> terminal. The staging step alone (`npm run stage[:beta]`) is cross-platform if
-> the artifacts already sit in `web/release/`.
+> **The build needs the Windows toolchain.** electron-builder can't cross-build
+> the NSIS `.exe` from a Linux runtime (no wine), so running the `desktop*`
+> scripts under WSL's *Linux* Node fails and `_github_assets*/` can't be
+> populated. Two ways to get a real Windows build:
+>
+> - **A native Windows terminal** — run the `desktop*` scripts there directly.
+> - **From WSL via Windows interop** — invoke the *Windows* Node toolchain from
+>   the WSL shell so electron-builder runs as a real Windows process (the repo
+>   lives on `/mnt/c`, so it writes straight into `web/release/`). This is what
+>   the `desktop:beta` / `stage:beta` run below uses.
+>
+> The staging step alone (`npm run stage[:beta]`) is genuinely cross-platform —
+> it just copies files — so it can run under either Node once the artifacts sit
+> in `web/release/`.
+
+### Building from WSL via Windows interop
+
+WSL can launch Windows executables directly, so you don't need a separate
+Windows terminal — drive the Windows Node toolchain from the WSL shell:
+
+```bash
+# sanity check: this is the WINDOWS node, reachable via interop
+cmd.exe /c "node --version && npm --version"
+
+cd "web"                                  # WSL cwd is inherited by cmd.exe
+cmd.exe /c "npm install"                  # ONE-TIME per checkout: adds the
+                                          #   win32-native optional deps
+                                          #   (@rollup/rollup-win32-x64-msvc,
+                                          #   esbuild, the Windows Electron
+                                          #   binary). Coexists with the Linux
+                                          #   deps; WSL vitest still runs.
+cmd.exe /c "npm run desktop:beta"         # build (Windows electron-builder)
+npm run stage:beta                        # stage (cross-platform, either Node)
+```
+
+Gotcha: don't chain `cd /d "…" && …` *inside* `cmd.exe /c` from WSL — its path
+parser chokes. Set the directory in the WSL shell (`cd "web"`) and let
+`cmd.exe` inherit it. If a build errors with `Cannot find module
+@rollup/rollup-win32-x64-msvc` (or the equivalent for esbuild/electron), the
+tree is still Linux-only — rerun the `cmd.exe /c "npm install"` step.
 
 The intended flow leaves everything staged so the only hand step is the GitHub draft:
 
-1. Bump `version` in `web/package.json` and commit (`Release v<version>`).
-2. **Build the artifacts with electron-builder** (Windows). This is what produces the files a release needs:
+1. Bump `version` in `web/package.json` and commit (`Release v<version>`). Source + docs commits (including the bump) always go to **`origin`** (the code repo, `registre-des-armees`) — that's independent of the release channel.
+2. **Build the artifacts with electron-builder** (Windows toolchain — native terminal or WSL-interop per above). This is what produces the files a release needs:
    - Beta: `npm run desktop:beta` → `npm run build` (tsc + Vite) then `electron-builder --win --config electron-builder.beta.cjs --publish never`.
    - Stable: `npm run desktop` → same, minus the beta config.
 
@@ -42,7 +77,18 @@ The intended flow leaves everything staged so the only hand step is the GitHub d
 3. **Stage the needed files**: `npm run stage:beta` (or `npm run stage`) runs `scripts/stage-release.mjs`, which copies exactly the Setup `.exe` + `.blockmap` + `latest.yml` (+ portable) for the current version into a freshly-cleaned `_github_assets_beta/` (or `_github_assets/`). It refuses to stage a `latest.yml` whose version doesn't match `package.json`, so a stale channel file can't slip through. These folders are gitignored (large local binaries).
 
    Steps 2–3 are chained by `npm run desktop:beta:stage` (or `npm run desktop:stage`) — one command that builds then stages.
-4. On GitHub → the correct repo (**beta → `registre-des-armees-beta`**, stable → `registre-des-armees`) → **Draft a new release** → **Create new tag** `v<version>` → drag in every file from the staged folder → **Publish**. Never tick "Pre-release".
+
+   The staging folder (`_github_assets_beta/` at the repo root) is the single source of truth for the upload. A convenience mirror is also kept at `web/release/_github_assets_beta/`; when you re-stage a new version, refresh that mirror too (copy the same four files in) so it never holds a stale version.
+4. **Push the git tag to the channel's repo.** The version tag lives on the repo that channel releases from — **beta tags → `registre-des-armees-beta`** (remote `beta`), **stable tags → `registre-des-armees`** (`origin`). Tag the `Release v<version>` commit and push, e.g. for beta:
+
+   ```bash
+   git remote add beta https://github.com/Ministere-de-la-Guerre/registre-des-armees-beta.git  # one-time
+   git tag -a v<version> <Release-commit> -m "Release v<version>"
+   git push beta v<version>          # stable: git push origin v<version>
+   ```
+
+   The tag's parent already exists in the beta repo, so this pushes just the one release commit. Pre-pushing means the GitHub draft (next step) selects the existing tag instead of creating one.
+5. On GitHub → the correct repo (**beta → `registre-des-armees-beta`**, stable → `registre-des-armees`) → **Draft a new release** → select the existing tag `v<version>` (or **Create new tag** if you skipped step 4) → drag in every file from the staged folder → **Publish**. Never tick "Pre-release".
 
 The Setup `.exe` + `.blockmap` + `latest.yml` are all **required** for auto-update; the portable `.exe` is a manual-download convenience the updater never uses.
 
@@ -56,8 +102,9 @@ Each `desktop*` run overwrites `web/release/`; copy/stage artifacts before build
 2. `npm test` green.
 3. `npm run build` clean.
 4. `npm run desktop:beta:stage` / `npm run desktop:stage` emits installer/portable/latest/blockmap **and** stages them.
-5. The curated `_github_assets*/` folder holds only the intended version.
-6. Draft + upload on GitHub per the workflow above.
+5. The curated `_github_assets*/` folder (and the `web/release/_github_assets_beta/` mirror) holds only the intended version.
+6. Git tag `v<version>` pushed to the channel's repo (beta → `beta`, stable → `origin`).
+7. Draft + upload on GitHub per the workflow above.
 
 ## Beta-updater caveat (stuck clients)
 
