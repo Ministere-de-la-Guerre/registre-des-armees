@@ -536,3 +536,54 @@ input::placeholder { color: #6f7888; }
   padding: 5px 4px 5px 10px; border: 1px solid var(--line); border-radius: 7px;
   background: var(--panel-2); font-size: 13px;
 }
+
+/* --- mobile / touch (safe-area, dynamic viewport, long-press, narrow layout) --- */
+/* Dynamic viewport height: 100vh mis-measures under a mobile URL bar and clips a
+   fixed bottom tray; 100dvh tracks the visible area. The 100vh line is the
+   fallback for engines without dvh; desktop is unaffected. */
+.app { height: 100vh; height: 100dvh; }
+
+/* Pad the fixed chrome past the notch / home indicator. env() falls back to 0,
+   so desktop keeps its exact original padding. */
+.topbar {
+  padding: calc(8px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) 8px
+    calc(16px + env(safe-area-inset-left, 0px));
+}
+.tray {
+  padding: 8px calc(14px + env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px))
+    calc(14px + env(safe-area-inset-left, 0px));
+}
+
+/* Medallions are the long-press surface: suppress the iOS image callout / text
+   selection / tap highlight, keep scrolling working, and drop the tap delay. */
+.medallion {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.medallion img { -webkit-user-drag: none; }
+
+/* Touch-only press cue at long-press (no hover to lean on). */
+@media (hover: none) {
+  .medallion:active .oval { transform: scale(0.94); border-color: var(--gold); }
+}
+
+/* Narrow screens (phones): single-column pickers, wrapping chrome, tighter
+   padding, and bottom-sheet modals. Desktop (>700px) is untouched. */
+@media (max-width: 700px) {
+  .topbar { flex-wrap: wrap; gap: 8px 10px; }
+  .topbar-sub { display: none; }
+  .corps-screen { padding: 12px 12px 48px; }
+  .corps-grid { grid-template-columns: 1fr; }
+  .corps-header { flex-wrap: wrap; gap: 8px; }
+  .map { padding: 10px 10px 20px; }
+  .filters-drawer { width: min(86vw, 320px); }
+  /* Modals rise as bottom sheets — thumb-reachable and safe-area aware. */
+  .modal-backdrop { padding: 0; align-items: flex-end; }
+  .modal {
+    max-width: none; border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+    max-height: 88dvh; padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}

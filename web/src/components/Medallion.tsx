@@ -2,6 +2,7 @@ import { useState } from "react";
 import { assetUrl } from "../data/assets";
 import { CLASS_LABELS } from "../domain/labels";
 import type { UnitCard } from "../domain/types";
+import { useLongPress } from "./useLongPress";
 
 const ABBR: Record<string, string> = {
   infantry_line: "Line",
@@ -69,6 +70,9 @@ export function Medallion({
   onHoverEnd,
 }: MedallionProps) {
   const [failed, setFailed] = useState(false);
+  // Touch parity: a long-press runs the same code as right-click (grid → details,
+  // tray → remove). Mouse pointers are ignored by the hook, so desktop is unchanged.
+  const longPress = useLongPress(onContextMenu);
   const icon = assetUrl(card.icon);
   const badge = assetUrl(card.guerrillaBadge);
   // A general occupying the staff slot is tracked separately from instance qty,
@@ -88,12 +92,19 @@ export function Medallion({
       aria-label={`${card.name}. ${CLASS_LABELS[card.unitClass] ?? card.unitClass}. Cost ${card.cost}. ${
         selected || inStaffSlot ? `Selected${qty > 1 ? `, quantity ${qty}` : ""}` : "Not selected"
       }. Enter to add, Delete to remove, i for details.`}
-      onClick={onClick}
+      {...longPress.handlers}
+      onClick={() => {
+        // Swallow the click the browser fires right after a touch long-press.
+        if (longPress.wasRecent()) return;
+        onClick?.();
+      }}
       onContextMenu={(e) => {
-        if (onContextMenu) {
-          e.preventDefault();
-          onContextMenu();
-        }
+        if (!onContextMenu) return;
+        e.preventDefault();
+        // On Android a long-press also synthesizes contextmenu; the hook already
+        // fired the callback, so ignore the duplicate.
+        if (longPress.wasRecent()) return;
+        onContextMenu();
       }}
       onMouseEnter={(e) => onHover?.(card, e.currentTarget.getBoundingClientRect())}
       onMouseLeave={() => onHoverEnd?.()}
