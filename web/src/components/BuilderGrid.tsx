@@ -33,6 +33,8 @@ export interface MedallionHandlers {
   onDetails: (card: UnitCard) => void;
   onHover: (card: UnitCard, anchor: DOMRect) => void;
   onHoverEnd: () => void;
+  /** Touch peek (grid: long-press → simplified stat card). Inert on desktop. */
+  onPeek: (card: UnitCard) => void;
 }
 
 function UnitMedallion({ card, h }: { card: UnitCard; h: MedallionHandlers }) {
@@ -55,6 +57,7 @@ function UnitMedallion({ card, h }: { card: UnitCard; h: MedallionHandlers }) {
       onContextMenu={() => h.onDetails(card)}
       onHover={h.onHover}
       onHoverEnd={h.onHoverEnd}
+      onPeek={h.onPeek}
     />
   );
 }
@@ -101,6 +104,7 @@ export function BuilderGrid({
               onContextMenu={() => handlers.onDetails(g)}
               onHover={handlers.onHover}
               onHoverEnd={handlers.onHoverEnd}
+              onPeek={handlers.onPeek}
             />
           ))}
         </div>
@@ -142,6 +146,7 @@ export function BuilderGrid({
                           onContextMenu={() => handlers.onDetails(card)}
                           onHover={handlers.onHover}
                           onHoverEnd={handlers.onHoverEnd}
+                          onPeek={handlers.onPeek}
                         />
                       ) : (
                         <UnitMedallion key={card.unitKey} card={card} h={handlers} />

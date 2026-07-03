@@ -19,5 +19,6 @@
     "exactOptionalPropertyTypes": false,
     "types": ["vitest/globals", "vite/client", "node"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/sw.ts"]
 }

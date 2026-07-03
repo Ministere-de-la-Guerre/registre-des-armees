@@ -148,6 +148,52 @@ export function importBuildJson(text: string): SavedBuild | null {
   }
 }
 
+// --- whole-save-set backup (export/import) -----------------------------------
+// iOS can evict site storage from an idle installed PWA, so the entire save set
+// can be serialized to a file the user keeps (and re-imported on any device).
+
+export interface BuildsBackup {
+  format: "rda-builds-backup";
+  version: number;
+  exportedAt: string;
+  builds: SavedBuild[];
+}
+
+export function exportAllBuilds(repo: BuildRepository): BuildsBackup {
+  return { format: "rda-builds-backup", version: SAVE_FORMAT_VERSION, exportedAt: nowIso(), builds: repo.list() };
+}
+
+export interface ImportSummary {
+  imported: number;
+  skipped: number;
+}
+
+/** Merge a backup file into the repo, by id. Accepts a full backup object, a bare
+ *  array of builds, or a single build — each entry migrated through the same path
+ *  as normal loads, so older exports import cleanly. */
+export function importAllBuilds(repo: BuildRepository, text: string): ImportSummary | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const record = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+  const rawBuilds: unknown[] = Array.isArray(parsed)
+    ? parsed
+    : record && Array.isArray(record.builds)
+      ? (record.builds as unknown[])
+      : [parsed];
+  let imported = 0;
+  let skipped = 0;
+  for (const raw of rawBuilds) {
+    const build = migrateSavedBuild(raw);
+    if (build && repo.save(build).ok) imported += 1;
+    else skipped += 1;
+  }
+  return { imported, skipped };
+}
+
 /** Repository over a StorageAdapter. Components use this, never localStorage. */
 export class BuildRepository {
   constructor(private adapter: StorageAdapter = defaultStorageAdapter()) {}

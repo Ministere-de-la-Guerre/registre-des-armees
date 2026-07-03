@@ -11,7 +11,7 @@ Purpose: locate the file to edit fast. NTW3 (Napoleon Total War 3 mod) army-buil
 
 Rules logic exists TWICE and must stay in parity: `tools/army_builder_rules.py` ↔ `web/src/rules/rules.ts` (TS is a faithful port; regex helpers duplicated in `tools/build_ntw3_army_builder_database.py`).
 
-## web/ — the app (React 18 + TS + Vite + Electron, Windows desktop)
+## web/ — the app (React 18 + TS + Vite; Electron Windows desktop + installable offline PWA)
 package.json scripts: `build:data`(py gen)·`dev`·`build`(tsc+vite)·`test`(vitest)·`lint`·`typecheck`·`electron`·`desktop[:release|:beta[:release]|:stage|:beta:stage]`(electron-builder; `:stage`→build+stage curated upload set)·`stage[:beta]`(`scripts/stage-release.mjs`).
 - `web/src/App.tsx` — root component / composition.
 - `web/src/main.tsx` · `index.html` · `styles.css` · `vite-env.d.ts`.
@@ -22,6 +22,7 @@ package.json scripts: `build:data`(py gen)·`dev`·`build`(tsc+vite)·`test`(vit
 - `web/src/data/`
   - `load.ts` — fetch+validate+normalize raw JSON → domain (untrusted-input tolerant).
   - `assets.ts` — resolve public asset/data URLs vs Vite base.
+  - `version.ts` — data-version stamp → cache key; SW + offline manager share it (DOM-free, bundled into the SW). `version.test.ts`.
   - `data.test.ts`.
 - `web/src/rules/rules.ts` — pricing, discounts, general classification, roster caps (port of py). `rules.test.ts`.
 - `web/src/state/` (pure logic, each has `.test.ts`)
@@ -30,14 +31,19 @@ package.json scripts: `build:data`(py gen)·`dev`·`build`(tsc+vite)·`test`(vit
   - `ordering.ts` — AC grid ordering within brigade + TOW arm/class brigade sequence. `combinedTowLayout()` backs the combined brigade-type grid (staff lifted out; every other unit pooled by brigade type, each ordered by price) — used by the TOW "Combine corps" toggle AND always for Custom Armies (non-`_ac_`/non-`_tow_` rosters; already combat-cap 1 via `generalCaps`).
   - `rotation.ts` — combat-general rotation predictor (NTW3.Shuffle clock-seed, MSVC PRNG). See memory `registre-armees-combat-general-rotation`.
   - `towRoll.ts` — legacy TOW background roll helpers (`ToWFarmycorps` / `ToWFgenerals`: source-corps slice, general keys, nearest source-corps-combo window). `findTowBuildRollTime` + `towSourceCorpsIdsInBuild`/`towCombatGeneralKeysInBuild` back the header "Generate times" button (times the roll+combat general the build actually uses). `towCorpsCeiling`/`isCardOverCorpsCeiling` = the soft 4-corps-roll ceiling (how many source corps the selection spans + which cards are over it), driving the "Corps N/4" header stat, the build-breakdown warning banner, and the red-framed medallions.
-  - `saves.ts` — named versioned saved builds (graceful old-schema load).
+  - `saves.ts` — named versioned saved builds (graceful old-schema load). Also whole-save-set backup: `exportAllBuilds`/`importAllBuilds` (`backup.test.ts`).
   - `storage.ts` — StorageAdapter (localStorage abstraction).
-- `web/src/components/` (UI, .tsx): `Builder`(main; `combinedView` = Custom Armies always + TOW "Combine corps" toggle → `combinedTowLayout`)·`BuilderGrid`·`CorpsSelect`·`FilterPanel`·`DetailsPanel`·`BottomTray`·`SaveLoadBar`·`RotationModal`(AC "Generate times")·`TowRollModal`(TOW "Corps roll" grid toggles)·`TowGenerateModal`(TOW "Generate times" — build-derived roll+general timing)·`Medallion`·`Tooltip`·`DualRange`. Shared: `rollTimeFormat.ts`(date fmt)·`DirectionBadge.tsx`.
+  - `offline.ts` — PWA per-faction "Save offline" (fetch faction JSON + icons into a data-version-keyed Cache the SW also serves), downloaded-faction list, + `navigator.storage` persist/estimate. Web-only (no-op in Electron).
+- `web/src/components/` (UI, .tsx): `Builder`(main; `combinedView` = Custom Armies always + TOW "Combine corps" toggle → `combinedTowLayout`)·`BuilderGrid`·`CorpsSelect`·`FilterPanel`·`DetailsPanel`·`BottomTray`·`SaveLoadBar`·`RotationModal`(AC "Generate times")·`TowRollModal`(TOW "Corps roll" grid toggles)·`TowGenerateModal`(TOW "Generate times" — build-derived roll+general timing)·`Medallion`(long-press→right-click parity via `useLongPress.ts`)·`Tooltip`·`DualRange`. Shared: `rollTimeFormat.ts`(date fmt)·`DirectionBadge.tsx`·`useLongPress.ts`(touch long-press hook; preventDefaults on recognition)·`useCoarsePointer.ts`(single source for the `(hover:none)and(pointer:coarse)` touch-vs-desktop fork — module fn `isCoarsePointer()` + reactive `useCoarsePointer()`; drives touch tap/long-press model, collapsible chrome, tray strip). Touch model (phones/tablets only, gated on coarse pointer; desktop/Electron byte-identical): grid tap=select / long-press=simplified `Tooltip` "peek" card (variant="peek", bottom-anchored, Full-details→`DetailsPanel`); tray tap=peek / long-press=remove; `BottomTray` collapses to a summary strip + bottom-sheet on touch; App owns a chevron that collapses topbar+corps-header. See `docs/MOBILE_UX_PASS.md`. PWA UI: `UpdateToast`(SW "update ready")·`OfflinePanel`(storage persist/estimate + downloaded factions + saves export/import)·`FactionOfflineButton`(topbar "Save offline").
 - `web/src/test/factories.ts` — test data factories.
 - `web/electron/main.cjs` — Electron main. `7za-wrapper.cs`. `web/build/` — icons + `make_icon.py`.
 - `web/electron-builder.beta.cjs` — beta channel config (separate appId/repo; see memory `registre-armees-release-channel`). Stable config lives in `package.json`.
 - `web/scripts/stage-release.mjs` — copies the release-needed artifacts (Setup exe+blockmap+latest.yml, +portable) for the current version into `_github_assets[_beta]/` for manual GitHub upload; guards against a stale `latest.yml`. See `docs/RELEASE.md`.
-- tsconfig{,.app,.node}.json · vite.config.ts · .eslintrc.cjs · DESKTOP.md.
+- tsconfig{,.app,.node,.worker}.json · vite.config.ts · .eslintrc.cjs · DESKTOP.md. (`tsconfig.worker.json` typechecks `src/sw.ts` with WebWorker libs; excluded from the app tsconfig.)
+- PWA (web target only): `web/src/sw.ts` — Workbox injectManifest service worker (precache shell/corps-picker/ui/data-stamps; runtime cache-first factions+icons keyed by data-version; version-scoped cleanup). `web/src/pwa.ts` — Electron-guarded registration + update toast. `vite.config.ts` — `VitePWA` (manifest + injectManifest globs). `web/build/make_pwa_icons.mjs` — regenerate `web/public/pwa-*.png`/`apple-touch-icon.png` (needs on-demand `sharp`). Desktop is byte-identical (no SW, no PWA chrome). See `docs/RELEASE.md` → Web channel.
+
+## .github/workflows/ — CI
+- `deploy-web.yml` — build + publish the web PWA to GitHub Pages on push to `main` (regenerates `web/public` via `tools/build_web_data.py`, runs typecheck/lint/test, `npm run build`, deploys `web/dist`). Decoupled from the manual desktop release. See `docs/RELEASE.md` → Web channel.
 
 ## tools/ — Python generators (run from repo root; output to data/, assets/, reports/, web/public/)
 - `build_ntw3_army_builder_database.py` — TSV → `data/generated/ntw3_army_builder_units.csv` (master unit×corps table). Core importer.
@@ -65,6 +71,8 @@ package.json scripts: `build:data`(py gen)·`dev`·`build`(tsc+vite)·`test`(vit
 - `docs/CHANGELOG.md`·`HANDOFF.md`·`RELEASE.md`(release/update channels + build→stage→draft workflow)·`Instructions.txt`. `README.md` (player-facing).
 - `docs/TOW_ARMY_BUILDS.md` — spec/reference for Theatres-of-War (`_tow_`) army assembly/ordering (source-corps-id divisions, TOW brigade buckets, combat-gen cap 1, all corps shown, no discounts).
 - `docs/TOW_ROLL_TIEBREAK_INVESTIGATION.md` + `docs/TOW_ROLL_HANDOFF_FOR_CODEX.md` — TOW source-corps roller tuning notes. Primary rule (pool = staff generals by ascending cost, first-seen SCID) CONFIRMED; Russie-Centre solved generically; Prusse, Espagne, and Flandres matched by scoped source-corps-pool calibrations because the equal-cost engine tie-break is still not derivable from exported tables. Read before touching `towRoll.ts`/`rotation.ts` roll ordering.
+- `docs/MOBILE_PWA_PLAN.md` — execution plan (NOT started) for shipping the app as an offline-capable mobile PWA (iOS/Android, no app store): phased manifest/SW, per-faction offline caching, responsive UI, deploy pipeline.
+- `docs/MOBILE_UX_PASS.md` — spec (IMPLEMENTED on `mobile-pwa`) for the phone/tablet-only UX pass: collapsible+scrollable top bar & bottom-sheet tray, touch model (tap=select, long-press=simplified stat card), global user-select suppression, one-click download-all-factions offline.
 - `docs/TOW_ROLLER_HANDOFF.md` — AUTHORITATIVE for the TOW corps roller: verified mechanics recap, definitive pool orders for ALL 50 TOW factions (13 calibrated from `TOW_Rolls.txt` in-game rolls, 1 derived, 36 no-shuffle ≤4-corps), implementation plan (extend `TOW_SOURCE_CORPS_POOL_CALIBRATIONS`), test-fixture guidance incl. known TOW_Rolls.txt transcription slips. Supersedes the two docs above.
 - `TOW_Rolls.txt` (repo root) — user-recorded in-game TOW corps rolls (calibration source data; 4 lines have name-swap slips, see TOW_ROLLER_HANDOFF §5).
 - `reports/` — validation/summary outputs of tools (CSV/txt/png); regenerated.

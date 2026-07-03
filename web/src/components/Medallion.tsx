@@ -2,6 +2,8 @@ import { useState } from "react";
 import { assetUrl } from "../data/assets";
 import { CLASS_LABELS } from "../domain/labels";
 import type { UnitCard } from "../domain/types";
+import { isCoarsePointer } from "./useCoarsePointer";
+import { useLongPress } from "./useLongPress";
 
 const ABBR: Record<string, string> = {
   infantry_line: "Line",
@@ -47,6 +49,14 @@ export interface MedallionProps {
   onContextMenu?: () => void;
   onHover?: (card: UnitCard, anchor: DOMRect) => void;
   onHoverEnd?: () => void;
+  /** Touch peek: show the simplified stat card. On coarse-pointer devices this
+   *  replaces one of the two gestures (see `peekOn`); it is inert on desktop,
+   *  where hover already shows the same card and right-click opens full details. */
+  onPeek?: (card: UnitCard) => void;
+  /** Which touch gesture opens the peek card. Grid medallions peek on long-press
+   *  (tap adds); tray medallions peek on tap (long-press removes). Default
+   *  "longpress" matches the grid, the common case. */
+  peekOn?: "tap" | "longpress";
 }
 
 /** Oval unit portrait used in the grid, build tray, and details modal. */
@@ -67,8 +77,20 @@ export function Medallion({
   onContextMenu,
   onHover,
   onHoverEnd,
+  onPeek,
+  peekOn = "longpress",
 }: MedallionProps) {
   const [failed, setFailed] = useState(false);
+  const coarse = isCoarsePointer();
+  // Touch model. On desktop (fine pointer) the hook ignores mouse pointers, so a
+  // long-press never fires and right-click/hover behave exactly as before.
+  //   • Grid (peekOn "longpress"): tap = the primary action (add); long-press =
+  //     the simplified stat card. Right-click parity with details is dropped here.
+  //   • Tray (peekOn "tap"): tap = the simplified stat card; long-press keeps the
+  //     right-click action (remove/clear).
+  const peekActive = coarse && !!onPeek;
+  const longPressAction = peekActive && peekOn === "longpress" ? () => onPeek!(card) : onContextMenu;
+  const longPress = useLongPress(longPressAction);
   const icon = assetUrl(card.icon);
   const badge = assetUrl(card.guerrillaBadge);
   // A general occupying the staff slot is tracked separately from instance qty,
@@ -88,17 +110,33 @@ export function Medallion({
       aria-label={`${card.name}. ${CLASS_LABELS[card.unitClass] ?? card.unitClass}. Cost ${card.cost}. ${
         selected || inStaffSlot ? `Selected${qty > 1 ? `, quantity ${qty}` : ""}` : "Not selected"
       }. Enter to add, Delete to remove, i for details.`}
-      onClick={onClick}
-      onContextMenu={(e) => {
-        if (onContextMenu) {
-          e.preventDefault();
-          onContextMenu();
+      {...longPress.handlers}
+      onClick={() => {
+        // Swallow the click the browser fires right after a touch long-press.
+        if (longPress.wasRecent()) return;
+        // On touch, a tray medallion's tap opens the peek card instead of its
+        // desktop click action (which is "show full details").
+        if (peekActive && peekOn === "tap") {
+          onPeek!(card);
+          return;
         }
+        onClick?.();
+      }}
+      onContextMenu={(e) => {
+        if (!onContextMenu) return;
+        e.preventDefault();
+        // On Android a long-press also synthesizes contextmenu; the hook already
+        // fired the callback, so ignore the duplicate.
+        if (longPress.wasRecent()) return;
+        onContextMenu();
       }}
       onMouseEnter={(e) => onHover?.(card, e.currentTarget.getBoundingClientRect())}
       onMouseLeave={() => onHoverEnd?.()}
-      onFocus={(e) => onHover?.(card, e.currentTarget.getBoundingClientRect())}
-      onBlur={() => onHoverEnd?.()}
+      // On touch, a tap focuses the medallion — firing this would pop the hover
+      // card on every select. Gate the focus-tooltip path off on coarse pointers;
+      // desktop keyboard users (fine pointer) keep focus-shows-tooltip.
+      onFocus={(e) => !coarse && onHover?.(card, e.currentTarget.getBoundingClientRect())}
+      onBlur={() => !coarse && onHoverEnd?.()}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();

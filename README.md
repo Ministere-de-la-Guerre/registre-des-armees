@@ -65,9 +65,26 @@ cost, men, stars, speed, abilities, and division/brigade to find what you need.
 
 ## Getting it
 
-Registre des Armées is a **Windows desktop app**. Download the latest installer
-from the [Releases page](../../releases), run it, and you're set — it updates
-itself when a new version ships.
+Registre des Armées runs two ways — pick whichever suits you.
+
+### On your phone or in a browser (no install needed)
+
+Open the web app at
+**https://ministere-de-la-guerre.github.io/registre-des-armees/**. It works in
+any modern browser and can be installed as an app that runs **offline**:
+
+- **iPhone / iPad (Safari):** tap **Share → Add to Home Screen**.
+- **Android (Chrome):** tap the **Install app** prompt (or the ⋮ menu → *Install app*).
+
+Once installed it launches full-screen like a native app. To use it without a
+connection, open a corps and tap **⤓ Save offline** — that downloads everything
+that faction needs. Your saved builds live on the device; use **⤓ Offline →
+Export saves** to back them up or move them to another device.
+
+### On Windows (desktop app)
+
+Download the latest installer from the [Releases page](../../releases), run it,
+and you're set — it updates itself when a new version ships.
 
 Because the app isn't code-signed yet, Windows SmartScreen may show a
 "Windows protected your PC" prompt on first run. Click **More info → Run anyway**

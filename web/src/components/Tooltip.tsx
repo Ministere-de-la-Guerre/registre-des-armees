@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ABILITY_KEYS, ABILITY_LABELS, type UnitCard } from "../domain/types";
 import { classLabel } from "../domain/labels";
 
@@ -7,20 +7,33 @@ interface Row {
   v: number | null;
 }
 
-/** Brief stats overview shown on hover/focus. Clamped to stay within the viewport. */
+/** Brief stats overview. Two presentations from one body:
+ *  - "hover" (desktop): follows the anchored medallion, clamped to the viewport,
+ *    non-interactive (pointer-events: none).
+ *  - "peek" (touch): a bottom-anchored popover that never clips off-screen, with a
+ *    "Full details" action (DetailsPanel is otherwise orphaned once long-press
+ *    stops opening it) and tap/scroll/outside-tap dismissal. */
 export function Tooltip({
   card,
   anchor,
   blockReason,
+  variant = "hover",
+  onFullDetails,
+  onDismiss,
 }: {
   card: UnitCard;
   anchor: DOMRect;
   blockReason?: string | null;
+  variant?: "hover" | "peek";
+  onFullDetails?: () => void;
+  onDismiss?: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const peek = variant === "peek";
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: anchor.left, top: anchor.bottom + 8 });
 
   useLayoutEffect(() => {
+    if (peek) return; // peek is CSS-positioned (bottom-centered), no measuring needed.
     const el = ref.current;
     if (!el) return;
     const { width, height } = el.getBoundingClientRect();
@@ -31,7 +44,29 @@ export function Tooltip({
     if (top < margin) top = margin;
     left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
     setPos({ left, top });
-  }, [anchor, card]);
+  }, [anchor, card, peek]);
+
+  // Peek dismissal: tap outside it, or scroll anywhere. (Tapping the card itself is
+  // handled by onClick below.) Listeners attach on the next frame so the very
+  // gesture that opened the card doesn't immediately close it.
+  useEffect(() => {
+    if (!peek || !onDismiss) return;
+    let armed = false;
+    const arm = requestAnimationFrame(() => (armed = true));
+    const onPointerDown = (e: PointerEvent) => {
+      if (!armed) return;
+      if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
+      onDismiss();
+    };
+    const onScroll = () => armed && onDismiss();
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      cancelAnimationFrame(arm);
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [peek, onDismiss]);
 
   // Stat order depends on what the unit actually does. Combat generals report their
   // underlying unit class so they read like the unit they lead.
@@ -70,7 +105,15 @@ export function Tooltip({
   const abilities = ABILITY_KEYS.filter((k) => card.abilities[k]);
 
   return (
-    <div ref={ref} className="tooltip" style={{ left: pos.left, top: pos.top }} role="tooltip">
+    <div
+      ref={ref}
+      className={`tooltip${peek ? " peek" : ""}`}
+      style={peek ? undefined : { left: pos.left, top: pos.top }}
+      role="tooltip"
+      // Tapping the card itself dismisses it (in addition to the outside/scroll
+      // listeners); guard so a tap on the "Full details" button doesn't double-fire.
+      onClick={peek ? () => onDismiss?.() : undefined}
+    >
       <h5>{card.name}</h5>
       <div className="tt-sub">
         {classLabel(card.unitClass)}
@@ -95,7 +138,22 @@ export function Tooltip({
         </div>
       )}
       {blockReason && <div className="tt-block">⚠ {blockReason}</div>}
-      <div className="tt-hint">Left-click to add · right-click for full details</div>
+      {peek ? (
+        <div className="tt-actions">
+          <button
+            type="button"
+            className="btn small"
+            onClick={(e) => {
+              e.stopPropagation();
+              onFullDetails?.();
+            }}
+          >
+            Full details
+          </button>
+        </div>
+      ) : (
+        <div className="tt-hint">Left-click to add · right-click for full details</div>
+      )}
     </div>
   );
 }

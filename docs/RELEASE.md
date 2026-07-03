@@ -2,7 +2,9 @@
 
 How the desktop app is packaged, versioned, and shipped, and the stable/beta
 auto-update design. Split out of `HANDOFF.md` because it's only needed when
-cutting a release. For packaging internals see also `web/DESKTOP.md`.
+cutting a release. For packaging internals see also `web/DESKTOP.md`. The
+**web/PWA channel** (a third target, independent of the two desktop channels) is
+documented in its own section below.
 
 ## Channels: stable vs beta
 
@@ -22,6 +24,43 @@ not versions whose string contains a hyphen. The `-beta.N` suffix is cosmetic
 - **`extraMetadata.name` is essential:** `userData` (`app.getName()` → package name) and `updaterCacheDirName` (`<name>-updater`) both derive from the package name, so overriding it gives beta its own saved builds + update cache; without it the two collide despite different appIds.
 - Runtime channel: `allowPrerelease = false` (both apps). Each app bundles `app-update.yml` for its own repo; the update path is `/releases/latest` → `latest.yml` on that repo.
 - **Publishing rule: never tick GitHub's "Pre-release" box** for either channel. If a release is (or was) marked Pre-release, `allowPrerelease=false` clients won't see it via `/releases/latest` — untick it and Set as latest. `desktop:beta:release` already publishes as a normal release automatically.
+
+## Web channel (PWA on GitHub Pages)
+
+A third target alongside stable/beta desktop: the same Vite build served as an
+installable, offline-capable PWA. **Fully decoupled from the desktop pipeline** —
+it touches none of the `desktop:*` scripts, electron-builder configs, or
+`_github_assets*` staging.
+
+- **Hosting: GitHub Pages** (Phase 0 decision). Free + HTTPS for this public
+  repo; `base: "./"` in `vite.config.ts` makes the build work from the
+  `…github.io/registre-des-armees/` sub-path. The SW scope (`./`) and manifest
+  `start_url` (`.`) are relative for the same reason.
+  - *One-time setup:* repo **Settings → Pages → Source = "GitHub Actions"**.
+    Until this is set, the workflow builds but the deploy step has nowhere to go.
+- **Deploy:** `.github/workflows/deploy-web.yml` runs on push to `main` and on
+  manual dispatch. It regenerates `web/public/{data,assets}` with the Python
+  pipeline (`python tools/build_web_data.py`, needs Pillow), runs
+  `typecheck + lint + test`, `npm run build`, and publishes `web/dist` to Pages.
+  `web/public/{data,assets}` are gitignored, so regenerating them in CI is
+  mandatory — the build won't have data otherwise.
+- **Versioning: continuous** (tracks `main`, no per-release tags). The in-app SW
+  "new version" toast makes rolling updates safe; runtime data caches are keyed
+  by `web/public/data/data-version.json`, so a data rebuild drops stale caches
+  automatically (no manual cache-busting).
+- **Service worker / caching** (`web/src/sw.ts`, `web/vite.config.ts`): precache
+  the shell + corps picker + `assets/ui` + data stamps (~5 MB); the 297 faction
+  JSONs and 13.6k unit icons are runtime cache-first (never precached). Users pull
+  a faction fully offline with the topbar **"Save offline"** button
+  (`web/src/state/offline.ts`). Registration is Electron-guarded
+  (`web/src/pwa.ts`) so the desktop app never runs the SW.
+- **Player install UX (pure PWA, Phase 0 decision):**
+  - *iPhone/iPad (Safari):* Share → **Add to Home Screen** (iOS has no install
+    prompt). Launches standalone, works offline.
+  - *Android (Chrome):* use the **Install app** prompt / menu entry.
+- **Regenerating PWA icons:** `web/build/make_pwa_icons.mjs` (see its header;
+  `sharp` is an on-demand tool, not a committed dependency). Outputs live in
+  `web/public/` and are committed.
 
 ## Release workflow (manual-draft, the default)
 
@@ -103,8 +142,8 @@ Each `desktop*` run overwrites `web/release/`; copy/stage artifacts before build
 3. `npm run build` clean.
 4. `npm run desktop:beta:stage` / `npm run desktop:stage` emits installer/portable/latest/blockmap **and** stages them.
 5. The curated `_github_assets*/` folder (and the `web/release/_github_assets_beta/` mirror) holds only the intended version.
-6. Git tag `v<version>` pushed to the channel's repo (beta → `beta`, stable → `origin`).
-7. Draft + upload on GitHub per the workflow above.
+6. Git tag `v<version>` pushed to the channel's repo (beta → `beta`, stable → `origin`). Automated — the only manual step left after this is #7.
+7. Draft + upload on GitHub per the workflow above. **Manual** — the human drafts the release and uploads the staged files.
 
 ## Beta-updater caveat (stuck clients)
 
