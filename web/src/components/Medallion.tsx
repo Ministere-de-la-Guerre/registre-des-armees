@@ -130,8 +130,12 @@ export function Medallion({
         if (longPress.wasRecent()) return;
         onContextMenu();
       }}
-      onMouseEnter={(e) => onHover?.(card, e.currentTarget.getBoundingClientRect())}
-      onMouseLeave={() => onHoverEnd?.()}
+      // Desktop hover shows the stat card. On touch a tap synthesizes a
+      // `mouseenter`, which would pop that same card on every select — gate the
+      // hover path off on coarse pointers (touch uses the explicit peek gesture
+      // instead). Desktop mice keep hover-shows-tooltip.
+      onMouseEnter={(e) => !coarse && onHover?.(card, e.currentTarget.getBoundingClientRect())}
+      onMouseLeave={() => !coarse && onHoverEnd?.()}
       // On touch, a tap focuses the medallion — firing this would pop the hover
       // card on every select. Gate the focus-tooltip path off on coarse pointers;
       // desktop keyboard users (fine pointer) keep focus-shows-tooltip.
@@ -156,13 +160,16 @@ export function Medallion({
       {showSpeed && card.speedCode && (
         <span className="speed" title={`Speed ${card.speedCode}`}>{card.speedCode}</span>
       )}
-      {card.groupCap > 0 && !hideName ? (
+      {/* The build tray (showSpeed) mirrors the desktop tray: speed badge only,
+          no cap/qty/checkmark clutter. The cap badge stays in the grid, where
+          showSpeed is off. */}
+      {card.groupCap > 0 && !hideName && !showSpeed ? (
         <span className={`qty cap${atCap ? " full" : ""}`} title={`${capShown} of ${card.groupCap} taken`}>
           {capShown}/{card.groupCap}
         </span>
       ) : qty > 1 ? (
         <span className="qty">{qty}</span>
-      ) : selected && qty <= 1 && !hideName ? (
+      ) : selected && qty <= 1 && !hideName && !showSpeed ? (
         // No checkmark in the tray — being in the tray already means selected.
         <span className="checkmark" aria-hidden>✓</span>
       ) : null}

@@ -645,12 +645,37 @@ input::placeholder { color: #6f7888; }
   .app.chrome-collapsed .corps-header,
   .app.chrome-collapsed .tow-warning.banner { display: none; }
 
-  /* Expanded, the controls bar keeps the existing readable wrapping (never
-     font-shrinks) and just bumps to 44px touch targets. We deliberately do NOT
-     make it an overflow scroller: that would clip the absolutely-positioned
-     Save/Load dropdown. The chevron tab is the space saver, not shrinking. */
+  /* Expanded, the controls bar is a single horizontal row the player swipes
+     through (never font-shrinks or wraps into a tall block whose overflowing
+     stats clip off-screen), at readable/44px-tap size. The Save/Load dropdown
+     would be clipped by this scroller, so it is lifted to a fixed bottom sheet
+     below. The chevron tab still hides the whole bar when the grid needs the room. */
+  .corps-header {
+    flex-wrap: nowrap;
+    gap: 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .corps-header::-webkit-scrollbar { display: none; }
+  /* Keep every control at its natural, readable width — the row scrolls instead
+     of squeezing items. */
+  .corps-header > * { flex-shrink: 0; }
   .corps-header .spacer { display: none; }
   .corps-header .btn { min-height: 44px; }
+
+  /* The Load dropdown is a descendant of the header's horizontal scroller, which
+     would clip it. On touch it rises as a fixed bottom sheet (matching the other
+     modals) instead of an absolute dropdown anchored to the button, so it escapes
+     the clip and stays thumb-reachable. */
+  .saves-menu {
+    position: fixed; left: 0; right: 0; top: auto; bottom: 0;
+    min-width: 0; width: 100%; max-height: 70dvh;
+    border-radius: 14px 14px 0 0;
+    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+    z-index: 95;
+  }
 
   /* --- Part 1a: collapsible bottom-sheet tray -----------------------------
      The always-present slim strip (running totals) replaces the desktop 31-slot row;

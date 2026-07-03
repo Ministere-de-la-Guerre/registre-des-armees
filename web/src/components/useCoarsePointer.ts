@@ -10,9 +10,27 @@ const mql =
     ? window.matchMedia("(hover: none) and (pointer: coarse)")
     : null;
 
+// Phone-only signal: a coarse pointer AND a viewport whose *shorter* side is
+// phone-sized (≤600px in either orientation). Tablets (min side ≥ ~768px) and
+// desktop are excluded. Used where phones need a different default from tablets
+// (e.g. the filter drawer starting collapsed). The shorter side is orientation-
+// stable, so this is safe to read once.
+const phoneMql =
+  typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia(
+        "(hover: none) and (pointer: coarse) and (max-width: 600px), (hover: none) and (pointer: coarse) and (max-height: 600px)",
+      )
+    : null;
+
 /** Non-reactive read for module/one-shot use (pointer type is stable per session). */
 export function isCoarsePointer(): boolean {
   return mql?.matches ?? false;
+}
+
+/** True on phones only (coarse pointer + phone-sized shorter viewport side),
+ *  excluding tablets and desktop. */
+export function isPhone(): boolean {
+  return phoneMql?.matches ?? false;
 }
 
 /** Reactive variant for components that must re-render if the signal ever flips. */

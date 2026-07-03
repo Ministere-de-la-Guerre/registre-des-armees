@@ -32,6 +32,26 @@ export function SaveLoadBar({
   const [saves, setSaves] = useState<SavedBuild[]>([]);
   const [open, setOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // Dismiss the Load menu on a tap/click outside it or Escape. On touch the menu
+  // is a bottom sheet whose trigger button can be scrolled out of the header, so
+  // this is the reliable way to close it (and it tidies the desktop dropdown too).
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
 
   // In-app name prompt. Electron does not support window.prompt(), so naming a
   // build (Save As / Rename) must go through this modal instead.
@@ -142,7 +162,7 @@ export function SaveLoadBar({
   };
 
   return (
-    <div style={{ display: "flex", gap: 6, alignItems: "center", position: "relative" }}>
+    <div ref={rootRef} style={{ display: "flex", gap: 6, alignItems: "center", position: "relative" }}>
       <button className={`btn small ${dirty ? "primary" : ""}`} onClick={doSave} title={loaded ? "Save changes" : "Save"}>
         {dirty ? "Save*" : "Save"}
       </button>

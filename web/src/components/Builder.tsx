@@ -41,6 +41,7 @@ import { TowRollModal } from "./TowRollModal";
 import { TowGenerateModal } from "./TowGenerateModal";
 import { SaveLoadBar } from "./SaveLoadBar";
 import { Tooltip } from "./Tooltip";
+import { isPhone } from "./useCoarsePointer";
 
 // Shared empties for the combined-corps view, where the grid "divisions" are
 // brigade types (no formation discounts — TOW earns none — so no group meta).
@@ -76,7 +77,10 @@ export function Builder({
   const [build, setBuild] = useState<BuildState>(emptyBuild);
   const [filters, setFilters] = useState<FilterState>(() => defaultFiltersFor(roster.factionKey));
   const [density, setDensity] = useState<"comfortable" | "compact">("compact");
-  const [filtersOpen, setFiltersOpen] = useState(true);
+  // Filters start open on desktop/tablets but collapsed on phones, where the
+  // drawer would otherwise bury the unit grid on first load (user can still open
+  // it via the header "Filters" button).
+  const [filtersOpen, setFiltersOpen] = useState(() => !isPhone());
   const [detail, setDetail] = useState<UnitCard | null>(null);
   const [hovered, setHovered] = useState<{ card: UnitCard; anchor: DOMRect } | null>(null);
   // Touch peek: the simplified stat card shown by long-press (grid) or tap (tray).
