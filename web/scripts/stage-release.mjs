@@ -10,7 +10,7 @@
 // After running this the folder holds exactly the intended version and nothing
 // else, so releasing is: go to GitHub -> Draft a new release -> create tag
 // v<version> -> drag in every file from this folder -> Publish (never tick
-// "Pre-release"). See docs/HANDOFF.md "Release workflow".
+// "Pre-release"). See docs/RELEASE.md.
 //
 // Usage:  node scripts/stage-release.mjs <stable|beta>
 // Normally invoked via `npm run desktop:stage` / `npm run desktop:beta:stage`,
@@ -90,6 +90,9 @@ for (const name of optional) {
 if (missing.length > 0) {
   console.error(`\nMissing required artifact(s) for ${version}: ${missing.join(", ")}`);
   console.error(`Did the ${channel} build for this version run? Each build overwrites web/release/.`);
+  if (process.platform !== "win32") {
+    console.error(`You're on ${process.platform}, not Windows — electron-builder can't build the NSIS installer here (no wine). Build on Windows, or copy web/release/ artifacts over, then re-run.`);
+  }
   process.exit(1);
 }
 

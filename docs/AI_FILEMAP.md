@@ -36,7 +36,7 @@ package.json scripts: `build:data`(py gen)·`dev`·`build`(tsc+vite)·`test`(vit
 - `web/src/test/factories.ts` — test data factories.
 - `web/electron/main.cjs` — Electron main. `7za-wrapper.cs`. `web/build/` — icons + `make_icon.py`.
 - `web/electron-builder.beta.cjs` — beta channel config (separate appId/repo; see memory `registre-armees-release-channel`). Stable config lives in `package.json`.
-- `web/scripts/stage-release.mjs` — copies the release-needed artifacts (Setup exe+blockmap+latest.yml, +portable) for the current version into `_github_assets[_beta]/` for manual GitHub upload; guards against a stale `latest.yml`. See HANDOFF "Release workflow".
+- `web/scripts/stage-release.mjs` — copies the release-needed artifacts (Setup exe+blockmap+latest.yml, +portable) for the current version into `_github_assets[_beta]/` for manual GitHub upload; guards against a stale `latest.yml`. See `docs/RELEASE.md`.
 - tsconfig{,.app,.node}.json · vite.config.ts · .eslintrc.cjs · DESKTOP.md.
 
 ## tools/ — Python generators (run from repo root; output to data/, assets/, reports/, web/public/)
@@ -62,7 +62,7 @@ package.json scripts: `build:data`(py gen)·`dev`·`build`(tsc+vite)·`test`(vit
 `icons/`(14.5k base)·`icons_by_army_corps/`(22.6k)·`army_corps_by_theatre/`·`staff_general_icons_by_corps/`·`ui/`. Do not hand-curate; regenerate via tools.
 
 ## docs/ · reports/ · root
-- `docs/CHANGELOG.md`·`HANDOFF.md`·`Instructions.txt`. `README.md` (player-facing).
+- `docs/CHANGELOG.md`·`HANDOFF.md`·`RELEASE.md`(release/update channels + build→stage→draft workflow)·`Instructions.txt`. `README.md` (player-facing).
 - `docs/TOW_ARMY_BUILDS.md` — spec/reference for Theatres-of-War (`_tow_`) army assembly/ordering (source-corps-id divisions, TOW brigade buckets, combat-gen cap 1, all corps shown, no discounts).
 - `docs/TOW_ROLL_TIEBREAK_INVESTIGATION.md` + `docs/TOW_ROLL_HANDOFF_FOR_CODEX.md` — TOW source-corps roller tuning notes. Primary rule (pool = staff generals by ascending cost, first-seen SCID) CONFIRMED; Russie-Centre solved generically; Prusse, Espagne, and Flandres matched by scoped source-corps-pool calibrations because the equal-cost engine tie-break is still not derivable from exported tables. Read before touching `towRoll.ts`/`rotation.ts` roll ordering.
 - `docs/TOW_ROLLER_HANDOFF.md` — AUTHORITATIVE for the TOW corps roller: verified mechanics recap, definitive pool orders for ALL 50 TOW factions (13 calibrated from `TOW_Rolls.txt` in-game rolls, 1 derived, 36 no-shuffle ≤4-corps), implementation plan (extend `TOW_SOURCE_CORPS_POOL_CALIBRATIONS`), test-fixture guidance incl. known TOW_Rolls.txt transcription slips. Supersedes the two docs above.
