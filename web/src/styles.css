@@ -519,3 +519,20 @@ input::placeholder { color: #6f7888; }
 @media (max-width: 1000px) {
   .filters-drawer { position: absolute; z-index: 35; height: calc(100% - var(--tray-h)); }
 }
+
+/* --- PWA: update toast + offline/storage panel (web target only) --- */
+.pwa-toast {
+  position: fixed; right: 16px; bottom: 16px; z-index: 95;
+  display: flex; align-items: center; gap: 10px;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--gold-deep); border-radius: 8px;
+  padding: 8px 12px; box-shadow: var(--shadow);
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+}
+.offline-row { display: flex; align-items: center; gap: 10px; margin: 4px 0 8px; }
+.offline-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.offline-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 5px 4px 5px 10px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--panel-2); font-size: 13px;
+}
