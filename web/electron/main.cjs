@@ -112,25 +112,37 @@ function setupAutoUpdates() {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  // Two independent update channels on the GitHub provider. electron-builder's
-  // GitHub provider ALWAYS writes `latest.yml` (it has no per-channel update file
-  // — `detectUpdateChannel`/`beta.yml` only apply to the generic/S3 providers),
-  // so both channels ship a `latest.yml`. They stay separate because each lives
-  // in a different GitHub release and each build only looks at the releases it is
-  // allowed to, decided from its own version string:
-  //   • Stable build  (e.g. 1.4.0)        -> allowPrerelease=false. The provider
-  //     asks GitHub for /releases/latest, which never returns a "Pre-release", so
-  //     a stable client only ever sees full releases.
-  //   • Pre-release    (e.g. 1.4.0-beta.1) -> allowPrerelease=true. The provider
-  //     walks the full releases feed incl. "Pre-release"-flagged ones, so a beta
-  //     client follows the beta line (and onto a newer stable if one ships).
-  // Publish accordingly: tick GitHub's "Pre-release" box for beta releases; leave
-  // it unticked + "Set as latest" for stable. That GitHub flag is the real switch
-  // — the build's -tag just decides which lane this client belongs to.
-  // Bootstrap caveat: a client only gets this behaviour once running a build that
-  // contains it. Pre-1.3.3 clients hardcoded allowPrerelease=true; ship the next
-  // full release as "Latest" so they migrate onto the stable line before betas.
-  autoUpdater.allowPrerelease = /-/.test(app.getVersion());
+  // Stable and beta are SEPARATE apps that publish to SEPARATE GitHub repos
+  // (stable -> registre-des-armees, beta -> registre-des-armees-beta). Each build
+  // bundles its own `app-update.yml` pointing at its own repo, so channel
+  // separation is already total: a build only ever sees the releases in its own
+  // repo. That means neither channel needs GitHub's "Pre-release" flag to stay
+  // apart — so we DON'T use it. Every release (stable and beta) is published as a
+  // NORMAL "latest" release, and both apps follow the simplest, most robust path:
+  //   allowPrerelease=false -> the GitHub provider asks for /releases/latest and
+  //   fetches its `latest.yml`. It compares by semver, so a beta client on
+  //   1.4.0-beta.1 still updates to a normal release tagged 1.4.0-beta.2 (the
+  //   `-beta` suffix is cosmetic here; GitHub's /releases/latest excludes only
+  //   releases whose "Pre-release" CHECKBOX is ticked, not versions with a hyphen).
+  // Publishing rule: never tick GitHub's "Pre-release" box. The beta publish
+  // config sets releaseType:"release" so `desktop:beta:release` does this for you.
+  //
+  // allowPrerelease=false is MANDATORY here — do NOT revert to the old
+  // `/-/.test(app.getVersion())` formula that set it true for `-beta.N` builds.
+  // The reason is a trap in electron-updater's GitHubProvider: with
+  // allowPrerelease=TRUE it does NOT pick the highest release. It walks the
+  // `/releases.atom` feed and takes the FIRST entry whose channel matches, and
+  // that feed is NOT sorted by semver (GitHub orders it by the tag's commit date,
+  // which put `v1.4.0-beta.1` AHEAD of `v1.4.0-beta.2`). So a beta.1 client with
+  // allowPrerelease=true selects beta.1 — itself — and forever reports "up to
+  // date." With allowPrerelease=FALSE the provider instead hits `/releases/latest`
+  // (GitHub's real "Latest" pointer) and reads that release's `latest.yml`, which
+  // correctly resolves to the newest beta regardless of atom-feed ordering.
+  // Consequence: the already-shipped v1.4.0-beta.1 clients (which hardcoded
+  // allowPrerelease=true, before this line existed) are permanently stuck on the
+  // atom-order bug and can only reach beta.2+ via a one-time MANUAL reinstall.
+  // Every build from beta.2 onward auto-updates fine.
+  autoUpdater.allowPrerelease = false;
 
   autoUpdater.on("update-downloaded", async (info) => {
     const { response } = await dialog.showMessageBox({

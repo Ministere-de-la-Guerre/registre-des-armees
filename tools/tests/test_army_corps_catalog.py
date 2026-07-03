@@ -22,6 +22,9 @@ class ArmyCorpsCatalogTests(unittest.TestCase):
     def test_known_theatre_groups(self) -> None:
         self.assertEqual(theatre_for("ntw3_ac_b05_x7_030")[2], "3rd Coalition (1805)")
         self.assertEqual(theatre_for("ntw3_ac_a12_x6_132")[2], "Hundred Days (1815)")
+        self.assertEqual(theatre_for("ntw3_tow_a05_x8_001")[0], "tow_french_imperial")
+        self.assertEqual(theatre_for("ntw3_tow_b05_x8_006")[0], "tow_coalition")
+        self.assertEqual(theatre_for("ntw3_tow_c10_x8_025")[0], "tow_french_imperial")
         self.assertEqual(theatre_for("ntw3_tow_b05_x8_006")[2], "Theatres of War")
 
     def test_display_numbers(self) -> None:

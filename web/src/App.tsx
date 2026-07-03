@@ -11,7 +11,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [loadingRoster, setLoadingRoster] = useState(false);
   // Corps-selection state persists across builder visits (scroll + filters).
-  const [corpsUi, setCorpsUi] = useState<CorpsUiState>({ search: "", side: "all", acOnly: false });
+  const [corpsUi, setCorpsUi] = useState<CorpsUiState>({ search: "", side: "all", acOnly: false, towOnly: false });
   const corpsScroll = useRef(0);
 
   useEffect(() => {

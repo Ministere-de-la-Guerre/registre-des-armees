@@ -41,12 +41,17 @@ One click finds the **cheapest** way to add combat generals to the units you've
 already picked — taking the discounts that lower your total and skipping the ones
 that would make it dearer. A second click resets them.
 
-### Know when a general is available — the "⏱ General times" feature
+### Know when a general is available — the "Generate times" feature
 In NTW3, the generals a corps offers **rotate roughly every three hours**, so the
 combat and staff generals you want aren't always on the menu. Registre des Armées
 reproduces that rotation exactly and tells you, for each general in your build,
 **the nearest local time you can recruit them** — whether that's right now, later
 today, or a window that just passed.
+
+For Theatres-of-War corps, "Generate times" instead times the **whole build you
+made**: it finds the nearest window whose roll offers every corps your selected
+units come from *and* the combat generals you used — so you can land the exact
+army you designed.
 
 It's calibrated against real in-game timings, so the times it shows match what
 the game will actually offer. (The rotation runs on your PC's clock, just like

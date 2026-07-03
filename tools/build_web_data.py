@@ -9,7 +9,7 @@ reads the existing source-of-truth files in the repository root:
 and produces, under ``web/public/``:
 
   - data/data-version.json        (schema + build version + counts)
-  - data/corps-index.json         (theatre-grouped, ToW excluded)
+  - data/corps-index.json         (theatre-grouped, incl. Theatres of War)
   - data/factions/<faction>.json  (one normalized roster per selectable corps)
   - assets/icons/**/*.png         (unit icons converted from .tga)
   - assets/army_corps_by_theatre/**/flag.png + post_selection_flag.png (copied)
@@ -19,7 +19,8 @@ Design goals (see README "Data refresh"):
   * Unknown CSV columns are ignored, never fatal.
   * Malformed *required* data is collected into a validation report rather than
     crashing the whole build.
-  * ToW factions and ToW unit variants are excluded here, at the import layer.
+  * ToW factions and unit variants are included; a TOW corps drops its (inert)
+    ACDV division/brigade tags so the web layer lays it out as one long list.
   * Re-runnable: PNG conversion / copies are skipped when already up to date.
 
 Run from anywhere:  python tools/build_web_data.py
@@ -225,6 +226,13 @@ def normalize_unit(row: dict, assets: AssetCopier, errors: list[str]) -> dict | 
 
     division = _int_or_none(_s(row, "division_id"))
     brigade = _int_or_none(_s(row, "brigade_id"))
+    if _is_tow_faction(faction_key):
+        # A TOW corps ignores the ACDV division/brigade tags — the web layer lays
+        # it out as one long list of arm/class brigades (docs/TOW_ARMY_BUILDS.md
+        # §3/§5). Dropping placement also keeps the AC-only Division/Brigade filter
+        # chips out of the TOW filter panel and earns no (TOW-forbidden) discounts.
+        division = None
+        brigade = None
 
     icon_src = _s(row, "icon_path")
     icon = assets.convert_tga_to_png(icon_src) if icon_src else None
@@ -294,17 +302,16 @@ def main() -> int:
     assets = AssetCopier()
     errors: list[str] = []
 
-    # 1. Load + normalize units, grouped by faction, excluding ToW.
+    # 1. Load + normalize units, grouped by faction (Theatres of War included).
     by_faction: dict[str, list[dict]] = {}
     total_rows = 0
-    excluded_tow = 0
+    tow_rows = 0
     with UNITS_CSV.open(newline="", encoding="utf-8-sig") as handle:
         for row in csv.DictReader(handle):
             total_rows += 1
             faction_key = _s(row, "faction_key")
             if _is_tow_faction(faction_key) or _bool(_s(row, "is_tow_variant")):
-                excluded_tow += 1
-                continue
+                tow_rows += 1
             card = normalize_unit(row, assets, errors)
             if card is None:
                 continue
@@ -364,20 +371,18 @@ def main() -> int:
             "cards": cards,
         }, ensure_ascii=False), encoding="utf-8")
 
-    # 3. Build the theatre-grouped corps index from the catalog (ToW excluded).
+    # 3. Build the theatre-grouped corps index from the catalog. Theatres of War
+    #    are split into Imperial and Coalition sides; TOW corps are not AC, so
+    #    isArmyCorps is False.
     catalog = json.loads(CATALOG_JSON.read_text(encoding="utf-8"))
     index_sides: list[dict] = []
     listed = 0
     for side, theatres in catalog.items():
-        if side == "shared":  # "Theatres of War" -> excluded per spec
-            continue
         side_theatres = []
         for theatre_name, corps_list in theatres.items():
             entries = []
             for corps in corps_list:
                 fk = corps.get("faction_key", "")
-                if _is_tow_faction(fk):
-                    continue
                 wk = fk in FLAG_WHITE_KEY_FACTIONS
                 flag = assets.copy_asset(corps.get("flag_png_path", ""), white_key=wk) or None
                 post_flag = assets.copy_asset(corps.get("post_selection_flag_png_path", ""), white_key=wk) or None
@@ -417,7 +422,7 @@ def main() -> int:
         "factionCount": len(by_faction),
         "corpsListed": listed,
         "totalSourceRows": total_rows,
-        "excludedTow": excluded_tow,
+        "towRows": tow_rows,
     }, ensure_ascii=False, indent=2), encoding="utf-8")
 
     # 6. Validation report.
@@ -425,7 +430,7 @@ def main() -> int:
     lines = [
         f"schema_version={SCHEMA_VERSION}",
         f"source_rows={total_rows}",
-        f"excluded_tow_rows={excluded_tow}",
+        f"tow_rows_included={tow_rows}",
         f"factions={len(by_faction)}",
         f"corps_listed={listed}",
         f"icons_converted={assets.converted}",

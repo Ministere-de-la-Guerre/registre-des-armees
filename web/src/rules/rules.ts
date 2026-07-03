@@ -330,7 +330,13 @@ export function classifyGeneral(card: RulesUnit): "staff" | "combat" | null {
 }
 
 export function generalCaps(factionKey: string): GeneralCaps {
-  if (!factionKey.includes("_ac_") && !factionKey.includes("_tow_")) {
+  // Theatres-of-War corps are hard-capped at a single combat general total,
+  // regardless of the corps rating (the 9 − N formula below would otherwise apply).
+  // See docs/TOW_ARMY_BUILDS.md §2 / §4.
+  if (factionKey.includes("_tow_")) {
+    return { staff: 1, combat: 1 };
+  }
+  if (!factionKey.includes("_ac_")) {
     return { staff: 1, combat: 1 };
   }
   const parts = factionKey.split("_");

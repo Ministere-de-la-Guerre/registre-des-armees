@@ -1,0 +1,1 @@
+Treat CLAUDE.md as AGENTS.md

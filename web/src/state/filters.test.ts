@@ -95,13 +95,6 @@ describe("ordinary filters (dimming, not removal)", () => {
     f.abilities.canFormSquare = "no";
     expect(matchesCard(makeUnit({ abilities: { canFormSquare: false } as never }), f)).toBe(true);
   });
-
-  it("division/brigade filters", () => {
-    const f = defaultFilters();
-    f.divisions = [2];
-    expect(matchesCard(makeUnit({ placement: { division: 1, brigade: 1 } }), f)).toBe(false);
-    expect(matchesCard(makeUnit({ placement: { division: 2, brigade: 1 } }), f)).toBe(true);
-  });
 });
 
 describe("combat-general visibility switch (removal)", () => {

@@ -14,6 +14,12 @@ import {
   type UnitCard,
   type UnitStats,
 } from "../domain/types";
+import {
+  compareTowSourceCorpsIds,
+  isTowFactionKey,
+  towBrigadeIndexOf,
+  towSourceCorpsIdOf,
+} from "../domain/tow";
 
 function num(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
@@ -81,6 +87,7 @@ function normalizeCard(raw: Record<string, unknown>): UnitCard | null {
     finalMen: num(raw.finalMen),
     speedCode: strOrNull(raw.speedCode),
     placement: division !== null && brigade !== null ? { division, brigade } : null,
+    towSourceCorpsId: towSourceCorpsIdOf(unitKey),
     divisionBrigadeCode: strOrNull(raw.divisionBrigadeCode),
     cost,
     cap,
@@ -103,6 +110,23 @@ function normalizeCard(raw: Record<string, unknown>): UnitCard | null {
   };
 }
 
+function withTowPlacements(cards: UnitCard[], factionKey: string): UnitCard[] {
+  if (!isTowFactionKey(factionKey)) return cards;
+  const sourceIds = [...new Set(cards.map((c) => c.towSourceCorpsId).filter((v): v is string => v !== null))]
+    .sort(compareTowSourceCorpsIds);
+  const divisions = new Map(sourceIds.map((id, index) => [id, index + 1]));
+  return cards.map((card) => {
+    if (card.towSourceCorpsId === null) return card;
+    const division = divisions.get(card.towSourceCorpsId);
+    if (division === undefined) return card;
+    return {
+      ...card,
+      placement: { division, brigade: towBrigadeIndexOf(card) },
+      placementSource: "tow_source_corps",
+    };
+  });
+}
+
 export async function loadCorpsIndex(): Promise<CorpsIndex> {
   const res = await fetch(dataUrl("corps-index.json"));
   if (!res.ok) throw new Error(`Failed to load corps index (${res.status})`);
@@ -113,6 +137,7 @@ export async function loadFaction(factionKey: string): Promise<FactionRoster> {
   const res = await fetch(dataUrl(`factions/${factionKey}.json`));
   if (!res.ok) throw new Error(`Failed to load roster for ${factionKey} (${res.status})`);
   const raw = (await res.json()) as Record<string, unknown>;
+  const faction = str(raw.factionKey) || factionKey;
   const cards = Array.isArray(raw.cards)
     ? (raw.cards as Record<string, unknown>[])
         .map(normalizeCard)
@@ -120,8 +145,8 @@ export async function loadFaction(factionKey: string): Promise<FactionRoster> {
     : [];
   return {
     schemaVersion: num(raw.schemaVersion) ?? 0,
-    factionKey: str(raw.factionKey) || factionKey,
+    factionKey: faction,
     armyCorpsName: str(raw.armyCorpsName),
-    cards,
+    cards: withTowPlacements(cards, faction),
   };
 }

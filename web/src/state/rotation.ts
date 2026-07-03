@@ -84,7 +84,7 @@ function armCategory(c: UnitCard): string {
  *  also alphabetical) then by ascending cost. Verified to reproduce 7 distinct
  *  in-game windows for corps ntw3_ac_a04_x5_076 (see rotation.test.ts). rosterIndex
  *  is only a stable tiebreaker for the rare same-category, same-cost pair. */
-function recruitOrder(a: UnitCard, b: UnitCard): number {
+export function recruitOrder(a: UnitCard, b: UnitCard): number {
   const ca = armCategory(a);
   const cb = armCategory(b);
   if (ca !== cb) return ca < cb ? -1 : 1;

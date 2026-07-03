@@ -35,6 +35,9 @@ export interface MedallionProps {
   /** Selecting this unit would push the build past the 10,000 cost ceiling — its
    *  cost is shown red as a warning (selection is still allowed). */
   overBudget?: boolean;
+  /** This unit belongs to a source corps beyond the 4 the game rolls together (or
+   *  selecting it would add a 5th). Framed red as a soft warning; still allowed. */
+  overCorps?: boolean;
   atCap?: boolean;
   hideName?: boolean;
   /** Show the speed/movement code (e.g. L4) as a badge in the top-left corner.
@@ -56,6 +59,7 @@ export function Medallion({
   dimmed = false,
   blocked = false,
   overBudget = false,
+  overCorps = false,
   atCap = false,
   hideName = false,
   showSpeed = false,
@@ -75,7 +79,7 @@ export function Medallion({
     <div
       className={`medallion${selected ? " selected" : ""}${inStaffSlot ? " staff" : ""}${
         dimmed ? " dimmed" : ""
-      }${blocked ? " blocked" : ""}${overBudget ? " overbudget" : ""}${atCap ? " atcap" : ""}${
+      }${blocked ? " blocked" : ""}${overBudget ? " overbudget" : ""}${overCorps ? " overcorps" : ""}${atCap ? " atcap" : ""}${
         hideName ? " tray-mini" : ""
       }`}
       role="button"
@@ -124,7 +128,10 @@ export function Medallion({
         // No checkmark in the tray — being in the tray already means selected.
         <span className="checkmark" aria-hidden>✓</span>
       ) : null}
-      <div className="oval">
+      <div
+        className="oval"
+        title={overCorps ? "From a 5th+ army corps — the game rolls only 4 together" : undefined}
+      >
         {icon && !failed ? (
           <img className="icon" src={icon} alt="" loading="lazy" onError={() => setFailed(true)} />
         ) : (

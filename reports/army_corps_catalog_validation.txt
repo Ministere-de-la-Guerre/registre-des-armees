@@ -4,7 +4,7 @@ catalog rows: 297
 main factions: 297
 missing source faction mappings: 0
 missing selection flags: 0
-theatre groups: 32
+theatre groups: 33
 selection flag sources: id_flag_cavalry.tga=2, id_flag_infantry.tga=47, large.dds=1, large.tga=9, mini_flag.tga=238
 authored post-selection flags: 223
 

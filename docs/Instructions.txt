@@ -336,6 +336,21 @@ Use a narrowly scoped verified override when every card in a final division lack
 tag and the division number therefore cannot be inferred from other cards. Leave
 staff generals and non-army-corps records blank when no tag exists.
 
+For Theatres of War (`_tow_`) records, do not use ACDV tags to decide the TOW
+division. A TOW division is the source army corps embedded in the unit key:
+
+```text
+ntw3_gen_staff_081_6_0115_tow_032
+ntw3_inf_line_081_030_2438_tow_032
+ntw3_inf_line_081_030_2438_tow_032_com_3016
+```
+
+In these examples, `032` is the selected TOW army id and `081` is the source
+corps id. Group TOW units by that source corps id when building TOW divisions.
+Each source corps/division may have multiple staff generals; that is expected,
+because the TOW roster includes every possible staff general for that source
+army corps.
+
 ## Cost and cap
 
 Use:

@@ -25,7 +25,7 @@ import {
   summarize,
 } from "../state/build";
 import { type FilterState, defaultFilters, isFilterActive, isHiddenByGeneralSwitch, matchesCard } from "../state/filters";
-import { orderBrigadeCards } from "../state/ordering";
+import { combinedTowLayout, orderBrigadeCards } from "../state/ordering";
 import { type BuildConfig, type LoadResult, type SavedBuild, isDirty } from "../state/saves";
 import { BottomTray } from "./BottomTray";
 import { BuilderGrid, type DivisionGroup, type GroupMeta, type MedallionHandlers } from "./BuilderGrid";
@@ -33,9 +33,35 @@ import { DetailsPanel } from "./DetailsPanel";
 import { FilterPanel } from "./FilterPanel";
 import { Medallion } from "./Medallion";
 import { combatPool, offeredCombatKeys, offeredStaffKeys, rotationApplies, staffPool } from "../state/rotation";
+import { LEGACY_TOW_MAX_SOURCE_CORPS, isCardOverCorpsCeiling, towCorpsCeiling } from "../state/towRoll";
+import { compareTowSourceCorpsIds, isTowFactionKey, towBrigadeLabel } from "../domain/tow";
+import { towCorpsFullNameMap } from "../domain/towCorpsNames";
 import { RotationModal } from "./RotationModal";
+import { TowRollModal } from "./TowRollModal";
+import { TowGenerateModal } from "./TowGenerateModal";
 import { SaveLoadBar } from "./SaveLoadBar";
 import { Tooltip } from "./Tooltip";
+
+// Shared empties for the combined-corps view, where the grid "divisions" are
+// brigade types (no formation discounts — TOW earns none — so no group meta).
+const EMPTY_DIVISION_META = new Map<number, GroupMeta>();
+const EMPTY_BRIGADE_META = new Map<string, GroupMeta>();
+
+// Roman numerals for the corps-roll breakdown chips (matches the Corps roll popup
+// and the grid's division numbering).
+const ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+const roman = (n: number) => ROMAN[n] ?? String(n);
+
+// TOW rosters open with combat generals hidden by default (the combined view
+// focuses on staff + line units); every other roster shows them.
+function defaultFiltersFor(factionKey: string): FilterState {
+  return { ...defaultFilters(), showCombatGenerals: !isTowFactionKey(factionKey) };
+}
+
+// Every source-corps id present in a TOW roster (all corps enabled by default).
+function allTowSourceCorpsIds(cards: readonly UnitCard[]): string[] {
+  return [...new Set(cards.map((c) => c.towSourceCorpsId).filter((x): x is string => !!x))];
+}
 
 export function Builder({
   roster,
@@ -48,7 +74,7 @@ export function Builder({
 }) {
   const index = useMemo(() => indexRoster(roster), [roster]);
   const [build, setBuild] = useState<BuildState>(emptyBuild);
-  const [filters, setFilters] = useState<FilterState>(defaultFilters);
+  const [filters, setFilters] = useState<FilterState>(() => defaultFiltersFor(roster.factionKey));
   const [density, setDensity] = useState<"comfortable" | "compact">("compact");
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [detail, setDetail] = useState<UnitCard | null>(null);
@@ -56,13 +82,89 @@ export function Builder({
   const [loadedSaved, setLoadedSaved] = useState<SavedBuild | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [rotationOpen, setRotationOpen] = useState(false);
+  const [towRollOpen, setTowRollOpen] = useState(false);
+  const [towGenerateOpen, setTowGenerateOpen] = useState(false);
+  // Source-corps ids the player has enabled for a Theatres-of-War roster (≤4).
+  // Only these corps' divisions render in the grid; null for non-TOW rosters, so
+  // nothing is hidden. Defaults to the corps the game rolls right now.
+  const isTow = isTowFactionKey(roster.factionKey);
+  // Custom armies are the non-discount, non-TOW rosters (neither `_ac_` nor
+  // `_tow_`). They already cap combat generals at 1 (rules.generalCaps) and always
+  // render in the combined brigade-type layout — a custom army is one roster, so
+  // "combining" just pools its units by brigade type like the TOW combined view.
+  const isCustom = !isTow && !roster.factionKey.includes("_ac_");
+  const [enabledCorps, setEnabledCorps] = useState<Set<string> | null>(null);
+  // Combined-corps view (TOW only): merge every enabled corps into one, whose
+  // "divisions" are brigade types pooled across corps. On by default; sticky
+  // across corps switches within a session; harmless (unused) for non-TOW rosters.
+  const [combinedTow, setCombinedTow] = useState(true);
+  // Whether the grid uses the pooled brigade-type layout: always for custom
+  // armies, and for TOW when the "Combine corps" toggle is on.
+  const combinedView = isCustom || (isTow && combinedTow);
 
   useEffect(() => {
     setBuild(emptyBuild());
-    setFilters(defaultFilters());
+    setFilters(defaultFiltersFor(roster.factionKey));
     setLoadedSaved(null);
     setHovered(null);
-  }, [roster.factionKey]);
+    setTowRollOpen(false);
+    setTowGenerateOpen(false);
+    // Enable every source corps by default (the combined view pools them all;
+    // >4 is over the game's roll size, which the header banner flags).
+    setEnabledCorps(isTowFactionKey(roster.factionKey) ? new Set(allTowSourceCorpsIds(roster.cards)) : null);
+  }, [roster.factionKey, roster.cards]);
+
+  // Any number of corps may be enabled; enabling more than the game rolls at once
+  // is allowed but flagged with a non-blocking warning (here and in the popup).
+  const toggleCorps = useCallback((id: string, on: boolean) => {
+    setEnabledCorps((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
+  // TOW grid divisions are labelled by their commanding general's surname (the
+  // army-corps name) instead of a Roman numeral; keyed by grid division number.
+  const divisionNames = useMemo(() => {
+    // Combined view (custom armies, or TOW with the toggle on): each grid
+    // "division" is a brigade type, keyed by its brigade index, so label it by
+    // brigade rather than by source-corps commander.
+    if (combinedView) {
+      const out = new Map<number, string>();
+      for (const b of [...Array(15).keys()].slice(2)) out.set(b, towBrigadeLabel(b));
+      out.set(99, towBrigadeLabel(99));
+      return out;
+    }
+    if (!isTow) return undefined;
+    const names = towCorpsFullNameMap(roster.cards);
+    const out = new Map<number, string>();
+    for (const c of roster.cards) {
+      const name = c.towSourceCorpsId ? names.get(c.towSourceCorpsId) : undefined;
+      if (c.placement && name) out.set(c.placement.division, name);
+    }
+    return out;
+  }, [combinedView, isTow, roster.cards]);
+
+  const tooManyCorps = isTow && enabledCorps != null && enabledCorps.size > LEGACY_TOW_MAX_SOURCE_CORPS;
+
+  // id → { division number, full name } for every source corps in this TOW faction,
+  // numbered like the Corps roll popup / grid (sorted by source-corps id).
+  const towCorpsInfo = useMemo(() => {
+    if (!isTow) return null;
+    const names = towCorpsFullNameMap(roster.cards);
+    const ids = [...new Set(roster.cards.map((c) => c.towSourceCorpsId).filter((x): x is string => !!x))].sort(
+      compareTowSourceCorpsIds,
+    );
+    const map = new Map<string, { division: number; name: string }>();
+    ids.forEach((id, i) => map.set(id, { division: i + 1, name: names.get(id) ?? `Corps ${id}` }));
+    return map;
+  }, [isTow, roster.cards]);
+
+  // The roll constraint that actually matters: how many distinct source corps the
+  // SELECTED units draw from (≤4 is rollable). Pure logic lives in state/towRoll.
+  const towBuild = useMemo(() => (isTow ? towCorpsCeiling(build, index) : null), [isTow, build, index]);
 
   useEffect(() => {
     if (!message) return;
@@ -108,6 +210,9 @@ export function Builder({
   const isDimmed = (card: UnitCard) => isFilterActive(filters) && !matchesCard(card, filters);
   const isBlocked = (card: UnitCard) => blockReasons.get(card.unitKey) != null;
   const isOverBudget = (card: UnitCard) => overBudgetCards.get(card.unitKey) === true;
+  // Soft 4-corps ceiling (TOW): a card is "over" when its source corps is already
+  // in the build beyond the first 4 rolled, or adding it would open a 5th corps.
+  const isOverCorps = (card: UnitCard) => (towBuild ? isCardOverCorpsCeiling(card, towBuild) : false);
 
   const tryAdd = (card: UnitCard) => {
     const reason = blockReasons.get(card.unitKey);
@@ -134,6 +239,20 @@ export function Builder({
   const clearBuild = () => {
     if (build.instances.length === 0 && !build.staffSlotUnitKey) return;
     setBuild(emptyBuild());
+  };
+
+  // Remove every selected unit (and the commander, if it belongs to this corps)
+  // drawn from a single source corps — the one-click "trim this corps" action on
+  // the over-4-corps warning chips.
+  const removeCorps = (sourceCorpsId: string) => {
+    const inCorps = (key: string | null) =>
+      !!key && index.byKey.get(key)?.towSourceCorpsId === sourceCorpsId;
+    const info = towCorpsInfo?.get(sourceCorpsId);
+    setBuild((b) => ({
+      instances: b.instances.filter((i) => !inCorps(i.unitKey)),
+      staffSlotUnitKey: inCorps(b.staffSlotUnitKey) ? null : b.staffSlotUnitKey,
+    }));
+    setMessage(`Removed all units from ${info ? `${roman(info.division)} · ${info.name}` : `corps ${sourceCorpsId}`}.`);
   };
 
   // Upgrade units already in the build by swapping a plain copy for the combat
@@ -169,6 +288,7 @@ export function Builder({
     isDimmed,
     isBlocked,
     isOverBudget,
+    isOverCorps,
     qtyOf,
     groupQtyOf: groupQty,
     atCapOf,
@@ -198,14 +318,38 @@ export function Builder({
     [offeredNowKeys],
   );
 
+  // A TOW card is hidden when its source corps is not in the enabled roll. Only
+  // affects display (the build state is untouched); non-TOW cards are unaffected.
+  const hiddenByCorpsRoll = useCallback(
+    (c: UnitCard) => enabledCorps != null && c.towSourceCorpsId != null && !enabledCorps.has(c.towSourceCorpsId),
+    [enabledCorps],
+  );
+
   // --- organizational grouping ---
+  // Army-corps: staff generals are lifted out into a top "Staff" row; the rest
+  // group by placement. Theatres-of-War instead keeps staff generals inside their
+  // source-corps division (load.ts places them in brigade 1), so for TOW they fall
+  // through to the placement grouping and no separate staff row is rendered.
   const { staffGenerals, divisions, unplaced } = useMemo(() => {
-    const visible = roster.cards.filter((c) => !isHiddenByGeneralSwitch(c, filters) && !hiddenByRotation(c));
+    const visible = roster.cards.filter(
+      (c) => !isHiddenByGeneralSwitch(c, filters) && !hiddenByRotation(c) && !hiddenByCorpsRoll(c),
+    );
+    // Combined view (custom armies always; TOW when toggled): one corps, whose
+    // "divisions" are the brigade types pooled across every unit (staff lifted to
+    // the top row), each ordered by the normal price rule.
+    if (combinedView) {
+      const { staffGenerals, brigades } = combinedTowLayout(visible);
+      const divisions: DivisionGroup[] = brigades.map((b) => ({
+        division: b.brigade,
+        brigades: [b],
+      }));
+      return { staffGenerals, divisions, unplaced: [] as UnitCard[] };
+    }
     const staffGenerals: UnitCard[] = [];
     const divMap = new Map<number, Map<number, UnitCard[]>>();
     const unplaced: UnitCard[] = [];
     for (const c of visible) {
-      if (c.isGeneral && c.generalKind === "staff") {
+      if (!isTow && c.isGeneral && c.generalKind === "staff") {
         staffGenerals.push(c);
       } else if (c.placement) {
         const d = divMap.get(c.placement.division) ?? new Map<number, UnitCard[]>();
@@ -226,7 +370,7 @@ export function Builder({
           .map((brigade) => ({ brigade, cards: divMap.get(division)!.get(brigade)! })),
       }));
     return { staffGenerals, divisions, unplaced: orderBrigadeCards(unplaced) };
-  }, [roster.cards, filters, hiddenByRotation]);
+  }, [roster.cards, filters, hiddenByRotation, hiddenByCorpsRoll, isTow, combinedView]);
 
   const { divisionMeta, brigadeMeta } = useMemo(() => {
     const totals = buildRosterTotals(roster.cards, roster.factionKey);
@@ -325,6 +469,14 @@ export function Builder({
               <span style={{ fontSize: 11, opacity: 0.7 }}> · {Math.max(0, combatCap - combatGensUsed)} left</span>
             </div>
           </div>
+          {isTow && towBuild && (
+            <div className="hstat" title="Distinct army corps your selected units draw from. The game rolls only 4 corps together, so a build spanning more can't come from a single roll (still allowed).">
+              <div className="lbl">Corps</div>
+              <div className={`val${towBuild.over ? " over" : ""}`}>
+                {towBuild.count}/{LEGACY_TOW_MAX_SOURCE_CORPS}
+              </div>
+            </div>
+          )}
           <div className="hstat" title="Selected unit cards able to form square, out of your total infantry (line, light, grenadiers, militia, irregulars; combat generals leading infantry count; skirmishers excluded)">
             <div className="lbl">Squares</div>
             <div className="val">
@@ -351,6 +503,19 @@ export function Builder({
           />
           Combat generals
         </label>
+        {isTow && (
+          <label
+            style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}
+            title="Merge every enabled corps into one: staff, then each brigade type (cavalry, infantry, artillery) pooled across corps and ordered by price"
+          >
+            <input
+              type="checkbox"
+              checked={combinedTow}
+              onChange={(e) => setCombinedTow(e.target.checked)}
+            />
+            Combine corps
+          </label>
+        )}
         {supportsRotation && (
           <label
             style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}
@@ -366,16 +531,26 @@ export function Builder({
         )}
         <button
           className="btn small"
-          onClick={() => setRotationOpen(true)}
-          title="When can I recruit each selected combat general? (in-game rotation times)"
+          onClick={() => (isTow ? setTowGenerateOpen(true) : setRotationOpen(true))}
+          title={
+            isTow
+              ? "Find the nearest in-game time whose roll lets you recruit the corps & combat generals your build uses"
+              : "When can I recruit each selected combat general? (in-game rotation times)"
+          }
         >
-          General times
+          Generate times
         </button>
+        {isTow && (
+          <button
+            className="btn small"
+            onClick={() => setTowRollOpen(true)}
+            title="Choose which army corps show in the builder (the game rolls 4 at a time)"
+          >
+            Corps roll
+          </button>
+        )}
         <button className="btn small" onClick={() => setFiltersOpen((o) => !o)}>
           {filtersOpen ? "Hide filters" : "Filters"}
-        </button>
-        <button className="btn small" onClick={() => setDensity((d) => (d === "comfortable" ? "compact" : "comfortable"))}>
-          {density === "comfortable" ? "Compact" : "Comfortable"}
         </button>
         <SaveLoadBar
           roster={roster}
@@ -387,6 +562,42 @@ export function Builder({
           onMessage={setMessage}
         />
       </div>
+
+      {/* Build-based warning takes priority over the enabled-set one: it names the
+          corps your selection actually spans (with per-corps counts), so you can
+          see exactly what to trim to get back to a rollable 4. */}
+      {towBuild?.over ? (
+        <div className="tow-warning banner" role="status">
+          ⚠ Your build draws from {towBuild.count} army corps — the game rolls only{" "}
+          {LEGACY_TOW_MAX_SOURCE_CORPS} together, so this build can’t come from a single roll. Click a corps
+          below to remove its units — clear {towBuild.count - LEGACY_TOW_MAX_SOURCE_CORPS} corp
+          {towBuild.count - LEGACY_TOW_MAX_SOURCE_CORPS === 1 ? "" : "s"} to make it rollable.
+          <span className="tow-corps-chips">
+            {towBuild.order.map((id) => {
+              const info = towCorpsInfo?.get(id);
+              const over = !towBuild.kept.has(id);
+              const label = info ? `${roman(info.division)} · ${info.name}` : id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  className={`tow-corps-chip${over ? " over" : ""}`}
+                  onClick={() => removeCorps(id)}
+                  title={`Remove all units from ${label}`}
+                >
+                  {label}
+                  <span className="n">{towBuild.counts.get(id)}</span>
+                </button>
+              );
+            })}
+          </span>
+        </div>
+      ) : tooManyCorps ? (
+        <div className="tow-warning banner" role="status">
+          ⚠ {enabledCorps!.size} army corps enabled — the game only rolls {LEGACY_TOW_MAX_SOURCE_CORPS} at a
+          time. This combination won’t appear together in a real in-game roll.
+        </div>
+      ) : null}
 
       <div className="stage">
         <div className={`filters-drawer${filtersOpen ? "" : " closed"}`}>
@@ -403,8 +614,9 @@ export function Builder({
           <BuilderGrid
             staffGenerals={staffGenerals}
             divisions={divisions}
-            divisionMeta={divisionMeta}
-            brigadeMeta={brigadeMeta}
+            divisionMeta={combinedView ? EMPTY_DIVISION_META : divisionMeta}
+            brigadeMeta={combinedView ? EMPTY_BRIGADE_META : brigadeMeta}
+            divisionNames={divisionNames}
             handlers={handlers}
             onStaffToggle={toggleStaff}
           />
@@ -429,6 +641,7 @@ export function Builder({
         index={index}
         build={build}
         summary={summary}
+        isOverCorps={isOverCorps}
         onRemoveInstance={removeInstance}
         onClearStaff={clearStaff}
         onClearBuild={clearBuild}
@@ -458,6 +671,19 @@ export function Builder({
       )}
       {rotationOpen && (
         <RotationModal index={index} roster={roster} build={build} onClose={() => setRotationOpen(false)} />
+      )}
+      {towRollOpen && enabledCorps && (
+        <TowRollModal
+          roster={roster}
+          index={index}
+          build={build}
+          enabled={enabledCorps}
+          onToggle={toggleCorps}
+          onClose={() => setTowRollOpen(false)}
+        />
+      )}
+      {towGenerateOpen && (
+        <TowGenerateModal roster={roster} index={index} build={build} onClose={() => setTowGenerateOpen(false)} />
       )}
       {message && <div className="toast" role="status">{message}</div>}
     </div>

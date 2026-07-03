@@ -2,56 +2,18 @@ import { useEffect, useMemo } from "react";
 import type { FactionRoster } from "../domain/types";
 import type { BuildState, RosterIndex } from "../state/build";
 import {
-  type RotationResult,
   combatPool,
   combatSelectCount,
   findRotation,
   findStaffRotation,
-  nextWindowStart,
   offeredCombatKeys,
   offeredStaffKeys,
   rotationApplies,
   staffPool,
   windowStart,
 } from "../state/rotation";
-
-function fmtDateTime(d: Date): string {
-  return d.toLocaleString(undefined, {
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function fmtTime(d: Date): string {
-  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-}
-
-function fmtRel(target: Date, now: Date): string {
-  const ms = target.getTime() - now.getTime();
-  const past = ms < 0;
-  const a = Math.abs(ms);
-  const mins = Math.round(a / 60000);
-  const hrs = Math.round(a / 3_600_000);
-  const days = Math.round(a / 86_400_000);
-  const s = mins < 60 ? `${mins} min` : hrs < 48 ? `${hrs} h` : `${days} days`;
-  return past ? `${s} ago` : `in ${s}`;
-}
-
-/** A single window's local time range, e.g. "14:00 – 17:00". */
-function windowRange(start: Date): string {
-  return `${fmtTime(start)} – ${fmtTime(nextWindowStart(start))}`;
-}
-
-function DirectionBadge({ dir }: { dir: RotationResult["closestDirection"] }) {
-  if (dir === "now") return <span className="rot-badge now">offered now</span>;
-  if (dir === "future") return <span className="rot-badge future">upcoming</span>;
-  if (dir === "past") return <span className="rot-badge past">most recent</span>;
-  return null;
-}
+import { fmtDateTime, fmtRel, windowRange } from "./rollTimeFormat";
+import { DirectionBadge } from "./DirectionBadge";
 
 /** Popup listing, for every combat general currently in the build, the nearest
  *  local time (past or future) the game offers them in this corps's rotation. */

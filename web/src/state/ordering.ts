@@ -10,6 +10,7 @@
 // cost. Within one type, more expensive units come first (cost-desc, like in-game).
 
 import type { UnitCard } from "../domain/types";
+import { towBrigadeIndexOf as towBrigadeIndexOfCard } from "../domain/tow";
 
 /** Broad type rank used to order groups within a brigade. Combat generals use
  *  their underlying unit class, so they sort beside the unit they lead. */
@@ -36,6 +37,10 @@ export function compareWithinSide(a: UnitCard, b: UnitCard): number {
 }
 
 export function orderBrigadeCards(cards: UnitCard[]): UnitCard[] {
+  if (cards.length > 0 && cards.every((c) => c.isGeneral && c.generalKind === "staff")) {
+    return sortStaffGenerals(cards);
+  }
+
   const groups = new Map<string, UnitCard[]>();
   for (const c of cards) {
     const k = c.capGroupKey;
@@ -75,4 +80,39 @@ export function sortStaffGenerals(cards: UnitCard[]): UnitCard[] {
     if (a.name !== b.name) return a.name.localeCompare(b.name);
     return a.unitKey.localeCompare(b.unitKey);
   });
+}
+
+export function towBrigadeIndexOf(unitClass: string): number {
+  return towBrigadeIndexOfCard(unitClass);
+}
+
+/** Combined Theatres-of-War layout: dissolve the per-source-corps divisions and
+ *  pool every card into one corps. Staff generals lift out into a top row; every
+ *  other unit is grouped by its brigade type (cavalry heavy → … → artillery)
+ *  across all corps, each brigade ordered by the normal price rule. Backs the
+ *  TOW "Combine corps" view; the caller maps each brigade to a grid section. */
+export function combinedTowLayout(cards: UnitCard[]): {
+  staffGenerals: UnitCard[];
+  brigades: { brigade: number; cards: UnitCard[] }[];
+} {
+  const staffGenerals: UnitCard[] = [];
+  const rest: UnitCard[] = [];
+  for (const c of cards) {
+    if (c.isGeneral && c.generalKind === "staff") staffGenerals.push(c);
+    else rest.push(c);
+  }
+  return { staffGenerals: sortStaffGenerals(staffGenerals), brigades: towBrigades(rest) };
+}
+
+export function towBrigades(cards: UnitCard[]): { brigade: number; cards: UnitCard[] }[] {
+  const byBrigade = new Map<number, UnitCard[]>();
+  for (const card of cards) {
+    const brigade = towBrigadeIndexOfCard(card);
+    const group = byBrigade.get(brigade) ?? [];
+    group.push(card);
+    byBrigade.set(brigade, group);
+  }
+  return [...byBrigade.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([brigade, group]) => ({ brigade, cards: orderBrigadeCards(group) }));
 }

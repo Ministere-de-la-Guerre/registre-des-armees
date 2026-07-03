@@ -8,16 +8,19 @@
 //
 // It also publishes/auto-updates from a DEDICATED beta releases repo, so the
 // beta only ever sees beta releases and never cross-updates to (or from) the
-// stable line. electron-updater's GitHub provider deliberately rolls a
-// prerelease client forward onto a newer *stable* release when they share one
-// repo, so true channel separation requires separate repos — this config is the
-// beta half of that split. The stable build keeps using the package.json
-// "build" field unchanged.
+// stable line. Because the repos are fully separate, the beta does NOT use
+// GitHub's "Pre-release" flag: every beta release is published as a NORMAL
+// "latest" release, and both apps auto-update via allowPrerelease=false ->
+// /releases/latest -> latest.yml (see web/electron/main.cjs). The stable build
+// keeps using the package.json "build" field unchanged.
 //
 // Build it with:  npm run desktop:beta            (local, no publish)
 //                 npm run desktop:beta:release    (publish to the beta repo)
-// The version in package.json must be a prerelease (e.g. 1.3.5-beta.1) so the
-// app's allowPrerelease (= /-/.test(version)) is true on the beta channel.
+// The `releaseType: "release"` below makes :release create a normal, published
+// release (not a draft, not a pre-release) with the Setup .exe + .blockmap +
+// latest.yml auto-uploaded, so beta clients auto-update with no manual GitHub
+// step. The version stays a `-beta.N` prerelease string purely so users can SEE
+// they are on the beta line; it no longer drives the update channel.
 
 const base = require("./package.json").build;
 
@@ -44,5 +47,8 @@ module.exports = {
     ...base.portable,
     artifactName: "RegistreDesArmeesBeta-Portable-${version}.${ext}",
   },
-  publish: [{ ...base.publish[0], repo: BETA_REPO }],
+  // releaseType "release" -> publish directly as a normal (non-draft,
+  // non-prerelease) GitHub release, which GitHub then marks "latest". This is
+  // what lets allowPrerelease=false clients find the beta via /releases/latest.
+  publish: [{ ...base.publish[0], repo: BETA_REPO, releaseType: "release" }],
 };

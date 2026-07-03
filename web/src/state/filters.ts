@@ -41,8 +41,6 @@ export interface FilterState {
   classes: string[]; // unit_class values to require (empty = all)
   categories: BroadCategory[]; // empty = all
   speeds: string[]; // exact speed codes (empty = all)
-  divisions: number[]; // empty = all
-  brigades: number[]; // empty = all
   abilities: Record<keyof UnitAbilities, Tri>;
   showCombatGenerals: boolean;
   /** When on, combat & staff generals not in the current local-time rotation
@@ -170,8 +168,6 @@ export function defaultFilters(): FilterState {
     classes: [],
     categories: [],
     speeds: [],
-    divisions: [],
-    brigades: [],
     abilities,
     showCombatGenerals: true,
     onlyOfferedNow: false,
@@ -217,8 +213,6 @@ export function matchesCard(card: UnitCard, f: FilterState): boolean {
   }
   if (f.categories.length && !broadCategoriesOf(card).some((c) => f.categories.includes(c))) return false;
   if (f.speeds.length && (!card.speedCode || !f.speeds.includes(card.speedCode))) return false;
-  if (f.divisions.length && (card.placement === null || !f.divisions.includes(card.placement.division))) return false;
-  if (f.brigades.length && (card.placement === null || !f.brigades.includes(card.placement.brigade))) return false;
   for (const key of ABILITY_KEYS) {
     const tri = f.abilities[key];
     if (tri === "yes" && !card.abilities[key]) return false;
@@ -234,7 +228,7 @@ export function isHiddenByGeneralSwitch(card: UnitCard, f: FilterState): boolean
 
 export function isFilterActive(f: FilterState): boolean {
   if (f.search.trim()) return true;
-  if (f.classes.length || f.categories.length || f.speeds.length || f.divisions.length || f.brigades.length) return true;
+  if (f.classes.length || f.categories.length || f.speeds.length) return true;
   for (const def of GLOBAL_FIELDS) if (rangeActive(f.numeric[def.id])) return true;
   for (const sc of STAT_CLASSES) for (const def of CLASS_FIELDS) if (rangeActive(f.classStats[sc][def.id])) return true;
   for (const k of ABILITY_KEYS) if (f.abilities[k] !== "any") return true;

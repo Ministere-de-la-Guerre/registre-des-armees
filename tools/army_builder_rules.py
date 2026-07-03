@@ -380,7 +380,12 @@ def classify_general(card: UnitCard) -> str | None:
 
 
 def general_caps(faction_key: str) -> GeneralCaps:
-    if "_ac_" not in faction_key and "_tow_" not in faction_key:
+    # Theatres-of-War corps are hard-capped at a single combat general total,
+    # regardless of the corps rating (the 9 - N formula below would otherwise
+    # apply). See docs/TOW_ARMY_BUILDS.md §2 / §4.
+    if "_tow_" in faction_key:
+        return GeneralCaps(staff=1, combat=1)
+    if "_ac_" not in faction_key:
         return GeneralCaps(staff=1, combat=1)
 
     parts = faction_key.split("_")

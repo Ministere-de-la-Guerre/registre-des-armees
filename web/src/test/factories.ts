@@ -14,6 +14,7 @@ export function makeUnit(partial: Partial<UnitCard> = {}): UnitCard {
     finalMen: 80,
     speedCode: "L3",
     placement: { division: 1, brigade: 1 },
+    towSourceCorpsId: null,
     divisionBrigadeCode: "ACDV1B1",
     cost: 500,
     cap: 1,

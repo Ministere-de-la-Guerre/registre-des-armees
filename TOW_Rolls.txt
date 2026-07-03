@@ -1,0 +1,99 @@
+[1815] 9. Flanders
+July 2
+12 am - Bonaparte, d'Erlon, Pajol, Ney
+3am - Bonaparte, Gerard, Vandamme, Reille
+6am - Gerard, Ney, Reille, d'Erlon
+9am - Vandamme, Ney, Pajol, Bonaparte
+12pm - Reille, Bonaparte, Vandamme, d'Erlon
+3pm - Mouton, Vandamme, d'Erlon, Reille
+6pm - Ney, Reille, Pajol, d'Erlon
+9pm - Reille, Mouton, Bonaparte, Gerard
+
+[1806] 12. Prusse
+July 2
+12pm - Davout, Murat, Bonaparte, Soult
+3am - Mortier, Soult, Lannes, Bernadotte
+6am - Augereau, Murat, Bernadotte, Davout
+9am - Bernadotte, Soult, Ney, Murat
+12am - Mortier, Davout, Soult, Ney
+3pm - Bonaparte, Bernadotte, Murat, Mortier
+6pm - Ney, Bernadotte, Davout, Soult
+9pm - Ney, Bonaparte, Bernadotte, Davout
+
+8ptr France 1811p:
+
+1ST OF JULY
+
+23pm - Dorsenne-Bessieres, Suchet, Macdonald, Massena
+
+20pm - Joseph, Suchet, Soult, Victor
+
+17pm - Dorsenne-Bessieres, Macdonald, Soult, Victor
+
+14pm - Joseph, Dorsenne- Bessieres, Massena, Macdonald
+
+11am - Soult, Macdonald, Victor, Dorsenne-Bessieres
+
+8am - Joseph, Macdonald, Massena, Suchet
+
+5am - Soult, Joseph, Suchet, Macdonald
+
+2am- Victor, Soult, Macdonald, Dorsenne-Bessieres 
+
+8ptr France 1814:
+
+1ST OF JULY
+
+23pm - Victor-Marmont, MacDonald-Oudinot, Maison, Mortier-Napoleon
+
+20pm - Victor-Marmont, Ney, Maison, Augereau
+
+17pm - Mortier-Napoleon, Augereau, Victor-Marmont, Ney
+
+14pm - Augereau, MacDonald-Oudinot, Maison, Victor-Marmont
+
+11am - Mortier-Napoleon, Maison, Augereau, Ney
+
+8am - Macdonald-Oudinot, Maison, Victor-Marmont, Mortier-Napoleon
+
+5am - Maison, Victor-Marmont, Ney, Augereau
+
+2am - Victor-Marmont, Mortier-Napoleon, Augereau, Ney
+
+10ptr Russia TOW:
+
+1ST OF JULY
+
+23pm - Bagration, Konstantin, Baggovout-De Tolly, Tchitchagov 
+
+20pm - Bagration, Baggovout-De Tolly, Tolstoi-Miloradovich, Toutchkov
+
+17pm - Steinheil-Essen, Tchichagov, Tolstoi-Miloradovich, Dokhtourov-Kutuzov
+
+14pm - Wittgenstein, Tormassov, Steinheil-Essen, Baggovout-De Tolly
+
+11am - Wittgenstein, Tolstoi-Miloradovich, Dokhtourov-Kutuzov, Baggovout-De Tolly
+
+8am - Steinheil-Essen, Konstantin, Baggovout-De Tolly, Tolstoi-Miloradovich
+
+5am - Tolstoi-Miloradovich, Baggovout-De Tolly, Wittgenstein, Toutchkov
+
+2am - Toutchkov, Tormassov, Baggovout-De Tolly, Tchitchagov 
+
+July 2 8:55pm - Single Gather
+11. France (Allemagne) - Bonaparte, Lannes, Murat, Davout
+
+10. Francce (Autriche) - Vandamme, Davout,  Bonaparte, Lannes
+8. Osmanh UK - Abdullah, Abu-Marak, AAbercromby, Baird
+9. Polsha - Bennigsen, Bagration, Gortchakov, Konstantin
+10. Preuben - Zezshwitz, Ingelfingen, Kalckreuth, Wolfenbüttel
+10. Osterreich - Kollowrwrat, Liechenstein, Lothringen, Hechingen
+7. Espagne (1811) - Iranzo, Santocildes, Aragorri, Freire
+
+July 2
+Osmanh UK
+6pm - Marak, Kor Yusuf, Baird, Abercromby
+3pm - Marak, Abdullah, Mustafa, Kor Yusuf
+
+10. Preuben
+3pm July 2  - Ingellfingen, Zezschhwitz, Ruchel, Wurttemberg

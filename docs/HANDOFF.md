@@ -1,692 +1,138 @@
-# AI Agent Handoff: Registre des Armees
+# AI Agent Handoff: Registre des Armées
 
-This document is for another AI agent taking over the project. It explains the
-repository layout, app architecture, data pipeline, rules math, and release
-workflow. The short version: this is a desktop-first React/Vite/Electron army
-builder for NTW3, backed by generated data from exported game tables and a
-source-parity rules engine.
+Deep reference for architecture, rules math, the rotation engine, and the release workflow. For the file map see `AI_FILEMAP.md`; for working rules see `CLAUDE.md`. This doc trades prose for density — expect to reason from the facts below rather than be walked through them.
 
-## Project Purpose
+Desktop-first React/Vite/Electron army builder for NTW3, backed by data generated from exported game tables and a source-parity rules engine. It exposes **all** staff/combat-general cards for a corps (not a random-roll emulator); caps enforce how many may be used.
 
-Registre des Armees lets a user choose an NTW3 army corps, browse every
-recruitable unit card for that corps, build an army, see cost and limit feedback,
-save/load builds, and package the result as a Windows desktop app.
+## Generated vs authored
 
-The app is not a random-roll emulator. It deliberately exposes all staff and
-combat-general cards available to the selected corps. Selection caps enforce how
-many may be used.
+Never hand-edit (regenerate instead): `data/generated/**`, `web/public/data/**`, `web/public/assets/**`, `web/dist/**`, `web/release/**`, the icon trees under `assets/**`, `web/node_modules/`. Fix the generator or the source tables and rebuild.
 
-## Repository Map
+## Commands
 
-Root files:
-
-- `README.md`: project documentation and the best source of rule provenance.
-- `docs/CHANGELOG.md`: release notes. It currently stops at 1.2.4 even though
-  `web/package.json` is 1.3.2.
-- `docs/Instructions.txt`: original/manual project instructions.
-- `docs/HANDOFF.md`: this file.
-- `data/generated/ntw3_army_builder_units.csv`: primary generated unit/corps database.
-- `data/generated/army_corps_catalog.csv` and
-  `data/generated/army_corps_catalog.json`: generated corps/theatre selection
-  index and flag metadata.
-- `data/staff_generals/staff_general_corps_placement.csv` and
-  `data/staff_generals/staff_general_corps_placement_with_stars.csv`:
-  staff-general placement/star reference data.
-
-Important directories:
-
-- `data/generated/`: generated data used by the Python tools and web import.
-- `data/staff_generals/`: staff-general placement CSV outputs.
-- `docs/`: project notes, changelog, instructions, and this handoff.
-- `source/tables/`: exported TSV source tables from NTW3.
-- `source/reference/`: extra reference TSVs, currently including uniforms.
-- `source/original_*`: extracted original game assets kept for provenance.
-- `assets/icons/`: normalized icon source tree by broad class.
-- `assets/icons_by_army_corps/`: icons organized by faction and division.
-- `assets/staff_general_icons_by_corps/`: staff-general portraits at corps root.
-- `assets/army_corps_by_theatre/`: generated flag assets grouped by side/theatre.
-- `assets/ui/`: command-star strips and guerrilla badge overlay.
-- `reports/`: validation summaries, merge warnings, manifests, previews.
-- `tools/`: Python data-build and validation tools.
-- `web/`: React/Vite/Electron desktop app.
-- `web/public/`: generated app data/assets consumed by Vite.
-- `web/dist/`: production Vite build.
-- `web/release/`: electron-builder output.
-- `web/release/_github_assets/`: curated files to upload to a GitHub release.
-
-Do not treat `web/node_modules/`, `web/dist/`, `web/release/`,
-`web/public/data/`, or `web/public/assets/` as hand-authored code. They are
-dependencies or generated output. Edit the generator/source data instead.
-
-## Development Commands
-
-From repo root:
-
-```powershell
-python tools/build_ntw3_army_builder_database.py
-python tools/build_army_corps_catalog.py
-python tools/build_web_data.py
-python -m unittest discover -s tools/tests -v
+Root (Python):
+```
+python tools/build_ntw3_army_builder_database.py   # Stage 1: source/tables -> data/generated/ntw3_army_builder_units.csv
+python tools/build_army_corps_catalog.py           # Stage 1: -> army_corps_catalog.{csv,json} + flag assets
+python tools/build_web_data.py                      # Stage 2: -> web/public/**
+python -m unittest discover -s tools/tests -v       # (single: python -m unittest tools.tests.test_army_builder_rules)
+```
+web/:
+```
+npm run build:data   # = python ../tools/build_web_data.py
+npm test             # vitest run; single: npx vitest run src/rules/rules.test.ts   (-t "name" by title)
+npm run lint | typecheck | build
+npm run desktop      # build + electron-builder, no publish
+npm run desktop:beta # beta channel (electron-builder.beta.cjs)
 ```
 
-From `web/`:
+## Data pipeline
 
-```powershell
-npm run build:data
-npm test
-npm run lint
-npm run build
-npm run desktop
-npm run desktop:dir
-```
+Stage 1 — raw tables → root CSV/catalog:
+- `build_ntw3_army_builder_database.py`: reads `source/tables/*.tsv`, joins stats/permissions/localisation/projectiles/command-ratings/icons/abilities/placement → `data/generated/ntw3_army_builder_units.csv` + `reports/ntw3_merge_{warnings.csv,summary.txt}`.
+- `build_army_corps_catalog.py`: unit CSV + `ntw3_factions.tsv` → `army_corps_catalog.{csv,json}`, `assets/army_corps_by_theatre/`, validation report.
+- `organize_icons_by_army_corps.py`, `build_command_star_assets.py`, `collect_staff_general_icons.py`: supporting icon/asset trees.
 
-`npm run build:data` runs `python ../tools/build_web_data.py`.
-`npm run desktop` runs the Vite build and electron-builder without publishing.
-`npm run desktop:release` publishes to GitHub if `GH_TOKEN` is configured.
+Stage 2 — `build_web_data.py`: generated CSV + catalog JSON → `web/public/data/{corps-index,data-version}.json` + one roster JSON per faction under `factions/`; converts TGA→PNG into `web/public/assets/`. **TOW factions/variants are included**; TOW rows drop their inert ACDV division/brigade placement in this adapter so the web layer can derive source-corps divisions and TOW arm/class brigades. Also stamps `rosterIndex` (0-based CSV position) and remaps raw AC division ids to compact per-faction display order — division 0 sorts last (reserve/support appears after combat divisions); the remap is a bijection so grouping math is preserved. `data-version.json` records `towRows`.
 
-## Data Pipeline
+## Web architecture (`web/src/`)
 
-There are two main generation stages.
+Flow: `App.tsx` loads corps index → `CorpsSelect` → `loadFaction(key)` → `Builder` runs `indexRoster()` → selections mutate a `BuildState` → `summarize()` (`state/build.ts`) expands into priced cards, limits, men, squares, violations. Components display derived state only; rule math stays in `rules/` and `state/`.
 
-Stage 1: raw NTW3 tables to root CSV/catalog.
+- `data/load.ts`: fetch + validate + normalize raw JSON → domain, tolerant of unknown/missing fields. For `_tow_` rosters, derives `placement` from source corps id + TOW brigade index and sets `placementSource="tow_source_corps"`.
+- `domain/types.ts`: versioned domain models.
+- `domain/tow.ts`: `_tow_` key parsing, `towSourceCorpsId`, source-corps id sorting, and TOW brigade index mapping.
+- `rules/rules.ts`: parity port of `tools/army_builder_rules.py` — keep behaviorally aligned.
+- `state/build.ts`: build model, add-blocking, soft-budget pricing, auto combat generals, summary. `summary.totalInfantry` (denominator of the header `squares/infantry` stat) counts line/light/grenadier/militia/irregular (combat generals by `underlyingUnitClass`); excludes skirmishers, cavalry, artillery, staff.
+- `state/{filters,ordering,saves,storage,rotation,towRoll}.ts` as named below.
 
-- `tools/build_ntw3_army_builder_database.py`
-  reads `source/tables/*.tsv`, joins unit stats, permissions, localisation,
-  projectiles, command ratings, icons, abilities, and placement data, then writes
-  `data/generated/ntw3_army_builder_units.csv`, `reports/ntw3_merge_warnings.csv`, and
-  `reports/ntw3_merge_summary.txt`.
-- `tools/build_army_corps_catalog.py`
-  reads the generated unit CSV plus `source/tables/ntw3_factions.tsv`, copies and
-  normalizes flags, and writes `data/generated/army_corps_catalog.csv`,
-  `data/generated/army_corps_catalog.json`, `assets/army_corps_by_theatre/`, and
-  `reports/army_corps_catalog_validation.txt`.
-- `tools/organize_icons_by_army_corps.py` creates the icon-by-corps tree and
-  reports.
-- `tools/build_command_star_assets.py` and `tools/collect_staff_general_icons.py`
-  maintain supporting UI/staff-general assets.
-
-Stage 2: root CSV/catalog to web app data.
-
-- `tools/build_web_data.py` reads `data/generated/ntw3_army_builder_units.csv`
-  and `data/generated/army_corps_catalog.json`.
-- It writes `web/public/data/corps-index.json`,
-  `web/public/data/data-version.json`, and one roster JSON per selectable faction
-  under `web/public/data/factions/`.
-- It converts TGA unit icons to PNG and copies browser-friendly assets to
-  `web/public/assets/`.
-- Current generated web manifest:
-  schema version 1, 247 faction rosters, 247 listed corps, 25,668 source rows,
-  12,032 excluded ToW rows.
-
-ToW faction rows and ToW unit variants are excluded from the app at this second
-stage. The source/root CSV can still contain ToW data.
-
-## Web App Architecture
-
-The app code lives in `web/src/`.
-
-- `main.tsx`: React entrypoint.
-- `App.tsx`: top-level flow. Loads the corps index, shows `CorpsSelect`, loads a
-  selected faction roster, then renders `Builder`.
-- `data/assets.ts`: resolves public-relative asset/data URLs against Vite
-  `base: "./"`.
-- `data/load.ts`: validation/normalization layer. It fetches generated JSON and
-  converts unknown raw data into stable domain models with safe defaults.
-- `domain/types.ts`: versioned in-app TypeScript domain models.
-- `rules/rules.ts`: TypeScript rules engine. It is a parity port of
-  `tools/army_builder_rules.py`; keep them behaviorally aligned.
-- `state/build.ts`: selected build model, add-blocking, soft-budget pricing,
-  auto combat-general replacement, reset logic, and summary derivation. The
-  summary's `totalInfantry` (denominator of the header "Squares" stat,
-  `squares/infantry`) counts every selected infantry class except skirmishers —
-  line, light, grenadiers, militia, irregulars — with combat generals classed by
-  the unit they lead (`underlyingUnitClass`); cavalry, artillery and staff
-  generals are excluded.
-- `state/filters.ts`: filter model and matching.
-- `state/ordering.ts`: unit-card ordering within staff/brigade groups.
-- `state/saves.ts`: versioned save/load repository.
-- `state/storage.ts`: storage abstraction over localStorage/in-memory fallback.
-- `state/rotation.ts`: in-game combat/staff general rotation predictor (seed,
-  PRNG, shuffle, pool ordering, nearest-window search). See its own section below.
-- `components/`: UI pieces for selection, builder grid, cards, details, filters,
-  bottom tray, save/load controls, and the `RotationModal` ("General times") popup.
-
-Data flow:
-
-1. `App` calls `loadCorpsIndex()`.
-2. User chooses a `CorpsEntry`.
-3. `App` calls `loadFaction(factionKey)`.
-4. `Builder` indexes the roster with `indexRoster()`.
-5. User selections mutate a `BuildState`.
-6. `summarize()` expands state into selected cards, price, limits, men, squares,
-   infantry total, and violation messages.
-7. Components display derived state only; rule math should stay in `rules/` and
-   `state/`.
-
-## Domain Model Notes
-
-`UnitCard` is the central in-app shape. Key fields:
-
-- `unitKey`, `factionKey`, `name`, `unitClass`
-- `cost`: base MP recruitment cost from the source CSV.
-- `cap`: card row cap.
-- `groupCap`: cap for the underlying base unit, shared with commander variants.
-- `capGroupKey` / `baseUnitKey`: base key after stripping final `_com_<digits>`.
-- `placement`: display/pricing division and brigade, or null.
-- `placementSource`: provenance from the generator.
-- `isGeneral`, `isCommanderVariant`, `generalKind`
-- `underlyingUnitClass`: base unit class used for combat generals.
-- `rosterIndex`: 0-based source-roster (CSV) position, stamped by
-  `build_web_data.py` before the display sort. Only the rotation predictor uses it,
-  as a tiebreak for equal-cost generals.
-- `finalMen`: display men count; staff generals always show 16.
-- `stats` and `abilities`
-- `icon`, `commandStarStrip`, `guerrillaBadge`
-
-`BuildState` stores explicit selected instances:
-
+`BuildState` holds explicit instances so duplicate copies remove independently:
 ```ts
-interface BuildState {
-  instances: { id: string; unitKey: string }[];
-  staffSlotUnitKey: string | null;
-}
+interface BuildState { instances: { id: string; unitKey: string }[]; staffSlotUnitKey: string | null; }
 ```
 
-Every selected copy has its own instance id so duplicate copies can be removed
-independently. The staff/commander slot is separate and holds at most one general.
+`UnitCard` key fields: `unitKey`, `factionKey`, `name`, `unitClass`; `cost` (base MP from CSV); `cap` (row cap); `groupCap` + `capGroupKey`/`baseUnitKey` (base key after stripping a final `_com_<digits>`, shared by commander variants); `placement` (division/brigade or null) + `placementSource`; `towSourceCorpsId` (parsed for TOW keys); `isGeneral`/`isCommanderVariant`/`generalKind`; `underlyingUnitClass` (base class for combat generals); `rosterIndex` (rotation tiebreak only); `finalMen` (staff generals always 16); `stats`, `abilities`, `icon`, `commandStarStrip`, `guerrillaBadge`.
 
-## Core Rules Math
+## Rules math
 
-The source-backed implementation is in `tools/army_builder_rules.py`; the app
-uses the TypeScript port in `web/src/rules/rules.ts`.
+`tools/army_builder_rules.py` == `web/src/rules/rules.ts`. **Integer floor throughout — never float-round.** Regex helpers are duplicated in `build_ntw3_army_builder_database.py`; keep in sync.
 
-### Base Cost
+**Base cost** = sum of each selected card's own `cost`. Commander variants carry their own row cost; do not add base-unit cost on top.
 
-Every selected card contributes its own MP cost:
+**Formation discounts** — only faction keys containing `_ac_` qualify. For each recruitable non-general placed card: `roster_cost += cap*cost`, `required_count += cap` (generals excluded from these totals, but a selected placed general adds 1 to its group's completion count). Per group: `group_discount = floor(roster_cost*(required_count-1)/100)`. A complete division replaces its brigade discounts (never stack); otherwise each complete brigade credits its own. German States get 1.5x: `applied = floor(sum(completed.discount)*3/2)`, `final = base_cost - applied`. GS detection: `faction_key.split("_")[3]` contains lowercase `"g"`.
 
-```text
-base_cost = sum(selected_card.cost)
-```
+**Support divisions earn no discount.** A division is support if `placementSource` ∈ {`inferred_new_support_division`, `inferred_existing_support_division`, `reserve_support_division`}, OR it contains only support arms AND has artillery. Support arms = foot/fixed artillery, horse artillery, skirmishers, sappers, marines (sappers/marines detected by name — may be classed as line/grenadier). A combat division with organic artillery is still combat; a pure-skirmisher no-artillery division is combat unless the generator marked it support.
 
-Commander variants already have their own row costs. Do not add base-unit cost
-on top of a commander variant.
+**General classification** uses raw men (`menRaw`), not display men: `menRaw` 32 or 122 → staff; else combat. Missing `menRaw` is a data error. All `_gen_staff_` cards display `finalMen` 16.
 
-### Formation Discount Eligibility
+**Caps:** staff = 1 always. Combat cap = 1 for non-AC and TOW; for keys with `_ac_`, `N` = trailing digits of the 4th underscore component, `combat cap = 9 - N` (e.g. `ntw3_ac_test_x5_001` → 4). Separate `acSelectionGeneralMaxima()` (source-reference AC pools, used by rotation not UI): staff 1, combat = `cap + 2`.
 
-Only faction keys containing `_ac_` receive brigade/division discounts.
+**Staff slot:** one slot; a staff OR combat general may occupy it. A combat general there keeps its identity/cost/stars/placement/cap-group but does NOT count against the combat cap. Modeled as `staffSlotIndex` into the expanded selected-card array.
 
-For each recruitable non-general card in the selected faction with a placement:
+**Hard limits:** cards 31, foot artillery 2, horse artillery 1, heavy cavalry 10, staff slot 1, combat generals = combat cap, unit cap = shared cap-group count ≤ `groupCap`, max one combat-general variant per base unit. Combat generals count toward the foot/horse-artillery + heavy-cavalry limits by `underlyingUnitClass`.
 
-```text
-roster_cost contribution = cap * cost
-required_count contribution = cap
-```
+**Budget** `MAX_BUILD_COST` = 10000 is a **soft** ceiling: adding an over-budget card is allowed (grid/tray colors the cost red; the build may exceed 10000). But discount eligibility uses an affordability replay: recruit order = staff slot first then instances in add-order; a candidate is affordable iff `current_discounted_final(from prior affordable cards) + candidate.face_value <= 10000`; a discount the candidate itself triggers cannot make it affordable. The final build pays every card's base cost but only credits discounts completed by affordable cards.
 
-Generals are excluded from the roster totals. A selected placed general still
-adds one selected card to its division/brigade completion count.
+**`autoPickCombatGenerals()`** never adds cards — it swaps selected plain instances to combat-general variants of the same cap group: (1) find remaining combat cap; (2) skip groups already holding a combat general; (3) per eligible base unit pick the cheapest combat variant; (4) greedily take the swap that most lowers final priced cost; (5) stop when no swap lowers/preserves cost. Can unlock discounts (making formation-completers affordable) and may pick fewer than the cap. `resetCombatGenerals()` reverts combat instances to base, staff slot untouched.
 
-For each group:
+## Rotation predictor (`state/rotation.ts` + `rotation.test.ts`; `RotationModal`, the army-corps "Generate times" popup)
 
-```text
-group_discount = floor(roster_cost * (required_count - 1) / 100)
-```
+Faithful reimplementation of NTW3.Shuffle / NTW3AC.ACgenerals (`ntw3.lua`/`ntw3ac.lua`), **verified against real in-game windows** (fixtures in `rotation.test.ts`). For each combat general in the build + the staff-slot commander, shows the nearest local time (past/future) the corps offers them.
+- **Seed:** `floor(localHour/2.8)*10000 + (day*100 + month)`. Local clock, ignores year (annually periodic). ~9 windows/day at local hours `[0,3,6,9,12,14,17,20,23]`.
+- **PRNG:** Windows CRT `rand()`/`srand()` LCG (`state*214013+2531011`, `RAND_MAX 32767`) — Win32 Lua 5.1 build. 5 warm-up draws, then Fisher-Yates, exactly as the Lua. Do not "simplify" the seed or PRNG.
+- **Combat pool:** all combat generals ordered by arm category (artillery → cavalry → infantry) then ascending cost (engine `RecruitableUnits` order, confirmed in `ntw3_land_units.tsv`); the window offers the first `acSelectionGeneralMaxima` = `9 - rating + 2`. `rosterIndex` only breaks ties for equal-cost same-category pairs.
+- **Staff pool:** offered = permanent commander (always) + one rotating shuffle pick (count 1). Commander = corps **namesake** (staff general whose name matches the corps-title leader: text before `/`, after `NN. `), e.g. Dokhtourov, Osterman-Tolstoi — NOT necessarily the priciest staff. Formation-named corps (e.g. "Garde impériale") have no namesake → commander falls back to highest-cost staff (Napoleon). See `staffCommanderKey(pool, corpsName)`.
 
-A complete division replaces its brigade discounts. If a division is complete,
-only the division discount is credited; otherwise each complete brigade can
-credit its brigade discount. They never stack.
+Needs only `UnitCard.cost`, `underlyingUnitClass` (category), `armyCorpsName`, `rosterIndex`.
 
-German States get a 1.5x total discount:
+## TOW builder + legacy roll helpers
 
-```text
-normal_discount = sum(completed_group.discount)
-applied_discount = floor(normal_discount * 3 / 2)  # German States only
-final_cost = base_cost - applied_discount
-```
+TOW (`_tow_`) corps are selectable from the same corps index as AC, under `tow_french_imperial` / `tow_coalition`; `CorpsSelect` can hide them with "Discount-eligible (AC) only". They are not discount-eligible: `calculateArmyCost()` returns base cost for every non-`_ac_` faction. `generalCaps()` hard-caps TOW combat generals at 1, regardless of the rating digit in the key.
 
-German States detection is intentionally narrow:
+TOW layout is derived in `data/load.ts`, not from ACDV tags. `tools/build_web_data.py` clears TOW `division`/`brigade`; `load.ts` parses `towSourceCorpsId` from the 4th underscore component of unit keys and maps sorted unique source ids to display divisions. Brigade numbers come from `domain/tow.ts`: staff command first, then cavalry heavy/standard/light/lancers/missile, infantry grenadiers/light/skirmishers/line/militia+irregulars, artillery foot/horse/fixed, then other. `state/ordering.ts` groups base units with commander variants and sorts each TOW brigade through the same card-ordering helper.
 
-```text
-faction_key.split("_")[3] contains lowercase "g"
-```
+`state/towRoll.ts` is not the main TOW builder. It mirrors the legacy NTW3AC background roll (`ToWFarmycorps` / `ToWFgenerals`) for analysis/search: source-corps pool comes from staff generals in first-seen roster order; if more than four source corps exist, `NTW3.Shuffle` selects four for the local-time window; staff and combat pools are shuffled independently, with up to four combat generals from rolled source corps. `findTowCorpsCombinationTime()` searches nearest local-time windows for an exact or contains source-corps combination.
 
-Keep integer floor arithmetic. Do not replace with floating rounding.
+The TOW header **"Generate times"** button (`TowGenerateModal`) times the build the player actually made, not the Corps roll menu toggles: `towSourceCorpsIdsInBuild()`/`towCombatGeneralKeysInBuild()` derive the corps the selected units draw from plus the combat generals used, then `findTowBuildRollTime()` finds the nearest window whose roll *contains* those corps AND offers every one of those combat generals (staff generals are excluded — the legacy roll offers all of them every window). "Corps roll" (`TowRollModal`) keeps only the grid show/hide toggles; its old inner "Generate times" button is gone. All three popups share `components/rollTimeFormat.ts` + `DirectionBadge.tsx`.
 
-### Support Divisions
+**Soft 4-corps-roll ceiling.** The game rolls only 4 source corps together, but the builder lets you select across more (e.g. by enabling >4 in "Corps roll", or in the combined view where corps identity is pooled away). This is a **soft** ceiling, modeled like the 10,000 cost budget — allowed but flagged, never blocked. `towCorpsCeiling(build, index)` (`state/towRoll.ts`) returns the distinct source corps the *selection* draws from in first-seen order, per-corps selected counts, the "kept" set (first 4), and `over` (>4); `isCardOverCorpsCeiling(card, ceiling)` flags a card that already sits in a corps past the kept 4, or would open a 5th. Surfaced in `Builder.tsx` as: a **"Corps N/4"** header stat (red when over, TOW only); a build-based warning **banner** that lists every corps the build spans with counts (chips past the 4th shown red — trim those); and **red-framed medallions** (`.medallion.overcorps`, same treatment as `.overbudget`) on the offending units in both grid and tray. The banner takes priority over the older enabled-set `tooManyCorps` warning.
 
-Support/reserve divisions do not earn discounts.
+## Placement provenance (`build_ntw3_army_builder_database.py`)
 
-A division is support if:
+`localisation_tag` (explicit `ACDV<d>B<b>`); `verified_override` (hand-confirmed, currently Bonaparte/Italie.C final division); `inferred_existing_support_division`; `inferred_new_support_division`; `inherited_base_unit` (`_com_` variant inherits base placement); `reserve_support_division` (raw division 0).
 
-- it is explicitly/designated by `placementSource` as one of
-  `inferred_new_support_division`, `inferred_existing_support_division`, or
-  `reserve_support_division`; or
-- it contains only support arms and has artillery.
+## Filters & ordering (`state/filters.ts`, `state/ordering.ts`)
 
-Support arms are foot/fixed artillery, horse artillery, skirmishers, sappers, and
-marines. Sappers/marines are detected by name because they can be classed as
-line/grenadier infantry.
+Filters **dim** non-matching cards; two exceptions **remove** cards: `showCombatGenerals` (header "Combat generals" checkbox; stored in config/saves) and `onlyOfferedNow` (shown only for rotating `_ac_` corps; keeps only combat+staff generals in the current local window via `offeredCombatKeys`+`offeredStaffKeys` → `hiddenByRotation()`; transient, NOT saved — the offered set changes every window). Search matches name + key. Cost/men/stars/cap filters are global; range/accuracy/reload/morale/melee/charge are class-specific (combat generals use `underlyingUnitClass`); combat generals belong to category `generals` plus their base category.
 
-A combat division with organic artillery is still a combat division and can earn
-discounts. A pure skirmisher division with no artillery is treated as combat
-unless the generator explicitly marked it as support.
+Ordering: within a cap group — expensive commander variants, base, cheaper/equal variants. AC group order in a brigade — infantry/skirmishers, cavalry, artillery, other. Within a type — cost desc, stars desc, rated before unrated, name, key. Foot/horse artillery interleave by cost. Staff generals — stars desc then name/key. TOW brigade sequence is assigned before ordering by `domain/tow.ts` as described above.
 
-### General Classification
+## Saves (`state/saves.ts`, format v2)
 
-General-class cards require raw men data. Classification uses exact `menRaw`, not
-the displayed/final men count:
+Stores `factionKey`, `armyCorpsName`, ordered selected instance unit keys, `staffSlotUnitKey`, UI config (density, combat-general visibility), timestamps, id/name. `migrateSavedBuild()` upgrades old shapes; load resolves keys against the current roster and reports missing keys rather than crashing. Names are unique **per corps**: `BuildRepository.findByName(name, factionKey?)` scopes to a corps, so two corps can each hold a same-named build. Components must use `BuildRepository`, never localStorage directly; `state/storage.ts` abstracts persistence (swappable for a filesystem/SQLite/IndexedDB adapter later).
 
-```text
-menRaw 32 or 122 -> staff general
-anything else    -> combat general
-```
+## Electron & release channels (`web/electron/main.cjs`, `web/package.json`, `web/electron-builder.beta.cjs`)
 
-Missing raw men is a data error in rules code. The generator supplies fallback
-raw men for known staff/general cases where appropriate.
+Packaged app serves `web/dist` over a private `app://bundle/` scheme (registered standard/secure, so `./data` and `./assets` fetches work). Renderer: context isolation, no node integration, sandbox on. External links open in the browser. Single-instance lock. `electron-updater` checks GitHub Releases when packaged. Headless smoke via `SMOKE_TEST=<file>`. Version source of truth = `web/package.json`.
 
-All `_gen_staff_` cards display `finalMen = 16`.
+**Stable and beta are separate apps updating from separate repos** — they install side-by-side and never cross-update. Separation is achieved by the separate repos alone (each app bundles its own `app-update.yml`), NOT by GitHub's "Pre-release" flag, so **both channels publish NORMAL "latest" releases** and both run `allowPrerelease=false`. A beta client on `1.4.0-beta.1` still updates to a normal release tagged `1.4.0-beta.2` because the provider compares by semver via `/releases/latest` → `latest.yml`; GitHub's `/releases/latest` excludes only releases whose Pre-release CHECKBOX is ticked, not versions whose string contains a hyphen. The `-beta.N` suffix is now cosmetic (lets users see they're on beta) and no longer drives the channel.
+- **Stable:** `package.json` "build". appId `fr.ministeredelaguerre.registredesarmees`, product "Registre des Armées", name `registre-des-armees`, repo `registre-des-armees`. `npm run desktop[:release]`. Artifacts `RegistreDesArmees-Setup/Portable-<v>.exe`.
+- **Beta:** `electron-builder.beta.cjs` spreads "build" and overrides `appId+".beta"`, `product+" Beta"`, `extraMetadata.name=registre-des-armees-beta`, `publish.repo=registre-des-armees-beta`, `publish.releaseType="release"` (publish directly as a normal release, never draft/pre-release). Version is a `-beta.N` string (e.g. `1.4.0-beta.2`). `npm run desktop:beta[:release]` (release needs `GH_TOKEN` for the beta repo). Artifacts `RegistreDesArmeesBeta-*`.
+- **`extraMetadata.name` is essential:** `userData` (`app.getName()` → package name) and `updaterCacheDirName` (`<name>-updater`) both derive from the package name, so overriding it gives beta its own saved builds + update cache; without it the two collide despite different appIds.
+- Runtime channel: `allowPrerelease = false` (both apps). Each app bundles `app-update.yml` for its own repo; the update path is `/releases/latest` → `latest.yml` on that repo.
+- Publishing rule: **never tick GitHub's "Pre-release" box** for either channel. If a release is (or was) marked Pre-release, `allowPrerelease=false` clients won't see it via `/releases/latest` — untick it and Set as latest. `desktop:beta:release` already publishes as a normal release automatically.
+- Each `desktop*` run overwrites `web/release/`; copy artifacts before building the other channel. Curated upload sets `_github_assets/` (stable) / `_github_assets_beta/` (beta) are for MANUAL publishing; `:release` auto-uploads the Setup `.exe` + `.blockmap` + `latest.yml` (all three are required for auto-update — the portable exe is manual download only).
+- Caveat: clients shipped under the OLD single-repo/shared-appId scheme (≤ v1.3.4 stable, v1.3.3-beta.1) can't be retro-fixed. **`1.4.0-beta.1` clients are also permanently stuck** and can only reach beta.2+ via a one-time MANUAL reinstall: they hardcoded `allowPrerelease=true`, and electron-updater's GitHubProvider with `allowPrerelease=true` does NOT choose the highest version — it walks `/releases.atom` and takes the first channel-matching entry. That feed is ordered by tag commit-date, not semver, and lists `v1.4.0-beta.1` ahead of `v1.4.0-beta.2`, so a beta.1 client re-selects itself and reports "up to date". This is exactly why `main.cjs` pins `allowPrerelease=false` (→ `/releases/latest` → `latest.yml`, which honors GitHub's real "Latest" pointer). Every build from `1.4.0-beta.2` onward carries the fix and auto-updates normally.
 
-### General Caps
+## Tests
 
-Staff cap is always 1.
+Python: `tools/tests/test_{army_builder_rules,army_corps_catalog,division_placement}.py`.
+Vitest: `rules.test.ts` (pricing/caps/support), `state/build.test.ts` (add-block/budget/auto generals), `filters`/`ordering`/`saves` `.test.ts`, `state/towRoll.test.ts`, `data/data.test.ts`. Changing rule math → run **both** suites; the TS must stay behaviorally equal to the Python.
 
-For non-AC/non-ToW factions:
+## Safe-change guidance
 
-```text
-combat cap = 1
-```
+Prefer source-of-truth edits. Wrong unit fields → fix generator/source tables, regenerate. JSON shape → update `build_web_data.py` + `data/load.ts` + `domain/types.ts` together. Pricing/caps → `army_builder_rules.py` + `rules/rules.ts` + parity tests together. Selection behavior → `state/build.ts` + state tests. Display order → `state/ordering.ts` + components (not data).
 
-For faction keys containing `_ac_` or `_tow_`:
+Before release: (1) `package.json` version correct; (2) `npm test`; (3) `npm run build`; (4) `npm run desktop` emits installer/portable/latest/blockmap; (5) the curated `_github_assets` set holds only the intended version.
 
-```text
-N = trailing digits from the fourth underscore component
-combat cap = 9 - N
-```
-
-Example: `ntw3_ac_test_x5_001` has combat cap 4.
-
-There is a separate `acSelectionGeneralMaxima()` helper for source-reference AC
-general pools:
-
-```text
-staff = 1
-combat = combat_cap + 2
-```
-
-The UI does not use that helper for card visibility.
-
-### Staff Slot
-
-The app has one staff/commander slot.
-
-- A staff general can occupy it.
-- A combat general can also occupy it.
-- A combat general in the staff slot still keeps its identity, cost, stars,
-  placement, and shared cap group.
-- A combat general in the staff slot does not count against
-  `combat_generals_against_cap`.
-- The slot can hold only one general.
-
-Rules validation models this with `staffSlotIndex` into the expanded selected-card
-array.
-
-### Known Limits
-
-Hard limits:
-
-```text
-total unit cards = 31
-foot artillery   = 2
-horse artillery  = 1
-heavy cavalry    = 10
-staff slot       = 1
-combat generals  = combat cap
-unit cap         = shared cap group count <= groupCap
-combat general   = max one combat-general variant per base unit
-```
-
-Combat generals count by `underlyingUnitClass` for foot-artillery,
-horse-artillery, and heavy-cavalry limits. An artillery-led combat general uses
-an artillery slot.
-
-The unit cap group is the base unit key after stripping a final `_com_<digits>`.
-Base unit copies and all combat-general variants share that cap.
-
-### 10,000 Budget Rule
-
-`MAX_BUILD_COST` is 10,000.
-
-The UI treats the budget as a soft ceiling:
-
-- adding a unit that pushes the build over 10,000 is allowed;
-- the grid/tray warns by coloring costs red;
-- the build can end above 10,000.
-
-Discount eligibility still uses an affordability replay:
-
-1. Recruit order is commander/staff slot first, then unit instances in the order
-   they were added.
-2. For each candidate card, compute the current discounted final cost from only
-   previously affordable cards.
-3. The candidate is affordable only if:
-
-```text
-current_discounted_final + candidate.face_value_cost <= 10000
-```
-
-4. A discount triggered by the candidate itself cannot make that candidate
-   affordable.
-5. The final displayed build pays the base cost of every selected card, but only
-   discounts completed by affordable cards are credited.
-
-This means over-budget cards can be selected but cannot complete a brigade or
-division for discount credit if they were unaffordable at face value.
-
-### Auto Combat Generals
-
-`autoPickCombatGenerals()` never adds cards. It replaces selected plain unit
-instances with combat-general variants for the same cap group.
-
-Algorithm:
-
-1. Determine remaining combat-general cap.
-2. Ignore units whose cap group already has a combat general.
-3. For each eligible selected base unit, find the cheapest combat-general variant
-   for that cap group.
-4. Greedily choose the swap that most lowers final priced cost.
-5. Stop when no remaining swap lowers or preserves the final cost.
-
-This can unlock discounts by making previously unaffordable formation-completing
-cards affordable. It can also choose fewer combat generals than the cap if more
-would make the build dearer.
-
-`resetCombatGenerals()` reverses combat-general instances back to their base unit
-while leaving the staff slot untouched.
-
-## Combat & Staff General Rotation Predictor
-
-`web/src/state/rotation.ts` (+ `rotation.test.ts`) and
-`web/src/components/RotationModal.tsx` implement the "General times" popup
-(opened from a button in the `Builder` header). For each combat general in the
-build and the staff-slot commander, it shows the nearest local time (past or
-future) the game offers them in that corps's clock-seeded rotation.
-
-This is a faithful reimplementation of the in-game NTW3.Shuffle / NTW3AC.ACgenerals
-logic (from `ntw3.lua` / `ntw3ac.lua`), reverse-engineered and **verified against
-real in-game windows** (see the calibration fixtures in `rotation.test.ts`):
-
-- Seed: `floor(localHour / 2.8) * 10000 + (day * 100 + month)`. Uses the player's
-  LOCAL clock and ignores the year, so the rotation is annually periodic. There are
-  ~9 windows/day starting at local hours `[0, 3, 6, 9, 12, 14, 17, 20, 23]`.
-- PRNG: the Windows CRT `rand()`/`srand()` LCG (`state*214013 + 2531011`,
-  `RAND_MAX 32767`) — the game is a Win32 Lua 5.1 build. 5 warm-up draws, then a
-  Fisher-Yates shuffle, exactly as the Lua does.
-- Combat pool: all combat generals, ordered by arm **category (artillery → cavalry
-  → infantry) then ascending cost** (this is the engine's `RecruitableUnits` order,
-  confirmed in `source/tables/ntw3_land_units.tsv`). The window offers the first
-  `acSelectionGeneralMaxima(faction).combat` = `9 - rating + 2`. `rosterIndex` is
-  only a stable tiebreak for equal-cost, same-category pairs.
-- Staff pool: offered = the corps's permanent **commander (always available)** plus
-  one rotating shuffle pick (count 1) from the staff pool. When the roll picks the
-  commander himself only he shows. The commander is the corps NAMESAKE: the staff
-  general whose name matches the corps-title leader (text before "/", after
-  "NN. "), e.g. Dokhtourov, Osterman-Tolstoi — NOT necessarily the priciest staff
-  (Koutouzov/Miloradovitch are the rotating picks). Formation-named corps (e.g.
-  "Garde impériale") have no namesake staff, so the commander falls back to the
-  highest-cost staff (Napoleon). See `staffCommanderKey(pool, corpsName)`.
-
-The popup's "Offered right now" `<details>` lists the predicted current-window pool
-for quick cross-checking against the in-game recruit screen. Predictor accuracy
-depends on `UnitCard.cost`, `underlyingUnitClass` (category), and
-`armyCorpsName`; it does not require any new generated data beyond `rosterIndex`.
-
-## Placement and Division Inference
-
-`build_ntw3_army_builder_database.py` writes placement provenance:
-
-- `localisation_tag`: explicit `ACDV<d>B<b>` in localisation.
-- `verified_override`: hand-confirmed override, currently used for Bonaparte /
-  Italie.C final division.
-- `inferred_existing_support_division`: untagged support joins an existing final
-  support division.
-- `inferred_new_support_division`: untagged support creates a new final support
-  division after the highest combat division.
-- `inherited_base_unit`: `_com_<digits>` commander variant inherits base placement.
-- `reserve_support_division`: raw division 0 support/reserve division.
-
-`build_web_data.py` remaps raw division ids to compact display order per faction.
-Division 0 sorts last because in-game reserve/support appears after combat
-divisions. This remap is a bijection within a faction, so it preserves grouping
-math while improving display labels.
-
-## Filtering and Ordering
-
-Filters in `state/filters.ts` mostly dim non-matching cards instead of hiding
-them. There are two exceptions, both of which *remove* cards from the grid:
-
-- The combat-general visibility switch (`showCombatGenerals`, "Combat generals"
-  checkbox in the `Builder` header), which removes combat generals when off.
-- The "Offered now" switch (`onlyOfferedNow`), shown in the header only for
-  rotating `_ac_` corps. When on, it keeps only the combat **and** staff generals
-  the game offers in this corps's current local-time rotation window; non-general
-  cards are never hidden by it. `Builder` computes the offered-key set with
-  `offeredCombatKeys` + `offeredStaffKeys` (see the rotation predictor section)
-  using `new Date()` at render, then `hiddenByRotation()` filters the grid and the
-  match count. Unlike `showCombatGenerals`, `onlyOfferedNow` is transient (not
-  stored in `BuildConfig`/saves), since the offered set changes every window.
-
-Search matches unit name and unit key.
-
-Cost, men, command stars, and cap filters are global.
-
-Range, accuracy, reload, morale, melee attack/defense, and charge bonus are
-class-specific by infantry/cavalry/artillery. Combat generals use
-`underlyingUnitClass`.
-
-Combat generals belong to category `generals` and also to the broad category of
-their base unit.
-
-Ordering in `state/ordering.ts`:
-
-- Within a cap group: expensive commander variants, base unit, cheaper/equal
-  commander variants.
-- Group order inside a brigade: infantry/skirmishers, cavalry, artillery, other.
-- Within a type: cost descending, stars descending, rated before unrated, name,
-  key.
-- Foot and horse artillery are not separated; they interleave by cost.
-- Staff generals sort by command stars descending, then name/key.
-
-## Saves and Persistence
-
-Saves are versioned in `state/saves.ts`.
-
-Current save format version: 2.
-
-Saves store:
-
-- `factionKey`
-- `armyCorpsName`
-- ordered selected instance unit keys
-- `staffSlotUnitKey`
-- UI config: density and combat-general visibility
-- timestamps and save id/name
-
-Older save shapes are migrated by `migrateSavedBuild()`. Loading resolves unit
-keys against the current roster and reports missing keys rather than crashing.
-
-Saved-build names are unique **per corps**, not globally. The Load menu already
-lists only the open corps's builds, and `BuildRepository.findByName(name,
-factionKey?)` scopes its lookup to a corps when given a `factionKey`. `SaveLoadBar`'s
-Save As passes the current `factionKey`, so the duplicate-name overwrite prompt
-fires only for a same-named build in the *same* corps; two different corps can each
-keep a build of the same name, each loading its own.
-
-Components must use `BuildRepository`; do not directly touch localStorage.
-`state/storage.ts` abstracts persistence and can be swapped later for a desktop
-filesystem/SQLite/IndexedDB adapter.
-
-## Electron Desktop App
-
-Electron code lives in `web/electron/main.cjs`.
-
-Key points:
-
-- Packaged app serves `web/dist` over a private `app://bundle/` scheme.
-- Relative fetches like `./data/...` and `./assets/...` work because
-  `app://` is registered as standard/secure and supports fetch.
-- Renderer uses context isolation, no node integration, and sandbox enabled.
-- External HTTP(S) links open in the user's browser.
-- Single-instance lock focuses an existing window.
-- `electron-updater` (installed: 6.8.9) checks GitHub Releases when packaged.
-- Stable and beta are **separate applications updating from separate repos.** This
-  is deliberate: with a single repo you cannot keep a beta off a newer stable.
-  `GitHubProvider.getLatestVersion()` (electron-updater 6.8.9) only blocks an
-  alpha-when-on-beta downgrade; a *stable* release is NOT excluded for a beta
-  client, and even forcing `autoUpdater.channel = "beta"` falls back to
-  `latest.yml` when the chosen stable release has no `beta.yml`. So a prerelease
-  client with `allowPrerelease=true` reading the same repo will roll forward onto
-  any newer full release. (This corrects the earlier note that claimed the GitHub
-  provider can't read `beta.yml` — it can; the real blocker is the version-
-  selection logic, which is why the split is by repo.)
-  - **Stable build** = package.json `build` field, `appId`
-    `fr.ministeredelaguerre.registredesarmees`, product "Registre des Armées",
-    publishes to repo `registre-des-armees`. `npm run desktop` /
-    `desktop:release`. Version is plain semver -> `allowPrerelease=false`.
-  - **Beta build** = `web/electron-builder.beta.cjs` (spreads the base config and
-    overrides), `appId` `…registredesarmees.beta`, product "Registre des Armées
-    Beta", own install dir + shortcut, publishes to repo `registre-des-armees-beta`.
-    `npm run desktop:beta` / `desktop:beta:release`. Version is a prerelease (e.g.
-    `1.3.5-beta.1`) -> `allowPrerelease=true`. It also sets `extraMetadata.name`
-    = `registre-des-armees-beta`, which gives the beta its own runtime app name —
-    so its `userData` folder (Electron's `app.getName()` falls back to the package
-    `name`) AND its `updaterCacheDirName` (`<name>-updater`) differ from stable.
-    Without that the two apps would share saved builds and the update-download
-    cache even with different appIds.
-  - Because the two apps have different `appId`/product names they install side by
-    side and never downgrade or overwrite each other, and because each bundles an
-    `app-update.yml` pointing at its own repo, neither ever sees the other's
-    releases. The runtime `autoUpdater.allowPrerelease = /-/.test(app.getVersion())`
-    is unchanged; the feed (repo) now does the channel separation.
-  - Caveat: clients already shipped under the OLD single-repo/shared-appId scheme
-    (≤ v1.3.4 stable and v1.3.3-beta.1) cannot be retro-fixed; they keep their old
-    update behavior. The split applies to builds made with the new beta config.
-- A headless smoke mode exists via `SMOKE_TEST=<output-file>`.
-
-Build configuration is in `web/package.json`.
-
-Version source of truth for desktop release is `web/package.json`.
-
-Targets:
-
-- NSIS installer: `RegistreDesArmees-Setup-${version}.exe`
-- Portable exe: `RegistreDesArmees-Portable-${version}.exe`
-
-Release output:
-
-- `web/release/latest.yml`
-- `web/release/*.exe`
-- `web/release/*.blockmap`
-- `web/release/_github_assets/` curated upload folder.
-
-For the current stable release (v1.3.4), `_github_assets` contains:
-
-- `RegistreDesArmees-Setup-1.3.4.exe`
-- `RegistreDesArmees-Setup-1.3.4.exe.blockmap`
-- `RegistreDesArmees-Portable-1.3.4.exe`
-- `latest.yml`
-
-v1.3.4 (plain `1.3.4` semver → stable channel, `allowPrerelease=false`) adds: the
-"General times" popup de-emojied; an "Offered now" header toggle that shows only
-the combat & staff generals in the corps's current rotation window; the header
-"Squares" stat shown as `squares/infantry`; and per-corps saved-build name
-uniqueness. It supersedes the v1.3.3-beta.1 pre-release. v1.3.2 introduced the
-combat & staff general rotation predictor (see its section above).
-
-Auto-update requires the installer, the channel `.yml`, and blockmap attached to
-the GitHub Release tagged `v<version>`. The portable exe is for manual download.
-
-### Channel-aware publishing
-
-The two channels are now **separate apps published to separate GitHub repos**, so
-each `latest.yml` lives in its own repo and the channels can never cross-update.
-
-- **Stable** -> repo `Ministere-de-la-Guerre/registre-des-armees`. Set the
-  package.json version to plain semver (e.g. `1.3.4`), `npm run desktop`
-  (local) or `desktop:release` (publish). Create/curate the GitHub Release on the
-  stable repo with **Set as latest** (Pre-release optional — the stable app uses
-  `allowPrerelease=false` and reads `/releases/latest`). Upload
-  `RegistreDesArmees-Setup-<v>.exe`, its `.blockmap`, and `latest.yml`.
-- **Beta** -> repo `Ministere-de-la-Guerre/registre-des-armees-beta` (must exist;
-  create it once). Set the version to a prerelease (e.g. `1.3.5-beta.1`),
-  `npm run desktop:beta` (local) or `desktop:beta:release` (publish, needs
-  `GH_TOKEN` with access to the beta repo). Artifacts are named
-  `RegistreDesArmeesBeta-Setup-<v>.exe` etc. Upload the Setup exe, its `.blockmap`,
-  and `latest.yml` to a Release on the **beta** repo. Because the beta repo holds
-  only betas, the beta app always picks the newest beta and never the stable line.
-
-Each `npm run desktop*` overwrites `web/release/`, so copy the set you want before
-building the other channel. Curated upload sets:
-`web/release/_github_assets/` (stable) and `web/release/_github_assets_beta/`
-(beta).
-
-## Important Tests
-
-Python:
-
-- `tools/tests/test_army_builder_rules.py`
-- `tools/tests/test_army_corps_catalog.py`
-- `tools/tests/test_division_placement.py`
-
-Web/Vitest:
-
-- `web/src/rules/rules.test.ts`: pricing, caps, support division behavior.
-- `web/src/state/build.test.ts`: add blocking, budget soft ceiling, auto generals.
-- `web/src/state/filters.test.ts`: filters/dimming behavior.
-- `web/src/state/ordering.test.ts`: card ordering.
-- `web/src/state/saves.test.ts`: save migration/persistence behavior.
-- `web/src/data/data.test.ts`: data normalization expectations.
-
-When changing rule math, run both Python and Vitest suites. The TypeScript rules
-must remain behaviorally equivalent to the Python source rules.
-
-## Safe Change Guidance for Future Agents
-
-Prefer source-of-truth edits:
-
-- If raw unit fields are wrong, inspect/fix the generator or source tables, then
-  regenerate data.
-- If web JSON shape changes, update `tools/build_web_data.py`,
-  `web/src/data/load.ts`, and `web/src/domain/types.ts` together.
-- If pricing/caps change, update `tools/army_builder_rules.py`,
-  `web/src/rules/rules.ts`, and parity tests together.
-- If selection behavior changes, update `web/src/state/build.ts` and the relevant
-  `state/*.test.ts`.
-- If display grouping/order changes, update `web/src/state/ordering.ts` and UI
-  components, not generated data.
-
-Avoid hand-editing generated files unless the user explicitly asks for a quick
-release artifact update. Generated files include:
-
-- `data/generated/ntw3_army_builder_units.csv`
-- `data/generated/army_corps_catalog.*`
-- `web/public/data/**`
-- `web/public/assets/**`
-- `web/dist/**`
-- `web/release/**`
-
-Before release, verify:
-
-1. `web/package.json` version is correct.
-2. `npm test` passes.
-3. `npm run build` passes.
-4. `npm run desktop` emits expected installer/portable/latest/blockmap files.
-5. `web/release/_github_assets` contains only the intended version upload set.
-
-## Known Current Workspace Notes
-
-`git status --short` currently reports untracked `.claude/` and Python
-`__pycache__` folders. They appear unrelated to the app handoff and should not be
-committed unless the user explicitly wants them.
-
-Some text in existing files appears mojibake in PowerShell output for accented
-French strings, but the app/source files are intentionally UTF-8. Be careful when
-rewriting files and preserve encoding.
+Encoding: source is UTF-8 with accented French; PowerShell may render mojibake — preserve UTF-8 on rewrite.

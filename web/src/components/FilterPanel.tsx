@@ -42,10 +42,8 @@ export function FilterPanel({
 }) {
   const [statTab, setStatTab] = useState<StatClass>("infantry");
 
-  const { classes, divisions, brigades, speeds, globalBounds, classBounds } = useMemo(() => {
+  const { classes, speeds, globalBounds, classBounds } = useMemo(() => {
     const cl = new Set<string>();
-    const dv = new Set<number>();
-    const br = new Set<number>();
     const sp = new Set<string>();
     const globalBounds: Bounds = {};
     const classBounds: Record<StatClass, Bounds> = { infantry: {}, cavalry: {}, artillery: {} };
@@ -58,10 +56,6 @@ export function FilterPanel({
     };
     for (const c of cards) {
       cl.add(c.unitClass);
-      if (c.placement) {
-        dv.add(c.placement.division);
-        br.add(c.placement.brigade);
-      }
       if (c.speedCode) sp.add(c.speedCode);
       for (const f of GLOBAL_FIELDS) grow(globalBounds, f.id, f.get(c));
       const sc = statClassOf(c);
@@ -69,8 +63,6 @@ export function FilterPanel({
     }
     return {
       classes: [...cl].sort(),
-      divisions: [...dv].sort((a, b) => a - b),
-      brigades: [...br].sort((a, b) => a - b),
       speeds: [...sp].sort((a, b) => speedOrderIndex(a) - speedOrderIndex(b)),
       globalBounds,
       classBounds,
@@ -171,35 +163,6 @@ export function FilterPanel({
               </div>
             );
           })}
-        </div>
-      )}
-
-      {(divisions.length > 0 || brigades.length > 0) && (
-        <div className="filter-section">
-          <h4>Division</h4>
-          <div className="chip-wrap">
-            {divisions.map((d) => (
-              <button
-                key={d}
-                className={`chip${filters.divisions.includes(d) ? " on" : ""}`}
-                onClick={() => onChange({ ...filters, divisions: toggleInArray(filters.divisions, d) })}
-              >
-                Div {d}
-              </button>
-            ))}
-          </div>
-          <h4 style={{ marginTop: 10 }}>Brigade</h4>
-          <div className="chip-wrap">
-            {brigades.map((b) => (
-              <button
-                key={b}
-                className={`chip${filters.brigades.includes(b) ? " on" : ""}`}
-                onClick={() => onChange({ ...filters, brigades: toggleInArray(filters.brigades, b) })}
-              >
-                Brig {b}
-              </button>
-            ))}
-          </div>
         </div>
       )}
 

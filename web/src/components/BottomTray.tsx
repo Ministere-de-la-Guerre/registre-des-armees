@@ -18,6 +18,7 @@ export function BottomTray({
   autoGeneralsDisabled,
   onResetGenerals,
   resetGeneralsDisabled,
+  isOverCorps,
   onDetails,
   onHover,
   onHoverEnd,
@@ -25,6 +26,8 @@ export function BottomTray({
   index: RosterIndex;
   build: BuildState;
   summary: Summary;
+  /** Flags a selected copy whose source corps is beyond the 4-corps roll (TOW). */
+  isOverCorps: (card: UnitCard) => boolean;
   onRemoveInstance: (instanceId: string) => void;
   onClearStaff: () => void;
   onClearBuild: () => void;
@@ -78,6 +81,7 @@ export function BottomTray({
             selected
             hideName
             showSpeed
+            overCorps={isOverCorps(card)}
             onClick={() => onDetails(card)}
             onContextMenu={() => onRemoveInstance(inst.id)}
             onHover={onHover}

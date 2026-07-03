@@ -211,6 +211,9 @@ describe("limits", () => {
   it("general caps and separate ac selection maximum", () => {
     expect(generalCaps("france").combat).toBe(1);
     expect(generalCaps("ntw3_tow_test_x8_001").combat).toBe(1);
+    // TOW is hard-capped at 1 regardless of rating — the 9 − N formula (which
+    // would give 6 here) is overridden for _tow_ keys.
+    expect(generalCaps("ntw3_tow_test_x3_001").combat).toBe(1);
     expect(generalCaps("ntw3_ac_test_x5_001").combat).toBe(4);
     expect(acSelectionGeneralMaxima("ntw3_ac_test_x5_001").combat).toBe(6);
   });

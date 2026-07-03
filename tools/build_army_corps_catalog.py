@@ -132,7 +132,12 @@ def theatre_for(key: str) -> tuple[str, int, str, str]:
         return "custom", 1000, "Custom Armies", "source_faction_table"
     kind, side, block, _ = parsed
     if kind == "tow":
-        return "shared", 900, "Theatres of War", "screenshot"
+        side_name = {
+            "a": "tow_french_imperial",
+            "b": "tow_coalition",
+            "c": "tow_french_imperial",
+        }[side]
+        return side_name, 900, "Theatres of War", "screenshot"
     group_key = f"{side}{block}"
     order, title, basis = THEATRES[group_key]
     side_name = "empire" if side == "a" else "coalition"
@@ -289,7 +294,13 @@ def main() -> None:
             row["theatre_display_order"] = position
 
     rows.sort(key=lambda row: (
-        {"empire": 0, "coalition": 1, "shared": 2, "custom": 3}[str(row["side"])],
+        {
+            "empire": 0,
+            "coalition": 1,
+            "tow_french_imperial": 2,
+            "tow_coalition": 3,
+            "custom": 4,
+        }[str(row["side"])],
         int(row["theatre_order"]), int(row["theatre_display_order"]),
         str(row["faction_key"]),
     ))

@@ -6,6 +6,7 @@ export interface CorpsUiState {
   search: string;
   side: string;
   acOnly: boolean;
+  towOnly: boolean;
 }
 
 export function CorpsSelect({
@@ -23,10 +24,12 @@ export function CorpsSelect({
   onScrollChange: (scrollTop: number) => void;
   onSelect: (entry: CorpsEntry) => void;
 }) {
-  const { search, side, acOnly } = ui;
+  const { search, side, acOnly, towOnly } = ui;
   const setSearch = (search: string) => onUiChange({ ...ui, search });
   const setSide = (side: string) => onUiChange({ ...ui, side });
-  const setAcOnly = (acOnly: boolean) => onUiChange({ ...ui, acOnly });
+  // AC-only and TOW/Custom-only are mutually exclusive views of the same axis.
+  const setAcOnly = (acOnly: boolean) => onUiChange({ ...ui, acOnly, towOnly: acOnly ? false : towOnly });
+  const setTowOnly = (towOnly: boolean) => onUiChange({ ...ui, towOnly, acOnly: towOnly ? false : acOnly });
 
   const scrollRef = useRef<HTMLDivElement>(null);
   // Restore the previous scroll position after the (filtered) list has rendered.
@@ -50,7 +53,8 @@ export function CorpsSelect({
               total += 1;
               const ok =
                 (!q || c.name.toLowerCase().includes(q) || c.factionKey.toLowerCase().includes(q)) &&
-                (!acOnly || c.isArmyCorps);
+                (!acOnly || c.isArmyCorps) &&
+                (!towOnly || !c.isArmyCorps);
               if (ok) matched += 1;
               return ok;
             }),
@@ -59,7 +63,7 @@ export function CorpsSelect({
       }))
       .filter((s) => s.theatres.length > 0);
     return { sides, total, matched };
-  }, [index, search, side, acOnly]);
+  }, [index, search, side, acOnly, towOnly]);
 
   return (
     <div className="corps-screen" ref={scrollRef} onScroll={(e) => onScrollChange(e.currentTarget.scrollTop)}>
@@ -82,7 +86,11 @@ export function CorpsSelect({
         </select>
         <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13 }}>
           <input type="checkbox" checked={acOnly} onChange={(e) => setAcOnly(e.target.checked)} />
-          Discount-eligible (AC) only
+          Army Corps Only
+        </label>
+        <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13 }}>
+          <input type="checkbox" checked={towOnly} onChange={(e) => setTowOnly(e.target.checked)} />
+          TOW factions only
         </label>
         <span className="spacer" style={{ flex: 1 }} />
         <span className="match-count">
@@ -111,6 +119,11 @@ export function CorpsSelect({
 
 function CorpsCard({ entry, onSelect }: { entry: CorpsEntry; onSelect: () => void }) {
   const flag = assetUrl(entry.flag);
+  const entryKind = entry.isArmyCorps
+    ? "Army Corps"
+    : entry.factionKey.includes("_tow_")
+      ? "Theatre of War"
+      : "Custom Army";
   return (
     <button className="corps-card" onClick={onSelect}>
       {flag ? (
@@ -121,7 +134,7 @@ function CorpsCard({ entry, onSelect }: { entry: CorpsEntry; onSelect: () => voi
       <span>
         <span className="corps-name">{entry.name}</span>
         <span className="corps-meta">
-          {entry.isArmyCorps ? "Army Corps" : "Custom Army"}
+          {entryKind}
           {entry.displayRating ? ` · rating ${entry.displayRating}` : ""}
           {entry.displayYear ? ` · ${entry.displayYear}` : ""} · {entry.cardCount} cards
         </span>

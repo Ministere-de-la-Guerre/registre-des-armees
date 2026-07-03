@@ -72,6 +72,8 @@ export interface UnitCard {
   finalMen: number | null;
   speedCode: string | null;
   placement: Placement | null;
+  /** TOW source army-corps id parsed from `_tow_` unit keys; null for AC/base rosters. */
+  towSourceCorpsId: string | null;
   divisionBrigadeCode: string | null;
   cost: number;
   cap: number;
@@ -140,6 +142,7 @@ export interface CorpsIndex {
 export const SIDE_LABELS: Record<string, string> = {
   empire: "Empire",
   coalition: "Coalition",
+  tow_french_imperial: "Imperial (TOW)",
+  tow_coalition: "Coalition (TOW)",
   custom: "Custom Armies",
-  shared: "Theatres of War",
 };
