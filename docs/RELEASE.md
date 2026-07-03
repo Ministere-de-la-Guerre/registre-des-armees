@@ -34,8 +34,15 @@ not versions whose string contains a hyphen. The `-beta.N` suffix is cosmetic
 The intended flow leaves everything staged so the only hand step is the GitHub draft:
 
 1. Bump `version` in `web/package.json` and commit (`Release v<version>`).
-2. On **Windows**: `npm run desktop:beta:stage` (beta) or `npm run desktop:stage` (stable). This builds, then runs `scripts/stage-release.mjs`, which copies exactly the Setup `.exe` + `.blockmap` + `latest.yml` (+ portable) for the current version into a freshly-cleaned `_github_assets_beta/` (or `_github_assets/`). It refuses to stage a `latest.yml` whose version doesn't match `package.json`, so a stale channel file can't slip through. These folders are gitignored (large local binaries).
-3. On GitHub → the correct repo (**beta → `registre-des-armees-beta`**, stable → `registre-des-armees`) → **Draft a new release** → **Create new tag** `v<version>` → drag in every file from the staged folder → **Publish**. Never tick "Pre-release".
+2. **Build the artifacts with electron-builder** (Windows). This is what produces the files a release needs:
+   - Beta: `npm run desktop:beta` → `npm run build` (tsc + Vite) then `electron-builder --win --config electron-builder.beta.cjs --publish never`.
+   - Stable: `npm run desktop` → same, minus the beta config.
+
+   electron-builder builds the `nsis` + `portable` Windows targets and writes them all into `web/release/`: `RegistreDesArmees[Beta]-Setup-<version>.exe`, its `.blockmap`, `RegistreDesArmees[Beta]-Portable-<version>.exe`, and the `latest.yml` channel file. Build prerequisites and the "Cannot create symbolic link" / 7za-wrapper workaround are in [`web/DESKTOP.md`](../web/DESKTOP.md).
+3. **Stage the needed files**: `npm run stage:beta` (or `npm run stage`) runs `scripts/stage-release.mjs`, which copies exactly the Setup `.exe` + `.blockmap` + `latest.yml` (+ portable) for the current version into a freshly-cleaned `_github_assets_beta/` (or `_github_assets/`). It refuses to stage a `latest.yml` whose version doesn't match `package.json`, so a stale channel file can't slip through. These folders are gitignored (large local binaries).
+
+   Steps 2–3 are chained by `npm run desktop:beta:stage` (or `npm run desktop:stage`) — one command that builds then stages.
+4. On GitHub → the correct repo (**beta → `registre-des-armees-beta`**, stable → `registre-des-armees`) → **Draft a new release** → **Create new tag** `v<version>` → drag in every file from the staged folder → **Publish**. Never tick "Pre-release".
 
 The Setup `.exe` + `.blockmap` + `latest.yml` are all **required** for auto-update; the portable `.exe` is a manual-download convenience the updater never uses.
 
