@@ -12,7 +12,7 @@ Purpose: locate the file to edit fast. NTW3 (Napoleon Total War 3 mod) army-buil
 Rules logic exists TWICE and must stay in parity: `tools/army_builder_rules.py` ↔ `web/src/rules/rules.ts` (TS is a faithful port; regex helpers duplicated in `tools/build_ntw3_army_builder_database.py`).
 
 ## web/ — the app (React 18 + TS + Vite + Electron, Windows desktop)
-package.json scripts: `build:data`(py gen)·`dev`·`build`(tsc+vite)·`test`(vitest)·`lint`·`typecheck`·`electron`·`desktop[:release|:beta[:release]]`(electron-builder).
+package.json scripts: `build:data`(py gen)·`dev`·`build`(tsc+vite)·`test`(vitest)·`lint`·`typecheck`·`electron`·`desktop[:release|:beta[:release]|:stage|:beta:stage]`(electron-builder; `:stage`→build+stage curated upload set)·`stage[:beta]`(`scripts/stage-release.mjs`).
 - `web/src/App.tsx` — root component / composition.
 - `web/src/main.tsx` · `index.html` · `styles.css` · `vite-env.d.ts`.
 - `web/src/domain/`
@@ -36,6 +36,7 @@ package.json scripts: `build:data`(py gen)·`dev`·`build`(tsc+vite)·`test`(vit
 - `web/src/test/factories.ts` — test data factories.
 - `web/electron/main.cjs` — Electron main. `7za-wrapper.cs`. `web/build/` — icons + `make_icon.py`.
 - `web/electron-builder.beta.cjs` — beta channel config (separate appId/repo; see memory `registre-armees-release-channel`). Stable config lives in `package.json`.
+- `web/scripts/stage-release.mjs` — copies the release-needed artifacts (Setup exe+blockmap+latest.yml, +portable) for the current version into `_github_assets[_beta]/` for manual GitHub upload; guards against a stale `latest.yml`. See HANDOFF "Release workflow".
 - tsconfig{,.app,.node}.json · vite.config.ts · .eslintrc.cjs · DESKTOP.md.
 
 ## tools/ — Python generators (run from repo root; output to data/, assets/, reports/, web/public/)

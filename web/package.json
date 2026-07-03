@@ -19,7 +19,11 @@
     "desktop": "npm run build && electron-builder --win --publish never",
     "desktop:release": "npm run build && electron-builder --win --publish always",
     "desktop:beta": "npm run build && electron-builder --win --config electron-builder.beta.cjs --publish never",
-    "desktop:beta:release": "npm run build && electron-builder --win --config electron-builder.beta.cjs --publish always"
+    "desktop:beta:release": "npm run build && electron-builder --win --config electron-builder.beta.cjs --publish always",
+    "stage": "node scripts/stage-release.mjs stable",
+    "stage:beta": "node scripts/stage-release.mjs beta",
+    "desktop:stage": "npm run desktop && npm run stage",
+    "desktop:beta:stage": "npm run desktop:beta && npm run stage:beta"
   },
   "dependencies": {
     "electron-updater": "^6.3.9",
