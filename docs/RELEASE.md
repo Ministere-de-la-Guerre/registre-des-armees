@@ -32,6 +32,34 @@ installable, offline-capable PWA. **Fully decoupled from the desktop pipeline** 
 it touches none of the `desktop:*` scripts, electron-builder configs, or
 `_github_assets*` staging.
 
+> **Where the live site actually is (READ FIRST).** The public PWA is hosted on
+> the **beta** repo's Pages, **not** origin. Origin's Pages is disabled and its
+> `deploy-web.yml` is `disabled_manually`, so pushing origin `main` does **not**
+> deploy. The generic bullets below describe the Pages mechanism; the **"Publishing
+> a web release"** subsection is the real, current workflow. Live URL:
+> `https://ministere-de-la-guerre.github.io/registre-des-armees-beta/`.
+
+### Publishing a web release (beta repo, versioned)
+
+The `beta` remote (`registre-des-armees-beta`) is a **curated mirror**: its `main`
+carries `web/`, `tools/`, `source/`, and its own `deploy-web.yml`, but **excludes**
+internal/dev files (`CLAUDE.md`, `AGENTS.md`, `docs/`, `reports/`, `TOW_Rolls.txt`).
+Each web release is one clean commit on top of that history.
+
+- **Versioned, not continuous:** bump `web/package.json` (+ `package-lock.json`) to
+  the next `2.0.0-beta.N` and commit as `Release v<ver> (web PWA, beta channel): …`.
+- **Steps** (from a full-source dev branch that has the changes):
+  1. `git checkout -b <tmp> beta/main`
+  2. `git checkout <dev-branch> -- web/src` (overlay only `web/**`; never docs/dev files)
+  3. `cd web && npm version <ver> --no-git-tag-version` (or hand-edit the two files)
+  4. `git add web/ && git commit -m "Release v<ver> (web PWA, beta channel): …"`
+  5. `git push beta <tmp>:main` → triggers the beta repo's `deploy-web.yml` → Pages
+  6. clean up: return to the dev branch, delete `<tmp>`
+- A pre-existing local `CLAUDE.md` edit blocks the `beta/main` checkout (that file
+  differs there); `git stash push -- CLAUDE.md` before, `git stash pop` after.
+- The full change (incl. `docs/`) still lands on the origin dev branch separately —
+  the beta commit is publish-only.
+
 - **Hosting: GitHub Pages** (Phase 0 decision). Free + HTTPS for this public
   repo; `base: "./"` in `vite.config.ts` makes the build work from the
   `…github.io/registre-des-armees/` sub-path. The SW scope (`./`) and manifest
@@ -44,7 +72,8 @@ it touches none of the `desktop:*` scripts, electron-builder configs, or
   `typecheck + lint + test`, `npm run build`, and publishes `web/dist` to Pages.
   `web/public/{data,assets}` are gitignored, so regenerating them in CI is
   mandatory — the build won't have data otherwise.
-- **Versioning: continuous** (tracks `main`, no per-release tags). The in-app SW
+- **Versioning:** in practice the beta channel uses explicit `2.0.0-beta.N` bumps
+  (see the subsection above), not continuous tracking. Either way the in-app SW
   "new version" toast makes rolling updates safe; runtime data caches are keyed
   by `web/public/data/data-version.json`, so a data rebuild drops stale caches
   automatically (no manual cache-busting).
