@@ -79,6 +79,9 @@ export function Builder({
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [detail, setDetail] = useState<UnitCard | null>(null);
   const [hovered, setHovered] = useState<{ card: UnitCard; anchor: DOMRect } | null>(null);
+  // Touch peek: the simplified stat card shown by long-press (grid) or tap (tray).
+  // Separate from `hovered` (which is desktop-only) and from `detail` (full panel).
+  const [peek, setPeek] = useState<UnitCard | null>(null);
   const [loadedSaved, setLoadedSaved] = useState<SavedBuild | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [rotationOpen, setRotationOpen] = useState(false);
@@ -107,6 +110,7 @@ export function Builder({
     setFilters(defaultFiltersFor(roster.factionKey));
     setLoadedSaved(null);
     setHovered(null);
+    setPeek(null);
     setTowRollOpen(false);
     setTowGenerateOpen(false);
     // Enable every source corps by default (the combined view pools them all;
@@ -296,6 +300,7 @@ export function Builder({
     onDetails: setDetail,
     onHover: (card, anchor) => setHovered({ card, anchor }),
     onHoverEnd: () => setHovered(null),
+    onPeek: setPeek,
   };
 
   // Set of general unitKeys offered in this corps's current local-time rotation
@@ -652,13 +657,28 @@ export function Builder({
         onDetails={setDetail}
         onHover={(c, a) => setHovered({ card: c, anchor: a })}
         onHoverEnd={() => setHovered(null)}
+        onPeek={setPeek}
+        corpsStat={isTow && towBuild ? { count: towBuild.count, max: LEGACY_TOW_MAX_SOURCE_CORPS, over: towBuild.over } : null}
       />
 
-      {hovered && !detail && (
+      {hovered && !detail && !peek && (
         <Tooltip
           card={hovered.card}
           anchor={hovered.anchor}
           blockReason={blockReasons.get(hovered.card.unitKey) ?? null}
+        />
+      )}
+      {peek && !detail && (
+        <Tooltip
+          card={peek}
+          anchor={new DOMRect()}
+          variant="peek"
+          blockReason={blockReasons.get(peek.unitKey) ?? null}
+          onFullDetails={() => {
+            setDetail(peek);
+            setPeek(null);
+          }}
+          onDismiss={() => setPeek(null)}
         />
       )}
       {detail && (
@@ -706,6 +726,7 @@ function UnplacedMedallion({ card, h }: { card: UnitCard; h: MedallionHandlers }
       onContextMenu={() => h.onDetails(card)}
       onHover={h.onHover}
       onHoverEnd={h.onHoverEnd}
+      onPeek={h.onPeek}
     />
   );
 }

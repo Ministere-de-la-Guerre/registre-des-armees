@@ -99,6 +99,63 @@ export async function downloadFactionOffline(
   return { ok: failed === 0, cached: total - failed, total, error: failed ? `${failed} file(s) failed to download` : undefined };
 }
 
+export interface DownloadAllProgress {
+  /** 1-based index of the faction currently being processed. */
+  index: number;
+  total: number;
+  factionKey: string;
+  /** Icon/JSON progress within the current faction (mirrors DownloadProgress). */
+  perFaction?: DownloadProgress;
+}
+
+export interface DownloadAllResult {
+  downloaded: number;
+  skipped: number;
+  failed: { factionKey: string; error?: string }[];
+  cancelled: boolean;
+}
+
+/** Download every faction into the offline cache, one at a time. Factions already
+ *  cached at the current data version are skipped (so this doubles as a resume /
+ *  "complete my set" action). Per-faction failures never abort the run — they are
+ *  collected and reported at the end, so the button can be pressed again to retry.
+ *  `shouldCancel` is checked between factions: cancelling keeps everything already
+ *  cached and finishes the in-flight faction. Sequential by design — icon fetches
+ *  inside a single faction already fan out, so we don't hammer the host. */
+export async function downloadAllFactionsOffline(
+  factionKeys: string[],
+  loadRoster: (factionKey: string) => Promise<FactionRoster>,
+  opts: { onProgress?: (p: DownloadAllProgress) => void; shouldCancel?: () => boolean } = {},
+): Promise<DownloadAllResult> {
+  const result: DownloadAllResult = { downloaded: 0, skipped: 0, failed: [], cancelled: false };
+  if (!offlineSupported()) return result;
+  const total = factionKeys.length;
+
+  for (let i = 0; i < factionKeys.length; i++) {
+    if (opts.shouldCancel?.()) {
+      result.cancelled = true;
+      break;
+    }
+    const factionKey = factionKeys[i];
+    opts.onProgress?.({ index: i + 1, total, factionKey });
+    if (await isFactionOffline(factionKey)) {
+      result.skipped++;
+      continue;
+    }
+    try {
+      const roster = await loadRoster(factionKey);
+      const res = await downloadFactionOffline(roster, (perFaction) =>
+        opts.onProgress?.({ index: i + 1, total, factionKey, perFaction }),
+      );
+      if (res.ok) result.downloaded++;
+      else result.failed.push({ factionKey, error: res.error });
+    } catch (e) {
+      result.failed.push({ factionKey, error: String(e) });
+    }
+  }
+  return result;
+}
+
 export async function isFactionOffline(factionKey: string): Promise<boolean> {
   if (!offlineSupported()) return false;
   const key = await getDataVersionKey();

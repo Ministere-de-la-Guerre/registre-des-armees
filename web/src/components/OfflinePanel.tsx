@@ -3,20 +3,30 @@
 //   2. show which factions are downloaded for offline use and let them be freed,
 //   3. export / import the whole save set as a file (the durable backup).
 import { useEffect, useRef, useState } from "react";
+import { loadFaction } from "../data/load";
 import { BuildRepository, exportAllBuilds, importAllBuilds } from "../state/saves";
 import {
+  downloadAllFactionsOffline,
   isStoragePersisted,
   listOfflineFactions,
   offlineSupported,
   removeFactionOffline,
   requestPersistentStorage,
   storageEstimate,
+  type DownloadAllProgress,
   type StorageUsage,
 } from "../state/offline";
 
 interface OfflinePanelProps {
   onClose: () => void;
   factionName: (key: string) => string;
+  /** Every distinct faction key, for the "Download all" offline action. */
+  allFactionKeys: string[];
+}
+
+interface DownloadAllState {
+  progress: DownloadAllProgress;
+  cancelRequested: boolean;
 }
 
 function mb(bytes: number): string {
@@ -36,7 +46,7 @@ function downloadJson(filename: string, data: unknown): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function OfflinePanel({ onClose, factionName }: OfflinePanelProps) {
+export function OfflinePanel({ onClose, factionName, allFactionKeys }: OfflinePanelProps) {
   const repoRef = useRef<BuildRepository>();
   if (!repoRef.current) repoRef.current = new BuildRepository();
   const repo = repoRef.current;
@@ -47,6 +57,8 @@ export function OfflinePanel({ onClose, factionName }: OfflinePanelProps) {
   const [saveCount, setSaveCount] = useState(repo.list().length);
   const [status, setStatus] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [downloadAll, setDownloadAll] = useState<DownloadAllState | null>(null);
+  const cancelRef = useRef(false);
 
   const refresh = () => {
     void isStoragePersisted().then(setPersisted);
@@ -66,6 +78,32 @@ export function OfflinePanel({ onClose, factionName }: OfflinePanelProps) {
   const freeFaction = async (key: string) => {
     await removeFactionOffline(key);
     setOfflineFactions((prev) => prev.filter((k) => k !== key));
+  };
+
+  const remaining = allFactionKeys.filter((k) => !offlineFactions.includes(k)).length;
+
+  const startDownloadAll = async () => {
+    cancelRef.current = false;
+    setStatus(null);
+    // Persist first: without it iOS can evict the whole cache we're about to fill.
+    await requestPersistentStorage().then(setPersisted);
+    setDownloadAll({ progress: { index: 0, total: allFactionKeys.length, factionKey: "" }, cancelRequested: false });
+    const result = await downloadAllFactionsOffline(allFactionKeys, loadFaction, {
+      onProgress: (progress) => setDownloadAll((s) => ({ progress, cancelRequested: s?.cancelRequested ?? false })),
+      shouldCancel: () => cancelRef.current,
+    });
+    setDownloadAll(null);
+    refresh();
+    const parts = [`${result.downloaded} downloaded`];
+    if (result.skipped) parts.push(`${result.skipped} already offline`);
+    if (result.failed.length)
+      parts.push(`${result.failed.length} failed (${result.failed.map((f) => factionName(f.factionKey)).join(", ")})`);
+    setStatus(`${result.cancelled ? "Cancelled — " : "Done — "}${parts.join(", ")}.`);
+  };
+
+  const requestCancel = () => {
+    cancelRef.current = true;
+    setDownloadAll((s) => (s ? { ...s, cancelRequested: true } : s));
   };
 
   const doExport = () => {
@@ -120,6 +158,45 @@ export function OfflinePanel({ onClose, factionName }: OfflinePanelProps) {
               </button>
             )}
           </div>
+
+          {offlineSupported() && allFactionKeys.length > 0 && (
+            <>
+              <div className="section-title">Download everything</div>
+              {downloadAll ? (
+                <div className="download-all-run">
+                  <p className="rot-note">
+                    Faction {downloadAll.progress.index} / {downloadAll.progress.total}
+                    {downloadAll.progress.factionKey ? ` — ${factionName(downloadAll.progress.factionKey)}` : ""}
+                    {downloadAll.progress.perFaction
+                      ? ` · ${Math.round(
+                          (downloadAll.progress.perFaction.done / Math.max(1, downloadAll.progress.perFaction.total)) * 100,
+                        )}%`
+                      : ""}
+                  </p>
+                  <div className="download-bar">
+                    <div
+                      className="download-bar-fill"
+                      style={{ width: `${Math.round((downloadAll.progress.index / Math.max(1, downloadAll.progress.total)) * 100)}%` }}
+                    />
+                  </div>
+                  <button className="btn small" onClick={requestCancel} disabled={downloadAll.cancelRequested}>
+                    {downloadAll.cancelRequested ? "Finishing current…" : "Cancel"}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className="rot-note">
+                    Make every faction usable offline in one go — {remaining} of {allFactionKeys.length} still to
+                    download. This is a large download (all unit icons for every corps) and may take several minutes;
+                    factions already saved are skipped, so you can safely stop and resume.
+                  </p>
+                  <button className="btn small" onClick={() => void startDownloadAll()} disabled={remaining === 0}>
+                    {remaining === 0 ? "✓ All factions offline" : `Download all factions (${remaining})`}
+                  </button>
+                </>
+              )}
+            </>
+          )}
 
           <div className="section-title">Downloaded factions</div>
           {offlineFactions.length === 0 ? (

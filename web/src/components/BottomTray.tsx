@@ -1,28 +1,11 @@
+import { useState } from "react";
 import type { UnitCard } from "../domain/types";
 import { MAX_TOTAL_UNIT_CARDS } from "../rules/rules";
 import type { BuildState, BuildSummary as Summary, RosterIndex } from "../state/build";
 import { Medallion } from "./Medallion";
+import { useCoarsePointer } from "./useCoarsePointer";
 
-/** The build tray: the staff slot (commander), then one medallion per selected
- *  copy in a single line, padded with empty slots up to the 31-card maximum. Each
- *  copy is independently removable (right-click). Running totals live in the top
- *  bar; only the Clear-build action remains here. Mirrors the game's unit bar. */
-export function BottomTray({
-  index,
-  build,
-  summary,
-  onRemoveInstance,
-  onClearStaff,
-  onClearBuild,
-  onAutoGenerals,
-  autoGeneralsDisabled,
-  onResetGenerals,
-  resetGeneralsDisabled,
-  isOverCorps,
-  onDetails,
-  onHover,
-  onHoverEnd,
-}: {
+interface TrayProps {
   index: RosterIndex;
   build: BuildState;
   summary: Summary;
@@ -38,7 +21,40 @@ export function BottomTray({
   onDetails: (card: UnitCard) => void;
   onHover: (card: UnitCard, anchor: DOMRect) => void;
   onHoverEnd: () => void;
-}) {
+  /** Touch peek: tap a tray medallion → simplified stat card (inert on desktop). */
+  onPeek: (card: UnitCard) => void;
+  /** TOW-only "Corps N/4" roll stat for the collapsed touch strip; null otherwise. */
+  corpsStat: { count: number; max: number; over: boolean } | null;
+}
+
+/** The build tray: the staff slot (commander), then one medallion per selected
+ *  copy in a single line, padded with empty slots up to the 31-card maximum. Each
+ *  copy is independently removable (right-click). Running totals live in the top
+ *  bar; only the Clear-build action remains here. Mirrors the game's unit bar.
+ *
+ *  On touch devices this instead collapses to a slim summary strip that expands
+ *  into a scrollable bottom sheet (see TouchTray); desktop is untouched. */
+export function BottomTray(props: TrayProps) {
+  const coarse = useCoarsePointer();
+  return coarse ? <TouchTray {...props} /> : <DesktopTray {...props} />;
+}
+
+function DesktopTray({
+  index,
+  build,
+  summary,
+  onRemoveInstance,
+  onClearStaff,
+  onClearBuild,
+  onAutoGenerals,
+  autoGeneralsDisabled,
+  onResetGenerals,
+  resetGeneralsDisabled,
+  isOverCorps,
+  onDetails,
+  onHover,
+  onHoverEnd,
+}: TrayProps) {
   const { totalCards } = summary;
   const staffCard = build.staffSlotUnitKey ? index.byKey.get(build.staffSlotUnitKey) : undefined;
 
@@ -120,5 +136,117 @@ export function BottomTray({
         </button>
       </div>
     </div>
+  );
+}
+
+/** Phone/tablet tray: a slim summary strip that expands into a scrollable bottom
+ *  sheet. Only actual selections are drawn (at readable grid size), never the 31
+ *  empty placeholders — the strip's N/31 count carries that. */
+function TouchTray({
+  index,
+  build,
+  summary,
+  onRemoveInstance,
+  onClearStaff,
+  onClearBuild,
+  onAutoGenerals,
+  autoGeneralsDisabled,
+  onResetGenerals,
+  resetGeneralsDisabled,
+  isOverCorps,
+  onDetails,
+  onPeek,
+  corpsStat,
+}: TrayProps) {
+  const [expanded, setExpanded] = useState(false);
+  const { totalCards } = summary;
+  const staffCard = build.staffSlotUnitKey ? index.byKey.get(build.staffSlotUnitKey) : undefined;
+  const instances = build.instances
+    .map((inst) => ({ inst, card: index.byKey.get(inst.unitKey) }))
+    .filter((e): e is { inst: { id: string; unitKey: string }; card: UnitCard } => Boolean(e.card));
+  const hasBuild = build.instances.length > 0 || build.staffSlotUnitKey !== null;
+
+  return (
+    <>
+      {/* Collapsed strip: the running numbers the player needs at a glance. Tapping
+          it (or the chevron) toggles the sheet; adding a unit updates the numbers
+          here rather than auto-expanding. */}
+      <button
+        type="button"
+        className="tray-strip"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((e) => !e)}
+      >
+        <span className="tray-stat">
+          <span className="cost">{summary.price.finalCost.toLocaleString()}</span>
+        </span>
+        <span className="tray-stat">
+          <b className={totalCards > MAX_TOTAL_UNIT_CARDS ? "over" : undefined}>{totalCards}</b>/
+          {MAX_TOTAL_UNIT_CARDS} cards
+        </span>
+        {corpsStat && (
+          <span className="tray-stat">
+            <b className={corpsStat.over ? "over" : undefined}>{corpsStat.count}</b>/{corpsStat.max} corps
+          </span>
+        )}
+        <span className="tray-strip-chevron" aria-hidden>
+          {expanded ? "▾" : "▴"}
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="tray-sheet-backdrop" onClick={() => setExpanded(false)}>
+          <div className="tray-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Selected units">
+            <div className="tray-sheet-head">
+              <button type="button" className="tray-sheet-handle" aria-label="Collapse" onClick={() => setExpanded(false)}>
+                <span className="tray-strip-grip" aria-hidden />
+              </button>
+            </div>
+            <div className="tray-sheet-grid" aria-label="Selected units">
+              <div className="tray-sheet-staff">
+                <span className="slot-label">Commander</span>
+                {staffCard ? (
+                  <Medallion
+                    card={staffCard}
+                    inStaffSlot
+                    onClick={() => onDetails(staffCard)}
+                    onContextMenu={onClearStaff}
+                    onPeek={onPeek}
+                    peekOn="tap"
+                  />
+                ) : (
+                  <span className="empty-oval" title="“Set commander” on any general" aria-hidden />
+                )}
+              </div>
+              {instances.map(({ inst, card }) => (
+                <Medallion
+                  key={inst.id}
+                  card={card}
+                  selected
+                  showSpeed
+                  overCorps={isOverCorps(card)}
+                  onClick={() => onDetails(card)}
+                  onContextMenu={() => onRemoveInstance(inst.id)}
+                  onPeek={onPeek}
+                  peekOn="tap"
+                />
+              ))}
+              {!hasBuild && <p className="tray-sheet-empty">No units yet — tap a unit in the grid to add it.</p>}
+            </div>
+            <div className="tray-sheet-actions">
+              <button className="btn auto-generals" disabled={autoGeneralsDisabled} onClick={onAutoGenerals}>
+                Auto generals
+              </button>
+              <button className="btn reset-generals" disabled={resetGeneralsDisabled} onClick={onResetGenerals}>
+                Reset generals
+              </button>
+              <button className="btn clear-build" disabled={!hasBuild} onClick={onClearBuild}>
+                Clear build
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

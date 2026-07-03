@@ -587,3 +587,120 @@ input::placeholder { color: #6f7888; }
     max-height: 88dvh; padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 }
+
+/* ============================================================================
+   MOBILE UX PASS (phones/tablets only). Everything below is gated to coarse
+   pointers, so desktop browsers AND the Electron build (hover: hover / pointer:
+   fine) render byte-identically — narrow desktop windows included.
+   ============================================================================ */
+@media (hover: none) and (pointer: coarse) {
+  /* --- Part 3: kill iOS text-selection / loupe on long-press ---------------
+     Suppress selection at the app root (not just on medallions), so long-pressing
+     near names, headers, gaps, and bar labels never starts a selection/loupe. */
+  .app {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    /* The touch tray is a slim strip, not the 128px desktop bar. Re-point the
+       shared height token so the filters drawer height and toast offset (both
+       calc against --tray-h) line up with the strip instead of leaving a gap. */
+    --tray-h: 52px;
+  }
+  /* Re-enable selection only where copying is plausibly useful: the full stat panel
+     and the generate-times output (both inside .modal-body), and the peek card. */
+  .modal-body, .tooltip.peek {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /* --- Part 2: peek card (long-press in grid / tap in tray) ----------------
+     Bottom-anchored popover that never clips off-screen, sitting above the tray
+     strip. Interactive (unlike the desktop hover tooltip) so its action is tappable. */
+  .tooltip.peek {
+    position: fixed; left: 50%; right: auto; transform: translateX(-50%);
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    top: auto; z-index: 90; pointer-events: auto;
+    width: min(340px, 92vw); max-width: min(340px, 92vw);
+  }
+  .tooltip .tt-actions { margin-top: 9px; display: flex; justify-content: flex-end; }
+  .tooltip .tt-actions .btn { min-height: 40px; padding: 6px 14px; }
+
+  /* --- Part 1b: collapsible / scrollable top chrome -----------------------
+     One chevron tab hides the brand bar + the faction controls bar so the grid can
+     own the viewport; expanded, the controls bar scrolls horizontally at readable,
+     tappable size instead of font-shrinking or wrapping into a tall block. */
+  /* Pinned top-right so it never covers the brand (left) or the faction controls.
+     The brand bar reserves matching right-padding so its own buttons don't slide
+     under the tab. When collapsed it's the only chrome, floating over the grid. */
+  .chrome-toggle {
+    position: fixed; top: calc(3px + env(safe-area-inset-top, 0px));
+    right: calc(8px + env(safe-area-inset-right, 0px));
+    z-index: 60; background: var(--panel-2); color: var(--gold-bright);
+    border: 1px solid var(--gold-deep); border-radius: 999px;
+    font-size: 12px; font-weight: 700; padding: 4px 14px; min-height: 30px;
+    box-shadow: var(--shadow);
+  }
+  .topbar { padding-right: calc(84px + env(safe-area-inset-right, 0px)); }
+  .app.chrome-collapsed .topbar,
+  .app.chrome-collapsed .corps-header,
+  .app.chrome-collapsed .tow-warning.banner { display: none; }
+
+  /* Expanded, the controls bar keeps the existing readable wrapping (never
+     font-shrinks) and just bumps to 44px touch targets. We deliberately do NOT
+     make it an overflow scroller: that would clip the absolutely-positioned
+     Save/Load dropdown. The chevron tab is the space saver, not shrinking. */
+  .corps-header .spacer { display: none; }
+  .corps-header .btn { min-height: 44px; }
+
+  /* --- Part 1a: collapsible bottom-sheet tray -----------------------------
+     The always-present slim strip (running totals) replaces the desktop 31-slot row;
+     tapping it raises a scrollable sheet of the actual selections at grid size. */
+  .tray-strip {
+    flex: none; display: flex; align-items: center; gap: 16px; width: 100%;
+    border: none; border-top: 1px solid var(--gold-deep); background: var(--bg-2); color: var(--text);
+    text-align: left; font-size: 13px; min-height: 44px;
+    padding: 6px calc(16px + env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px))
+      calc(16px + env(safe-area-inset-left, 0px));
+  }
+  .tray-strip .tray-stat { color: var(--text-soft); font-variant-numeric: tabular-nums; }
+  .tray-strip .tray-stat b { color: var(--text); font-weight: 700; }
+  .tray-strip .tray-stat b.over { color: var(--bad); }
+  .tray-strip-chevron { margin-left: auto; color: var(--gold-bright); font-size: 15px; }
+
+  .tray-sheet-backdrop {
+    position: fixed; inset: 0; z-index: 80; background: rgba(5, 8, 12, 0.5);
+    display: flex; align-items: flex-end;
+  }
+  .tray-sheet {
+    width: 100%; background: var(--panel); border-top: 1px solid var(--gold-deep);
+    border-top-left-radius: 14px; border-top-right-radius: 14px; box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.6);
+    max-height: 70dvh; display: flex; flex-direction: column;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+  .tray-sheet-head { display: flex; justify-content: center; padding: 8px 0 4px; }
+  .tray-sheet-handle { background: none; border: none; padding: 6px 40px; }
+  .tray-strip-grip { display: block; width: 40px; height: 4px; border-radius: 2px; background: var(--line-2); }
+  .tray-sheet-grid {
+    flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    display: flex; flex-wrap: wrap; gap: 12px 10px; align-content: flex-start;
+    padding: 6px 14px 10px;
+  }
+  .tray-sheet-grid .medallion { width: 72px; }
+  .tray-sheet-staff { display: flex; flex-direction: column; align-items: center; }
+  .tray-sheet-staff .slot-label {
+    font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-soft); margin-bottom: 2px;
+  }
+  .tray-sheet-staff .empty-oval { width: 72px; aspect-ratio: 0.84 / 1; border-radius: 50%; background: var(--panel-2); border: 1px solid var(--line-2); }
+  .tray-sheet-empty { color: var(--text-soft); font-size: 13px; padding: 8px 4px; }
+  .tray-sheet-actions {
+    flex: none; display: flex; gap: 8px; padding: 8px 14px; border-top: 1px solid var(--line);
+  }
+  .tray-sheet-actions .btn { flex: 1; min-height: 44px; }
+  .tray-sheet-actions .clear-build { border-color: var(--bad-deep); color: var(--bad); }
+  .tray-sheet-actions .auto-generals { border-color: var(--gold-deep); color: var(--gold-bright); }
+}
+
+/* --- Part 4: download-all progress (web target only; layout is pointer-agnostic) */
+.download-all-run { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 8px; }
+.download-bar { height: 8px; border-radius: 4px; background: var(--panel-3); overflow: hidden; }
+.download-bar-fill { height: 100%; background: linear-gradient(var(--gold-bright), var(--gold)); transition: width 0.2s ease; }

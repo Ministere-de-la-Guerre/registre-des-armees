@@ -39,10 +39,16 @@ export function useLongPress(
   const onPointerDown = (e: React.PointerEvent) => {
     if (!onLongPress || (e.pointerType !== "touch" && e.pointerType !== "pen")) return;
     start.current = { x: e.clientX, y: e.clientY };
+    // Keep the native event so we can suppress residual native gestures (Android
+    // image-save sheet, stray text selection) ONLY once the press is recognized as
+    // long — never on touchstart, so page/grid scrolling keeps working. If the
+    // finger moves first, the timer is cleared and we never preventDefault.
+    const native = e.nativeEvent;
     clear();
     timer.current = window.setTimeout(() => {
       timer.current = null;
       firedAt.current = Date.now();
+      native.preventDefault?.();
       onLongPress();
     }, ms);
   };
