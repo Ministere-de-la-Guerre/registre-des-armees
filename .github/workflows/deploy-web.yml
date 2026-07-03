@@ -1,0 +1,71 @@
+# Web/PWA channel — build the browser app and publish it to GitHub Pages.
+#
+# Decoupled from the desktop release pipeline (docs/RELEASE.md): the Windows
+# installers stay manual, while every push to main ships the latest web build.
+# The SW "update available" toast makes continuous web rollout safe.
+#
+# One-time setup: repo Settings → Pages → Build and deployment → Source =
+# "GitHub Actions". The site then serves at
+# https://<owner>.github.io/registre-des-armees/ (base: "./" handles the sub-path).
+name: Deploy web PWA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; let a newer push supersede an in-flight run.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The 297 faction JSONs + 13.6k icons under web/public are generated (and
+      # gitignored), so regenerate them from the committed source before building.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Pillow (data pipeline converts .tga icons)
+        run: python -m pip install --upgrade Pillow
+      - name: Generate browser data (web/public/{data,assets})
+        run: python tools/build_web_data.py
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install deps
+        run: npm ci
+        working-directory: web
+      - name: Verify (typecheck + lint + tests)
+        run: npm run typecheck && npm run lint && npm test
+        working-directory: web
+      - name: Build PWA
+        run: npm run build
+        working-directory: web
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
