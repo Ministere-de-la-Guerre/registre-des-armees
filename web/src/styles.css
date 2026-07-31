@@ -746,6 +746,22 @@ input::placeholder { color: #6f7888; }
     top: auto; z-index: 90; pointer-events: auto;
     width: min(340px, 92vw); max-width: min(340px, 92vw);
   }
+  /* Peeking a unit in the lower half of the screen flips the card to the top half so
+     it never sits on the unit the player is about to tap a second time to select. */
+  .tooltip.peek.peek-top {
+    top: calc(12px + env(safe-area-inset-top, 0px)); bottom: auto;
+  }
+  /* Drag handle: slide the card off a unit hiding behind it (bottom rows) so the
+     two-tap select can reach the unit underneath. touch-action:none keeps the drag
+     from scrolling the grid (which would dismiss the peek). */
+  .tooltip.peek .tt-drag {
+    touch-action: none; cursor: grab; margin: -4px -4px 4px; padding: 6px 0 8px;
+    display: flex; justify-content: center; -webkit-user-select: none; user-select: none;
+  }
+  .tooltip.peek .tt-drag:active { cursor: grabbing; }
+  .tooltip.peek .tt-grip {
+    width: 40px; height: 4px; border-radius: 999px; background: var(--gold-deep);
+  }
   .tooltip .tt-actions { margin-top: 9px; display: flex; justify-content: flex-end; }
   .tooltip .tt-actions .btn { min-height: 40px; padding: 6px 14px; }
 

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ABILITY_KEYS, ABILITY_LABELS, type UnitCard } from "../domain/types";
 import { classLabel } from "../domain/labels";
 
@@ -31,6 +31,46 @@ export function Tooltip({
   const ref = useRef<HTMLDivElement>(null);
   const peek = variant === "peek";
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: anchor.left, top: anchor.bottom + 8 });
+
+  // Peek placement: the card is normally bottom-anchored, but a unit in the lower
+  // half of the screen would sit behind it — and the two-tap model needs a *second*
+  // tap on that same unit to select it. When the peeked unit is in the lower half,
+  // spawn the card in the upper half instead so the unit stays reachable for an
+  // immediate second tap without dragging the card out of the way.
+  const atTop = peek && anchor.top + anchor.height / 2 > window.innerHeight / 2;
+
+  // Peek drag: the card is bottom-anchored, so a unit in the bottom rows sits
+  // behind it — and the two-tap model needs a *second* tap on that same unit to
+  // select it. The drag handle lets the player slide the card off the unit (as an
+  // offset from its default bottom-centered spot) and then tap through to it. The
+  // offset resets whenever a different unit is peeked, so each card opens in place.
+  const [drag, setDrag] = useState<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
+  const dragState = useRef<{ id: number; lastX: number; lastY: number } | null>(null);
+  useEffect(() => setDrag({ dx: 0, dy: 0 }), [card]);
+
+  const onHandleDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    (e.target as Element).setPointerCapture(e.pointerId);
+    dragState.current = { id: e.pointerId, lastX: e.clientX, lastY: e.clientY };
+  };
+  const onHandleMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const st = dragState.current;
+    const el = ref.current;
+    if (!st || st.id !== e.pointerId || !el) return;
+    e.preventDefault();
+    const r = el.getBoundingClientRect();
+    const edge = 44; // keep at least this much of the card reachable on every side
+    let ddx = e.clientX - st.lastX;
+    let ddy = e.clientY - st.lastY;
+    ddx = Math.max(edge - r.right, Math.min(window.innerWidth - edge - r.left, ddx));
+    ddy = Math.max(edge - r.bottom, Math.min(window.innerHeight - edge - r.top, ddy));
+    st.lastX = e.clientX;
+    st.lastY = e.clientY;
+    setDrag((d) => ({ dx: d.dx + ddx, dy: d.dy + ddy }));
+  };
+  const onHandleUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (dragState.current?.id === e.pointerId) dragState.current = null;
+  };
 
   useLayoutEffect(() => {
     if (peek) return; // peek is CSS-positioned (bottom-centered), no measuring needed.
@@ -113,13 +153,32 @@ export function Tooltip({
   return (
     <div
       ref={ref}
-      className={`tooltip${peek ? " peek" : ""}`}
-      style={peek ? undefined : { left: pos.left, top: pos.top }}
+      className={`tooltip${peek ? " peek" : ""}${atTop ? " peek-top" : ""}`}
+      style={
+        peek
+          ? { transform: `translate(calc(-50% + ${drag.dx}px), ${drag.dy}px)` }
+          : { left: pos.left, top: pos.top }
+      }
       role="tooltip"
       // Tapping the card itself dismisses it (in addition to the outside/scroll
       // listeners); guard so a tap on the "Full details" button doesn't double-fire.
       onClick={peek ? () => onDismiss?.() : undefined}
     >
+      {peek && (
+        <div
+          className="tt-drag"
+          // Slide the card without dismissing it; stop the tap from bubbling to the
+          // card's dismiss handler so a grab-and-release doesn't close it.
+          onPointerDown={onHandleDown}
+          onPointerMove={onHandleMove}
+          onPointerUp={onHandleUp}
+          onPointerCancel={onHandleUp}
+          onClick={(e) => e.stopPropagation()}
+          aria-hidden="true"
+        >
+          <span className="tt-grip" />
+        </div>
+      )}
       <h5>{card.name}</h5>
       <div className="tt-sub">
         {classLabel(card.unitClass)}

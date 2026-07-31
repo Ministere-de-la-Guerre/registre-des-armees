@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { assetUrl } from "../data/assets";
 import { CLASS_LABELS } from "../domain/labels";
 import type { UnitCard } from "../domain/types";
@@ -50,14 +50,14 @@ export interface MedallionProps {
    *  cap badge is hidden. The grid shows the speed pill too (under the cap badge),
    *  driven by `!hideName` rather than this flag. */
   showSpeed?: boolean;
-  onClick?: () => void;
+  onClick?: (anchor?: DOMRect) => void;
   onContextMenu?: () => void;
   onHover?: (card: UnitCard, anchor: DOMRect) => void;
   onHoverEnd?: () => void;
   /** Touch peek: show the simplified stat card. On coarse-pointer devices this
    *  replaces one of the two gestures (see `peekOn`); it is inert on desktop,
    *  where hover already shows the same card and right-click opens full details. */
-  onPeek?: (card: UnitCard) => void;
+  onPeek?: (card: UnitCard, anchor: DOMRect) => void;
   /** Which touch gesture opens the peek card. Grid medallions peek on long-press
    *  (tap adds); tray medallions peek on tap (long-press removes). Default
    *  "longpress" matches the grid, the common case. */
@@ -97,6 +97,11 @@ export function Medallion({
 }: MedallionProps) {
   const [failed, setFailed] = useState(false);
   const coarse = isCoarsePointer();
+  // The peek stat card needs the tapped medallion's on-screen position so it can
+  // spawn clear of the unit (upper half when the unit is low on the screen). Read
+  // it from the root at gesture time — it's always in its final position by then.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const anchorRect = () => rootRef.current?.getBoundingClientRect() ?? new DOMRect();
   // Touch model. On desktop (fine pointer) the hook ignores mouse pointers, so a
   // long-press never fires and right-click/hover behave exactly as before.
   //   • Grid: no `onPeek` is passed, so tap = onClick and long-press = onContextMenu.
@@ -106,7 +111,7 @@ export function Medallion({
   //   • Tray (peekOn "tap"): tap = the simplified stat card; long-press keeps the
   //     right-click action (remove/clear).
   const peekActive = coarse && !!onPeek;
-  const longPressAction = peekActive && peekOn === "longpress" ? () => onPeek!(card) : onContextMenu;
+  const longPressAction = peekActive && peekOn === "longpress" ? () => onPeek!(card, anchorRect()) : onContextMenu;
   const longPress = useLongPress(longPressAction);
   const icon = assetUrl(card.icon);
   const badge = assetUrl(card.guerrillaBadge);
@@ -121,6 +126,7 @@ export function Medallion({
       }${dimmed ? " dimmed" : ""}${blocked ? " blocked" : ""}${overBudget ? " overbudget" : ""}${overCorps ? " overcorps" : ""}${atCap ? " atcap" : ""}${
         hideName ? " tray-mini" : ""
       }`}
+      ref={rootRef}
       role="button"
       tabIndex={0}
       aria-pressed={selected || inStaffSlot}
@@ -134,10 +140,10 @@ export function Medallion({
         // On touch, a tray medallion's tap opens the peek card instead of its
         // desktop click action (which is "show full details").
         if (peekActive && peekOn === "tap") {
-          onPeek!(card);
+          onPeek!(card, anchorRect());
           return;
         }
-        onClick?.();
+        onClick?.(anchorRect());
       }}
       onContextMenu={(e) => {
         if (!onContextMenu) return;

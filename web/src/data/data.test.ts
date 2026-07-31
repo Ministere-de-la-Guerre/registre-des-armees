@@ -6,6 +6,9 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { loadFaction } from "./load";
+import { emptyBuild, indexRoster, makeInstanceId, summarize } from "../state/build";
+import type { BuildState } from "../state/build";
 
 const DATA_DIR = resolve(process.cwd(), "public", "data");
 
@@ -80,4 +83,51 @@ describe("generated data", () => {
       expect(unplaced, file).toHaveLength(0);
     }
   });
+
+  // Real-roster pricing through the app's own path (loadFaction -> summarize), not
+  // the rules-unit factories: 13. Davout / I.C (1812 Russia) is the corps whose
+  // support-division sapper + skirmisher brigades discount as a set. Verified in game.
+  it("13. Davout (1812) prices the sapper + skirmisher support brigades as a set", async () => {
+    const roster = await loadFactionFromDisk("ntw3_ac_a11_x5_117");
+    const index = indexRoster(roster);
+    const byName = (needle: string): string => {
+      const hit = roster.cards.filter((c) => !c.isGeneral && c.name.includes(needle));
+      expect(hit, needle).toHaveLength(1);
+      return hit[0].unitKey;
+    };
+    const davout = roster.cards.find((c) => c.isGeneral && c.generalKind === "staff")!;
+    const sapper = byName("Sapeurs [G4]");
+    const tirailleur = byName("Tirailleurs [S2]");
+    const withUnits = (...keys: string[]): BuildState => ({
+      ...emptyBuild(),
+      staffSlotUnitKey: davout.unitKey,
+      instances: keys.map((unitKey) => ({ id: makeInstanceId(), unitKey })),
+    });
+
+    // Davout + 2 Sapeurs + 6 Tirailleurs: 600 + 552 + 1110 = 2262 base, minus
+    // floor(552*1/100)=5 and floor(1110*5/100)=55 -> 2202.
+    const full = summarize(index, withUnits(...Array<string>(2).fill(sapper), ...Array<string>(6).fill(tirailleur)));
+    expect(full.price.baseCost).toBe(2262);
+    expect(full.price.appliedDiscount).toBe(60);
+    expect(full.price.finalCost).toBe(2202);
+
+    // Either brigade alone earns nothing.
+    const skirmishersOnly = summarize(index, withUnits(...Array<string>(6).fill(tirailleur)));
+    expect(skirmishersOnly.price.finalCost).toBe(skirmishersOnly.price.baseCost);
+    const sappersOnly = summarize(index, withUnits(...Array<string>(2).fill(sapper)));
+    expect(sappersOnly.price.finalCost).toBe(sappersOnly.price.baseCost);
+  });
 });
+
+/** loadFaction() fetches; in tests serve the generated JSON straight off disk. */
+async function loadFactionFromDisk(factionKey: string) {
+  const body = readFileSync(resolve(DATA_DIR, "factions", `${factionKey}.json`), "utf-8");
+  const original = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(body, { status: 200, headers: { "content-type": "application/json" } })) as typeof fetch;
+  try {
+    return await loadFaction(factionKey);
+  } finally {
+    globalThis.fetch = original;
+  }
+}

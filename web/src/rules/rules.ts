@@ -23,6 +23,19 @@ const SUPPORT_PLACEMENT_SOURCES = new Set([
   "reserve_support_division",
 ]);
 
+// Corps-specific exception: a handful of corps grant a normal *brigade* discount to
+// the non-artillery (sapper / skirmisher) brigades of their final artillery-support
+// division, even though that division earns no discount as a whole. The artillery
+// reserve brigades in that division still earn nothing. Those non-artillery brigades
+// discount all-or-nothing together: in game, taking every skirmisher but no sapper
+// (or vice versa) earns nothing — only filling all of them credits, and then each
+// brigade credits its own brigade discount (never a division-level one). This mirrors
+// the in-game behaviour for these specific corps only — keep in parity with
+// SUPPORT_DIVISION_BRIGADE_DISCOUNT_FACTIONS in tools/army_builder_rules.py.
+const SUPPORT_DIVISION_BRIGADE_DISCOUNT_FACTIONS = new Set([
+  "ntw3_ac_a11_x5_117", // 13. Davout / I.C (1812 Russia)
+]);
+
 export const MAX_TOTAL_UNIT_CARDS = 31;
 export const MAX_BUILD_COST = 10000;
 export const MAX_FOOT_ARTILLERY = 2;
@@ -214,10 +227,21 @@ export function buildRosterTotals(
   const divisions = new Map<number, GroupTotal>();
   const brigades = new Map<string, GroupTotal>();
   const support = supportDivisions(recruitable, factionKey);
+  const supportBrigadeDiscount = SUPPORT_DIVISION_BRIGADE_DISCOUNT_FACTIONS.has(factionKey);
   for (const card of recruitable) {
     if (card.factionKey !== factionKey || card.isGeneral || card.placement === null) continue;
     const { division, brigade } = card.placement;
-    if (support.has(division)) continue; // support divisions earn no discount
+    if (support.has(division)) {
+      // Support divisions earn no division discount. For the exception corps, their
+      // non-artillery (sapper / skirmisher) brigades still earn a brigade discount,
+      // so record those brigade totals only (never the division total, and never the
+      // artillery reserve brigades).
+      if (supportBrigadeDiscount && !isArtillery(card)) {
+        const bkey = `${division}:${brigade}`;
+        brigades.set(bkey, addToGroup(brigades.get(bkey), card));
+      }
+      continue;
+    }
     divisions.set(division, addToGroup(divisions.get(division), card));
     const bkey = `${division}:${brigade}`;
     brigades.set(bkey, addToGroup(brigades.get(bkey), card));
@@ -302,6 +326,41 @@ export function calculateArmyCost(
           discount: groupDiscount(brigadeTotal),
         });
       }
+    }
+  }
+
+  // Orphan brigades: discount-eligible brigades whose division is itself a
+  // non-discounting support division (the SUPPORT_DIVISION_BRIGADE_DISCOUNT_FACTIONS
+  // exception). Their division never appears in `divisions`, so the loop above skips
+  // them; evaluate them here. They discount all-or-nothing as a set: every eligible
+  // brigade of that division must be complete before any of them credits, and then
+  // each credits its own brigade discount (the division total is never used).
+  const orphanBrigades = new Map<number, string[]>();
+  for (const bkey of brigadeKeys) {
+    const bdiv = Number(bkey.split(":")[0]);
+    if (divisions.has(bdiv)) continue;
+    const list = orphanBrigades.get(bdiv);
+    if (list) list.push(bkey);
+    else orphanBrigades.set(bdiv, [bkey]);
+  }
+  const orphanDivisionIds = [...orphanBrigades.keys()].sort((a, b) => a - b);
+  for (const bdiv of orphanDivisionIds) {
+    const bkeys = orphanBrigades.get(bdiv)!;
+    const allComplete = bkeys.every(
+      (bkey) => (selectedBrigades.get(bkey) ?? 0) >= brigades.get(bkey)!.requiredCount,
+    );
+    if (!allComplete) continue;
+    for (const bkey of bkeys) {
+      const brigadeTotal = brigades.get(bkey)!;
+      completed.push({
+        groupType: "brigade",
+        divisionId: bdiv,
+        brigadeId: Number(bkey.split(":")[1]),
+        rosterCost: brigadeTotal.rosterCost,
+        requiredCount: brigadeTotal.requiredCount,
+        selectedCount: selectedBrigades.get(bkey) ?? 0,
+        discount: groupDiscount(brigadeTotal),
+      });
     }
   }
 

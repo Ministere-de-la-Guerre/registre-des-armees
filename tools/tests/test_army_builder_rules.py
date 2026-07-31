@@ -170,6 +170,80 @@ class PricingTests(unittest.TestCase):
         self.assertEqual(result.normal_discount, 6)
         self.assertEqual(result.completed_groups[0].division_id, 1)
 
+    def test_davout_support_division_grants_sapper_skirmisher_brigade_discount(self) -> None:
+        # 13. Davout / I.C (1812 Russia) is the exception corps: the non-artillery
+        # (sapper / skirmisher) brigades of its final artillery-support division earn
+        # a brigade discount, while the artillery reserve brigades still do not.
+        faction = "ntw3_ac_a11_x5_117"
+        inf = card("inf", faction=faction, division=1, brigade=1, cost=500, cap=2)
+        art = card(
+            "art", faction=faction, unit_class="artillery_foot",
+            division=7, brigade=1, cost=100, cap=2,
+        )
+        sapper = card(
+            "ntw3_inf_grena_117_999_0523", faction=faction, unit_class="infantry_grenadiers",
+            division=7, brigade=5, cost=276, cap=2, unit_name="Sapeurs [G4]",
+        )
+        skirm = card(
+            "ntw3_inf_skirm_117_999_4780", faction=faction, unit_class="infantry_skirmishers",
+            division=7, brigade=6, cost=185, cap=6, unit_name="Tirailleurs [S2]",
+        )
+        roster = [inf, art, sapper, skirm]
+        selected = [inf, inf, art, art, sapper, sapper] + [skirm] * 6
+        result = calculate_army_cost(selected, roster, faction)
+        groups = {
+            (g.group_type, g.division_id, g.brigade_id) for g in result.completed_groups
+        }
+        self.assertIn(("division", 1, None), groups)
+        self.assertIn(("brigade", 7, 5), groups)
+        self.assertIn(("brigade", 7, 6), groups)
+        self.assertNotIn(("brigade", 7, 1), groups)
+        # 10 (div 1) + floor(552*1/100)=5 (sappers) + floor(1110*5/100)=55 (skirmishers).
+        self.assertEqual(result.normal_discount, 10 + 5 + 55)
+
+    def test_davout_support_division_brigades_discount_all_or_nothing(self) -> None:
+        faction = "ntw3_ac_a11_x5_117"
+        art = card(
+            "art", faction=faction, unit_class="artillery_foot",
+            division=7, brigade=1, cost=100, cap=2,
+        )
+        sapper = card(
+            "ntw3_inf_grena_117_999_0523", faction=faction, unit_class="infantry_grenadiers",
+            division=7, brigade=5, cost=276, cap=2, unit_name="Sapeurs [G4]",
+        )
+        skirm = card(
+            "ntw3_inf_skirm_117_999_4780", faction=faction, unit_class="infantry_skirmishers",
+            division=7, brigade=6, cost=185, cap=6, unit_name="Tirailleurs [S2]",
+        )
+        roster = [art, sapper, skirm]
+        # Every skirmisher but no sapper -> nothing (verified in game).
+        skirmishers_only = calculate_army_cost([skirm] * 6, roster, faction)
+        self.assertEqual(skirmishers_only.completed_groups, ())
+        self.assertEqual(skirmishers_only.final_cost, 6 * 185)
+        # Every sapper but no skirmisher -> likewise nothing.
+        sappers_only = calculate_army_cost([sapper, sapper], roster, faction)
+        self.assertEqual(sappers_only.completed_groups, ())
+        self.assertEqual(sappers_only.final_cost, 2 * 276)
+        # Both brigades filled -> each credits its own brigade discount.
+        both = calculate_army_cost([sapper, sapper] + [skirm] * 6, roster, faction)
+        self.assertEqual(both.normal_discount, 5 + 55)
+        self.assertEqual(both.final_cost, 552 + 1110 - 60)
+
+    def test_sapper_skirmisher_support_discount_is_scoped_to_exception_corps(self) -> None:
+        faction = "ntw3_ac_test_x5_001"  # not in the exception set
+        inf = card("inf", faction=faction, division=1, brigade=1, cost=500, cap=2)
+        art = card(
+            "art", faction=faction, unit_class="artillery_foot",
+            division=7, brigade=1, cost=100, cap=2,
+        )
+        sapper = card(
+            "ntw3_inf_grena_sap", faction=faction, unit_class="infantry_grenadiers",
+            division=7, brigade=5, cost=276, cap=2, unit_name="Sapeurs [G4]",
+        )
+        result = calculate_army_cost([inf, inf, art, art, sapper, sapper], [inf, art, sapper], faction)
+        self.assertEqual([g.division_id for g in result.completed_groups], [1])
+        self.assertEqual(result.normal_discount, 10)
+
     def test_builder_designated_specialist_reserve_earns_no_discount(self) -> None:
         # The builder can infer a support division of loose specialists with no
         # artillery; placement_source marks it, so it must earn no discount.

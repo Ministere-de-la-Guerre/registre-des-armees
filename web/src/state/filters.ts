@@ -7,6 +7,7 @@
 // by one global range. Combat generals are classified by their underlying unit
 // class. Cost/men/cap/stars stay global.
 
+import { matchesSearch } from "../domain/searchText";
 import { ABILITY_KEYS, type UnitAbilities, type UnitCard } from "../domain/types";
 
 export type Tri = "any" | "yes" | "no";
@@ -188,10 +189,7 @@ function rangeActive(r: NumericRange): boolean {
 
 /** True when a card matches the ordinary (dimming) filters. */
 export function matchesCard(card: UnitCard, f: FilterState): boolean {
-  if (f.search.trim()) {
-    const q = f.search.trim().toLowerCase();
-    if (!card.name.toLowerCase().includes(q) && !card.unitKey.toLowerCase().includes(q)) return false;
-  }
+  if (f.search.trim() && !matchesSearch(`${card.name} ${card.unitKey}`, f.search)) return false;
   for (const def of GLOBAL_FIELDS) {
     if (!inRange(def.get(card), f.numeric[def.id])) return false;
   }

@@ -30,7 +30,7 @@ interface TrayProps {
   onHover: (card: UnitCard, anchor: DOMRect) => void;
   onHoverEnd: () => void;
   /** Touch peek: tap a tray medallion → simplified stat card (inert on desktop). */
-  onPeek: (card: UnitCard) => void;
+  onPeek: (card: UnitCard, anchor: DOMRect) => void;
   /** TOW-only "Corps N/4" roll stat for the collapsed touch strip; null otherwise. */
   corpsStat: { count: number; max: number; over: boolean } | null;
 }

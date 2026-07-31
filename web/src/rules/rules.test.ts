@@ -196,6 +196,107 @@ describe("pricing", () => {
     expect(result.completedGroups).toHaveLength(0);
   });
 
+  it("13. Davout (a11_x5_117): sapper/skirmisher brigades of the support division earn a brigade discount", () => {
+    const faction = "ntw3_ac_a11_x5_117";
+    const inf = card("inf", { faction, division: 1, brigade: 1, cost: 500, cap: 2 });
+    // Division 7 = the final artillery-support division: artillery reserve brigades
+    // plus a sapper brigade and a skirmisher brigade.
+    const art = card("art", { faction, unitClass: "artillery_foot", division: 7, brigade: 1, cost: 100, cap: 2 });
+    const sapper = card("ntw3_inf_grena_117_999_0523", {
+      faction,
+      unitClass: "infantry_grenadiers",
+      division: 7,
+      brigade: 5,
+      cost: 276,
+      cap: 2,
+      name: "Sapeurs [G4]",
+    });
+    const skirm = card("ntw3_inf_skirm_117_999_4780", {
+      faction,
+      unitClass: "infantry_skirmishers",
+      division: 7,
+      brigade: 6,
+      cost: 185,
+      cap: 6,
+      name: "Tirailleurs [S2]",
+    });
+    const roster = [inf, art, sapper, skirm];
+    const selected = [
+      inf,
+      inf,
+      art,
+      art, // completing the artillery brigade grants nothing
+      sapper,
+      sapper,
+      ...Array<RulesUnit>(6).fill(skirm),
+    ];
+    const result = calculateArmyCost(selected, roster, faction);
+    const byGroup = result.completedGroups.map((g) => `${g.groupType}:${g.divisionId}:${g.brigadeId}`);
+    // Combat division 1 discounts as usual; the sapper (7:5) and skirmisher (7:6)
+    // brigades each earn a brigade discount; the artillery reserve brigade (7:1) does not.
+    expect(byGroup).toContain("division:1:null");
+    expect(byGroup).toContain("brigade:7:5");
+    expect(byGroup).toContain("brigade:7:6");
+    expect(byGroup).not.toContain("brigade:7:1");
+    // 10 (div 1) + floor(552*1/100)=5 (sappers) + floor(1110*5/100)=55 (skirmishers).
+    expect(result.normalDiscount).toBe(10 + 5 + 55);
+  });
+
+  it("13. Davout: the support division's sapper/skirmisher brigades discount all-or-nothing", () => {
+    const faction = "ntw3_ac_a11_x5_117";
+    const art = card("art", { faction, unitClass: "artillery_foot", division: 7, brigade: 1, cost: 100, cap: 2 });
+    const sapper = card("ntw3_inf_grena_117_999_0523", {
+      faction,
+      unitClass: "infantry_grenadiers",
+      division: 7,
+      brigade: 5,
+      cost: 276,
+      cap: 2,
+      name: "Sapeurs [G4]",
+    });
+    const skirm = card("ntw3_inf_skirm_117_999_4780", {
+      faction,
+      unitClass: "infantry_skirmishers",
+      division: 7,
+      brigade: 6,
+      cost: 185,
+      cap: 6,
+      name: "Tirailleurs [S2]",
+    });
+    const roster = [art, sapper, skirm];
+    // Every skirmisher but no sapper -> nothing (verified in game).
+    const skirmishersOnly = calculateArmyCost(Array<RulesUnit>(6).fill(skirm), roster, faction);
+    expect(skirmishersOnly.completedGroups).toHaveLength(0);
+    expect(skirmishersOnly.finalCost).toBe(6 * 185);
+    // Every sapper but no skirmisher -> likewise nothing.
+    const sappersOnly = calculateArmyCost([sapper, sapper], roster, faction);
+    expect(sappersOnly.completedGroups).toHaveLength(0);
+    expect(sappersOnly.finalCost).toBe(2 * 276);
+    // Both brigades filled -> each credits its own brigade discount.
+    const both = calculateArmyCost([sapper, sapper, ...Array<RulesUnit>(6).fill(skirm)], roster, faction);
+    expect(both.normalDiscount).toBe(5 + 55);
+    expect(both.finalCost).toBe(552 + 1110 - 60);
+  });
+
+  it("the sapper/skirmisher support-division discount is scoped to the exception corps only", () => {
+    const faction = "ntw3_ac_test_x5_001"; // not in the exception set
+    const inf = card("inf", { faction, division: 1, brigade: 1, cost: 500, cap: 2 });
+    const art = card("art", { faction, unitClass: "artillery_foot", division: 7, brigade: 1, cost: 100, cap: 2 });
+    const sapper = card("ntw3_inf_grena_sap", {
+      faction,
+      unitClass: "infantry_grenadiers",
+      division: 7,
+      brigade: 5,
+      cost: 276,
+      cap: 2,
+      name: "Sapeurs [G4]",
+    });
+    const result = calculateArmyCost([inf, inf, art, art, sapper, sapper], [inf, art, sapper], faction);
+    // Only the combat division discounts; the support division earns nothing here.
+    expect(result.completedGroups.map((g) => g.divisionId)).toEqual([1]);
+    expect(result.normalDiscount).toBe(10);
+  });
+
   it("a combat division keeps its discount even with organic divisional artillery", () => {
     const faction = "ntw3_ac_test_x5_001";
     // Division 1 mixes infantry and a divisional battery -> still a combat division.

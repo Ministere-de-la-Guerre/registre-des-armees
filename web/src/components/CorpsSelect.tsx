@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef } from "react";
 import { assetUrl } from "../data/assets";
+import { matchesSearch } from "../domain/searchText";
 import { type CorpsEntry, type CorpsIndex, SIDE_LABELS } from "../domain/types";
 
 export interface CorpsUiState {
@@ -39,7 +40,7 @@ export function CorpsSelect({
   }, []);
 
   const { sides, total, matched } = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = search.trim();
     let total = 0;
     let matched = 0;
     const sides = index.sides
@@ -52,7 +53,7 @@ export function CorpsSelect({
             corps: t.corps.filter((c) => {
               total += 1;
               const ok =
-                (!q || c.name.toLowerCase().includes(q) || c.factionKey.toLowerCase().includes(q)) &&
+                (!q || matchesSearch(`${c.name} ${c.factionKey}`, q)) &&
                 (!acOnly || c.isArmyCorps) &&
                 (!towOnly || !c.isArmyCorps);
               if (ok) matched += 1;

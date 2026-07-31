@@ -31,7 +31,7 @@ export interface MedallionHandlers {
   atCapOf: (card: UnitCard) => boolean;
   /** Grid tap. Desktop: add immediately. Touch: first tap primes + peeks, a second
    *  tap on the same unit adds (see Builder's primeOrAct). */
-  onAdd: (card: UnitCard) => void;
+  onAdd: (card: UnitCard, anchor?: DOMRect) => void;
   /** Grid secondary. Desktop: right-click → full details. Touch: long-press →
    *  remove one copy from the bar (deselect). */
   onDetails: (card: UnitCard) => void;
@@ -60,7 +60,7 @@ function UnitMedallion({ card, h }: { card: UnitCard; h: MedallionHandlers }) {
       overBudget={h.isOverBudget(card)}
       overCorps={h.isOverCorps(card)}
       atCap={h.atCapOf(card)}
-      onClick={() => h.onAdd(card)}
+      onClick={(anchor) => h.onAdd(card, anchor)}
       onContextMenu={() => h.onDetails(card)}
       onHover={h.onHover}
       onHoverEnd={h.onHoverEnd}
@@ -88,7 +88,7 @@ export function BuilderGrid({
    *  When present it replaces the Roman-numeral division label. */
   divisionNames?: Map<number, string>;
   handlers: MedallionHandlers;
-  onStaffToggle: (card: UnitCard) => void;
+  onStaffToggle: (card: UnitCard, anchor?: DOMRect) => void;
 }) {
   return (
     <>
@@ -107,7 +107,7 @@ export function BuilderGrid({
               dimmed={handlers.isDimmed(g)}
               overBudget={handlers.isOverBudget(g)}
               overCorps={handlers.isOverCorps(g)}
-              onClick={() => onStaffToggle(g)}
+              onClick={(anchor) => onStaffToggle(g, anchor)}
               onContextMenu={() => handlers.onDetails(g)}
               onHover={handlers.onHover}
               onHoverEnd={handlers.onHoverEnd}
@@ -149,7 +149,7 @@ export function BuilderGrid({
                           dimmed={handlers.isDimmed(card)}
                           overBudget={handlers.isOverBudget(card)}
                           overCorps={handlers.isOverCorps(card)}
-                          onClick={() => onStaffToggle(card)}
+                          onClick={(anchor) => onStaffToggle(card, anchor)}
                           onContextMenu={() => handlers.onDetails(card)}
                           onHover={handlers.onHover}
                           onHoverEnd={handlers.onHoverEnd}

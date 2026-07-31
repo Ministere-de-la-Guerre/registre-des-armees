@@ -35,6 +35,21 @@ SUPPORT_PLACEMENT_SOURCES = frozenset(
     }
 )
 
+# Corps-specific exception: a handful of corps grant a normal *brigade* discount to
+# the non-artillery (sapper / skirmisher) brigades of their final artillery-support
+# division, even though that division earns no discount as a whole. The artillery
+# reserve brigades in that division still earn nothing. Those non-artillery brigades
+# discount all-or-nothing together: in game, taking every skirmisher but no sapper (or
+# vice versa) earns nothing — only filling all of them credits, and then each brigade
+# credits its own brigade discount (never a division-level one). This mirrors the
+# in-game behaviour for these specific corps only — keep in parity with
+# SUPPORT_DIVISION_BRIGADE_DISCOUNT_FACTIONS in web/src/rules/rules.ts.
+SUPPORT_DIVISION_BRIGADE_DISCOUNT_FACTIONS = frozenset(
+    {
+        "ntw3_ac_a11_x5_117",  # 13. Davout / I.C (1812 Russia)
+    }
+)
+
 MAX_TOTAL_UNIT_CARDS = 31
 MAX_FOOT_ARTILLERY = 2
 MAX_HORSE_ARTILLERY = 1
@@ -317,13 +332,20 @@ def build_roster_totals(
 
     recruitable_cards = list(recruitable_cards)
     support = support_divisions(recruitable_cards, faction_key)
+    support_brigade_discount = faction_key in SUPPORT_DIVISION_BRIGADE_DISCOUNT_FACTIONS
     for card in recruitable_cards:
         if card.faction_key != faction_key or card.is_general or card.placement is None:
             continue
         division = card.placement.division_id
-        if division in support:  # support divisions earn no discount
-            continue
         brigade = card.placement.brigade_id
+        if division in support:
+            # Support divisions earn no division discount. For the exception corps,
+            # their non-artillery (sapper / skirmisher) brigades still earn a brigade
+            # discount, so record those brigade totals only (never the division total,
+            # and never the artillery reserve brigades).
+            if support_brigade_discount and not _is_artillery(card):
+                brigades[(division, brigade)] = brigades[(division, brigade)].add(card)
+            continue
         divisions[division] = divisions[division].add(card)
         brigades[(division, brigade)] = brigades[(division, brigade)].add(card)
 
@@ -395,6 +417,36 @@ def calculate_army_cost(
                         brigade_total.required_count, brigade_selected, discount,
                     )
                 )
+
+    # Orphan brigades: discount-eligible brigades whose division is itself a
+    # non-discounting support division (the SUPPORT_DIVISION_BRIGADE_DISCOUNT_FACTIONS
+    # exception). Their division never appears in `divisions`, so the loop above skips
+    # them; evaluate them here. They discount all-or-nothing as a set: every eligible
+    # brigade of that division must be complete before any of them credits, and then
+    # each credits its own brigade discount (the division total is never used).
+    orphan_brigades: dict[int, list[tuple[int, int]]] = defaultdict(list)
+    for division_brigade in sorted(brigades):
+        brigade_division = division_brigade[0]
+        if brigade_division in divisions:
+            continue
+        orphan_brigades[brigade_division].append(division_brigade)
+
+    for brigade_division in sorted(orphan_brigades):
+        division_brigades = orphan_brigades[brigade_division]
+        if any(
+            selected_brigades[key] < brigades[key].required_count
+            for key in division_brigades
+        ):
+            continue
+        for division_brigade in division_brigades:
+            brigade_total = brigades[division_brigade]
+            completed.append(
+                CompletedGroup(
+                    "brigade", brigade_division, division_brigade[1],
+                    brigade_total.roster_cost, brigade_total.required_count,
+                    selected_brigades[division_brigade], group_discount(brigade_total),
+                )
+            )
 
     normal_discount = sum(group.discount for group in completed)
     german_states = is_german_states(faction_key)

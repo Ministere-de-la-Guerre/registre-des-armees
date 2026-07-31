@@ -92,7 +92,7 @@ export function Builder({
   const [hovered, setHovered] = useState<{ card: UnitCard; anchor: DOMRect } | null>(null);
   // Touch peek: the simplified stat card shown by long-press (grid) or tap (tray).
   // Separate from `hovered` (which is desktop-only) and from `detail` (full panel).
-  const [peek, setPeek] = useState<UnitCard | null>(null);
+  const [peek, setPeek] = useState<{ card: UnitCard; anchor: DOMRect } | null>(null);
   // Touch grid two-tap model: the unit whose stat card a first tap has shown. While
   // it stays primed, a tap adds it (rather than re-peeking); tapping a different unit
   // moves the priming. Always null on desktop, which adds on the first click.
@@ -280,12 +280,12 @@ export function Builder({
   // Touch grid tap dispatcher. A first tap on a unit shows its stat card and primes
   // it; a second tap (and any after) runs its action — add, or set commander for a
   // staff general. Tapping a different unit re-primes that one instead.
-  const primeOrAct = (card: UnitCard, act: (c: UnitCard) => void) => {
+  const primeOrAct = (card: UnitCard, act: (c: UnitCard) => void, anchor: DOMRect) => {
     if (primedKey === card.unitKey) {
       act(card);
     } else {
       setPrimedKey(card.unitKey);
-      setPeek(card);
+      setPeek({ card, anchor });
     }
   };
 
@@ -416,7 +416,7 @@ export function Builder({
     qtyOf,
     groupQtyOf: groupQty,
     atCapOf,
-    onAdd: coarse ? (card) => primeOrAct(card, tryAdd) : tryAdd,
+    onAdd: coarse ? (card, anchor) => primeOrAct(card, tryAdd, anchor ?? new DOMRect()) : tryAdd,
     onDetails: coarse ? (card) => removeOneByKey(card.unitKey) : setDetail,
     onHover: (card, anchor) => setHovered({ card, anchor }),
     onHoverEnd: () => setHovered(null),
@@ -743,7 +743,7 @@ export function Builder({
             brigadeMeta={combinedView ? EMPTY_BRIGADE_META : brigadeMeta}
             divisionNames={divisionNames}
             handlers={handlers}
-            onStaffToggle={coarse ? (card) => primeOrAct(card, toggleStaff) : toggleStaff}
+            onStaffToggle={coarse ? (card, anchor) => primeOrAct(card, toggleStaff, anchor ?? new DOMRect()) : toggleStaff}
           />
           {unplaced.length > 0 && (
             <section className="division" aria-label="Other units">
@@ -787,11 +787,11 @@ export function Builder({
         onDetails={setDetail}
         onHover={(c, a) => setHovered({ card: c, anchor: a })}
         onHoverEnd={() => setHovered(null)}
-        onPeek={(card) => {
+        onPeek={(card, anchor) => {
           // A tray peek is not a grid prime; clear any lingering grid prime so a
           // later tap on that grid unit re-peeks rather than acting.
           setPrimedKey(null);
-          setPeek(card);
+          setPeek({ card, anchor });
         }}
         corpsStat={isTow && towBuild ? { count: towBuild.count, max: LEGACY_TOW_MAX_SOURCE_CORPS, over: towBuild.over } : null}
       />
@@ -805,12 +805,12 @@ export function Builder({
       )}
       {peek && !detail && (
         <Tooltip
-          card={peek}
-          anchor={new DOMRect()}
+          card={peek.card}
+          anchor={peek.anchor}
           variant="peek"
-          blockReason={blockReasons.get(peek.unitKey) ?? null}
+          blockReason={blockReasons.get(peek.card.unitKey) ?? null}
           onFullDetails={() => {
-            setDetail(peek);
+            setDetail(peek.card);
             dismissPeek();
           }}
           onDismiss={dismissPeek}
@@ -870,7 +870,7 @@ function UnplacedMedallion({ card, h }: { card: UnitCard; h: MedallionHandlers }
       blocked={blocked}
       overBudget={h.isOverBudget(card)}
       atCap={h.atCapOf(card)}
-      onClick={() => h.onAdd(card)}
+      onClick={(anchor) => h.onAdd(card, anchor)}
       onContextMenu={() => h.onDetails(card)}
       onHover={h.onHover}
       onHoverEnd={h.onHoverEnd}
