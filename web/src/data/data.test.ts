@@ -86,8 +86,9 @@ describe("generated data", () => {
 
   // Real-roster pricing through the app's own path (loadFaction -> summarize), not
   // the rules-unit factories: 13. Davout / I.C (1812 Russia) is the corps whose
-  // support-division sapper + skirmisher brigades discount as a set. Verified in game.
-  it("13. Davout (1812) prices the sapper + skirmisher support brigades as a set", async () => {
+  // support-division sapper + skirmisher brigades each earn their own brigade
+  // discount. Verified in game.
+  it("13. Davout (1812) discounts each support-division sapper/skirmisher brigade on its own", async () => {
     const roster = await loadFactionFromDisk("ntw3_ac_a11_x5_117");
     const index = indexRoster(roster);
     const byName = (needle: string): string => {
@@ -111,11 +112,19 @@ describe("generated data", () => {
     expect(full.price.appliedDiscount).toBe(60);
     expect(full.price.finalCost).toBe(2202);
 
-    // Either brigade alone earns nothing.
+    // Either brigade alone still earns its own brigade discount.
     const skirmishersOnly = summarize(index, withUnits(...Array<string>(6).fill(tirailleur)));
-    expect(skirmishersOnly.price.finalCost).toBe(skirmishersOnly.price.baseCost);
+    expect(skirmishersOnly.price.baseCost).toBe(1710);
+    expect(skirmishersOnly.price.appliedDiscount).toBe(55);
+    expect(skirmishersOnly.price.finalCost).toBe(1655);
     const sappersOnly = summarize(index, withUnits(...Array<string>(2).fill(sapper)));
-    expect(sappersOnly.price.finalCost).toBe(sappersOnly.price.baseCost);
+    expect(sappersOnly.price.baseCost).toBe(1152);
+    expect(sappersOnly.price.appliedDiscount).toBe(5);
+    expect(sappersOnly.price.finalCost).toBe(1147);
+
+    // A partially filled brigade still earns nothing.
+    const partial = summarize(index, withUnits(sapper));
+    expect(partial.price.finalCost).toBe(partial.price.baseCost);
   });
 });
 

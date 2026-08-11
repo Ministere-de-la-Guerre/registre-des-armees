@@ -201,7 +201,7 @@ class PricingTests(unittest.TestCase):
         # 10 (div 1) + floor(552*1/100)=5 (sappers) + floor(1110*5/100)=55 (skirmishers).
         self.assertEqual(result.normal_discount, 10 + 5 + 55)
 
-    def test_davout_support_division_brigades_discount_all_or_nothing(self) -> None:
+    def test_davout_support_division_brigades_discount_independently(self) -> None:
         faction = "ntw3_ac_a11_x5_117"
         art = card(
             "art", faction=faction, unit_class="artillery_foot",
@@ -216,14 +216,26 @@ class PricingTests(unittest.TestCase):
             division=7, brigade=6, cost=185, cap=6, unit_name="Tirailleurs [S2]",
         )
         roster = [art, sapper, skirm]
-        # Every skirmisher but no sapper -> nothing (verified in game).
+        # Every skirmisher but no sapper -> the skirmisher brigade alone credits.
         skirmishers_only = calculate_army_cost([skirm] * 6, roster, faction)
-        self.assertEqual(skirmishers_only.completed_groups, ())
-        self.assertEqual(skirmishers_only.final_cost, 6 * 185)
-        # Every sapper but no skirmisher -> likewise nothing.
+        self.assertEqual(
+            [(g.group_type, g.division_id, g.brigade_id) for g in skirmishers_only.completed_groups],
+            [("brigade", 7, 6)],
+        )
+        self.assertEqual(skirmishers_only.normal_discount, 55)
+        self.assertEqual(skirmishers_only.final_cost, 1110 - 55)
+        # Every sapper but no skirmisher -> the sapper brigade alone credits.
         sappers_only = calculate_army_cost([sapper, sapper], roster, faction)
-        self.assertEqual(sappers_only.completed_groups, ())
-        self.assertEqual(sappers_only.final_cost, 2 * 276)
+        self.assertEqual(
+            [(g.group_type, g.division_id, g.brigade_id) for g in sappers_only.completed_groups],
+            [("brigade", 7, 5)],
+        )
+        self.assertEqual(sappers_only.normal_discount, 5)
+        self.assertEqual(sappers_only.final_cost, 552 - 5)
+        # A partially filled brigade still credits nothing.
+        partial = calculate_army_cost([sapper], roster, faction)
+        self.assertEqual(partial.completed_groups, ())
+        self.assertEqual(partial.final_cost, 276)
         # Both brigades filled -> each credits its own brigade discount.
         both = calculate_army_cost([sapper, sapper] + [skirm] * 6, roster, faction)
         self.assertEqual(both.normal_discount, 5 + 55)

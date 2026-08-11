@@ -26,12 +26,12 @@ const SUPPORT_PLACEMENT_SOURCES = new Set([
 // Corps-specific exception: a handful of corps grant a normal *brigade* discount to
 // the non-artillery (sapper / skirmisher) brigades of their final artillery-support
 // division, even though that division earns no discount as a whole. The artillery
-// reserve brigades in that division still earn nothing. Those non-artillery brigades
-// discount all-or-nothing together: in game, taking every skirmisher but no sapper
-// (or vice versa) earns nothing — only filling all of them credits, and then each
-// brigade credits its own brigade discount (never a division-level one). This mirrors
-// the in-game behaviour for these specific corps only — keep in parity with
-// SUPPORT_DIVISION_BRIGADE_DISCOUNT_FACTIONS in tools/army_builder_rules.py.
+// reserve brigades in that division still earn nothing. Each eligible brigade credits
+// independently, exactly like an ordinary brigade: filling just the sapper brigade (or
+// just the skirmisher brigade) earns that brigade's own discount, and the division
+// total is never used. This mirrors the in-game behaviour for these specific corps
+// only — keep in parity with SUPPORT_DIVISION_BRIGADE_DISCOUNT_FACTIONS in
+// tools/army_builder_rules.py.
 const SUPPORT_DIVISION_BRIGADE_DISCOUNT_FACTIONS = new Set([
   "ntw3_ac_a11_x5_117", // 13. Davout / I.C (1812 Russia)
 ]);
@@ -332,36 +332,23 @@ export function calculateArmyCost(
   // Orphan brigades: discount-eligible brigades whose division is itself a
   // non-discounting support division (the SUPPORT_DIVISION_BRIGADE_DISCOUNT_FACTIONS
   // exception). Their division never appears in `divisions`, so the loop above skips
-  // them; evaluate them here. They discount all-or-nothing as a set: every eligible
-  // brigade of that division must be complete before any of them credits, and then
-  // each credits its own brigade discount (the division total is never used).
-  const orphanBrigades = new Map<number, string[]>();
+  // them; evaluate them here. Each credits independently on its own completeness (the
+  // division total is never used).
   for (const bkey of brigadeKeys) {
-    const bdiv = Number(bkey.split(":")[0]);
+    const [bdiv, bid] = bkey.split(":").map(Number);
     if (divisions.has(bdiv)) continue;
-    const list = orphanBrigades.get(bdiv);
-    if (list) list.push(bkey);
-    else orphanBrigades.set(bdiv, [bkey]);
-  }
-  const orphanDivisionIds = [...orphanBrigades.keys()].sort((a, b) => a - b);
-  for (const bdiv of orphanDivisionIds) {
-    const bkeys = orphanBrigades.get(bdiv)!;
-    const allComplete = bkeys.every(
-      (bkey) => (selectedBrigades.get(bkey) ?? 0) >= brigades.get(bkey)!.requiredCount,
-    );
-    if (!allComplete) continue;
-    for (const bkey of bkeys) {
-      const brigadeTotal = brigades.get(bkey)!;
-      completed.push({
-        groupType: "brigade",
-        divisionId: bdiv,
-        brigadeId: Number(bkey.split(":")[1]),
-        rosterCost: brigadeTotal.rosterCost,
-        requiredCount: brigadeTotal.requiredCount,
-        selectedCount: selectedBrigades.get(bkey) ?? 0,
-        discount: groupDiscount(brigadeTotal),
-      });
-    }
+    const brigadeTotal = brigades.get(bkey)!;
+    const brigadeSelected = selectedBrigades.get(bkey) ?? 0;
+    if (brigadeSelected < brigadeTotal.requiredCount) continue;
+    completed.push({
+      groupType: "brigade",
+      divisionId: bdiv,
+      brigadeId: bid,
+      rosterCost: brigadeTotal.rosterCost,
+      requiredCount: brigadeTotal.requiredCount,
+      selectedCount: brigadeSelected,
+      discount: groupDiscount(brigadeTotal),
+    });
   }
 
   const normalDiscount = completed.reduce((sum, g) => sum + g.discount, 0);

@@ -38,12 +38,12 @@ SUPPORT_PLACEMENT_SOURCES = frozenset(
 # Corps-specific exception: a handful of corps grant a normal *brigade* discount to
 # the non-artillery (sapper / skirmisher) brigades of their final artillery-support
 # division, even though that division earns no discount as a whole. The artillery
-# reserve brigades in that division still earn nothing. Those non-artillery brigades
-# discount all-or-nothing together: in game, taking every skirmisher but no sapper (or
-# vice versa) earns nothing — only filling all of them credits, and then each brigade
-# credits its own brigade discount (never a division-level one). This mirrors the
-# in-game behaviour for these specific corps only — keep in parity with
-# SUPPORT_DIVISION_BRIGADE_DISCOUNT_FACTIONS in web/src/rules/rules.ts.
+# reserve brigades in that division still earn nothing. Each eligible brigade credits
+# independently, exactly like an ordinary brigade: filling just the sapper brigade (or
+# just the skirmisher brigade) earns that brigade's own discount, and the division
+# total is never used. This mirrors the in-game behaviour for these specific corps
+# only — keep in parity with SUPPORT_DIVISION_BRIGADE_DISCOUNT_FACTIONS in
+# web/src/rules/rules.ts.
 SUPPORT_DIVISION_BRIGADE_DISCOUNT_FACTIONS = frozenset(
     {
         "ntw3_ac_a11_x5_117",  # 13. Davout / I.C (1812 Russia)
@@ -421,32 +421,23 @@ def calculate_army_cost(
     # Orphan brigades: discount-eligible brigades whose division is itself a
     # non-discounting support division (the SUPPORT_DIVISION_BRIGADE_DISCOUNT_FACTIONS
     # exception). Their division never appears in `divisions`, so the loop above skips
-    # them; evaluate them here. They discount all-or-nothing as a set: every eligible
-    # brigade of that division must be complete before any of them credits, and then
-    # each credits its own brigade discount (the division total is never used).
-    orphan_brigades: dict[int, list[tuple[int, int]]] = defaultdict(list)
+    # them; evaluate them here. Each credits independently on its own completeness (the
+    # division total is never used).
     for division_brigade in sorted(brigades):
-        brigade_division = division_brigade[0]
+        brigade_division, brigade_id = division_brigade
         if brigade_division in divisions:
             continue
-        orphan_brigades[brigade_division].append(division_brigade)
-
-    for brigade_division in sorted(orphan_brigades):
-        division_brigades = orphan_brigades[brigade_division]
-        if any(
-            selected_brigades[key] < brigades[key].required_count
-            for key in division_brigades
-        ):
+        brigade_total = brigades[division_brigade]
+        brigade_selected = selected_brigades[division_brigade]
+        if brigade_selected < brigade_total.required_count:
             continue
-        for division_brigade in division_brigades:
-            brigade_total = brigades[division_brigade]
-            completed.append(
-                CompletedGroup(
-                    "brigade", brigade_division, division_brigade[1],
-                    brigade_total.roster_cost, brigade_total.required_count,
-                    selected_brigades[division_brigade], group_discount(brigade_total),
-                )
+        completed.append(
+            CompletedGroup(
+                "brigade", brigade_division, brigade_id,
+                brigade_total.roster_cost, brigade_total.required_count,
+                brigade_selected, group_discount(brigade_total),
             )
+        )
 
     normal_discount = sum(group.discount for group in completed)
     german_states = is_german_states(faction_key)

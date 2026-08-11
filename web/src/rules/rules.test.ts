@@ -242,7 +242,7 @@ describe("pricing", () => {
     expect(result.normalDiscount).toBe(10 + 5 + 55);
   });
 
-  it("13. Davout: the support division's sapper/skirmisher brigades discount all-or-nothing", () => {
+  it("13. Davout: the support division's sapper/skirmisher brigades discount independently", () => {
     const faction = "ntw3_ac_a11_x5_117";
     const art = card("art", { faction, unitClass: "artillery_foot", division: 7, brigade: 1, cost: 100, cap: 2 });
     const sapper = card("ntw3_inf_grena_117_999_0523", {
@@ -264,14 +264,24 @@ describe("pricing", () => {
       name: "Tirailleurs [S2]",
     });
     const roster = [art, sapper, skirm];
-    // Every skirmisher but no sapper -> nothing (verified in game).
+    // Every skirmisher but no sapper -> the skirmisher brigade alone credits.
     const skirmishersOnly = calculateArmyCost(Array<RulesUnit>(6).fill(skirm), roster, faction);
-    expect(skirmishersOnly.completedGroups).toHaveLength(0);
-    expect(skirmishersOnly.finalCost).toBe(6 * 185);
-    // Every sapper but no skirmisher -> likewise nothing.
+    expect(skirmishersOnly.completedGroups.map((g) => `${g.groupType}:${g.divisionId}:${g.brigadeId}`)).toEqual([
+      "brigade:7:6",
+    ]);
+    expect(skirmishersOnly.normalDiscount).toBe(55);
+    expect(skirmishersOnly.finalCost).toBe(1110 - 55);
+    // Every sapper but no skirmisher -> the sapper brigade alone credits.
     const sappersOnly = calculateArmyCost([sapper, sapper], roster, faction);
-    expect(sappersOnly.completedGroups).toHaveLength(0);
-    expect(sappersOnly.finalCost).toBe(2 * 276);
+    expect(sappersOnly.completedGroups.map((g) => `${g.groupType}:${g.divisionId}:${g.brigadeId}`)).toEqual([
+      "brigade:7:5",
+    ]);
+    expect(sappersOnly.normalDiscount).toBe(5);
+    expect(sappersOnly.finalCost).toBe(552 - 5);
+    // A partially filled brigade still credits nothing.
+    const partial = calculateArmyCost([sapper], roster, faction);
+    expect(partial.completedGroups).toHaveLength(0);
+    expect(partial.finalCost).toBe(276);
     // Both brigades filled -> each credits its own brigade discount.
     const both = calculateArmyCost([sapper, sapper, ...Array<RulesUnit>(6).fill(skirm)], roster, faction);
     expect(both.normalDiscount).toBe(5 + 55);
