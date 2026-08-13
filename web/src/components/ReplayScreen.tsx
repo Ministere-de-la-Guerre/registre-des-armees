@@ -16,10 +16,12 @@ import { BuildRepository, type SavedBuild } from "../state/saves";
 import {
   type ReplaySession,
   emptyReplaySession,
+  replayArmyIssues,
   replayBuildName,
   resolveReplayArmy,
   savedBuildFromReplayArmy,
 } from "../state/replayBuild";
+import { MAX_BUILD_COST } from "../rules/rules";
 import { Medallion } from "./Medallion";
 
 /** Replays are a couple of MB; anything this large is not one, and we would
@@ -269,6 +271,8 @@ function costOf(view: ArmyView): number | null {
   return summarize(view.index, view.build).price.finalCost;
 }
 
+const OVER_TITLE = `Over the ${MAX_BUILD_COST.toLocaleString()} MP limit this builder allows`;
+
 function ArmyCard({ view, active, onClick }: { view: ArmyView; active: boolean; onClick: () => void }) {
   const { army, entry } = view;
   const flag = assetUrl(entry?.flag ?? null);
@@ -283,7 +287,15 @@ function ArmyCard({ view, active, onClick }: { view: ArmyView; active: boolean; 
         <span className="corps-name">{army.player || "AI / unassigned"}</span>
         <span className="corps-meta">{entry?.name ?? army.corpsName ?? army.factionKey}</span>
         <span className="corps-meta">
-          {cards} cards{cost !== null && ` · ${cost.toLocaleString()} MP`}
+          {cards} cards
+          {cost !== null && (
+            <>
+              {" · "}
+              <span className={cost > MAX_BUILD_COST ? "over" : undefined} title={cost > MAX_BUILD_COST ? OVER_TITLE : undefined}>
+                {cost.toLocaleString()} MP
+              </span>
+            </>
+          )}
         </span>
       </span>
     </button>
@@ -293,6 +305,8 @@ function ArmyCard({ view, active, onClick }: { view: ArmyView; active: boolean; 
 function ArmyDetail({ view, onSave, onOpen }: { view: ArmyView; onSave: () => void; onOpen: () => void }) {
   const { army, entry, index, build, missingKeys } = view;
   const summary = index ? summarize(index, build) : null;
+  const issues = summary ? replayArmyIssues(summary) : [];
+  const overCost = !!summary && summary.price.finalCost > MAX_BUILD_COST;
   const postFlag = assetUrl(entry?.postSelectionFlag ?? entry?.flag ?? null);
 
   // One medallion per fielded copy, in the order the replay lists them — the same
@@ -319,8 +333,8 @@ function ArmyDetail({ view, onSave, onOpen }: { view: ArmyView; onSave: () => vo
         {summary && (
           <>
             <div className="hstat">
-              <div className="lbl">Cost</div>
-              <div className="val">{summary.price.finalCost.toLocaleString()}</div>
+              <div className="lbl">Cost / {MAX_BUILD_COST.toLocaleString()}</div>
+              <div className={`val${overCost ? " over" : ""}`}>{summary.price.finalCost.toLocaleString()}</div>
             </div>
             <div className="hstat">
               <div className="lbl">Cards</div>
@@ -348,6 +362,11 @@ function ArmyDetail({ view, onSave, onOpen }: { view: ArmyView; onSave: () => vo
         </div>
       </div>
 
+      {issues.map((issue) => (
+        <div className="error-box" key={issue}>
+          ⚠ {issue}
+        </div>
+      ))}
       {!index && (
         <div className="error-box">
           ⚠ No roster data for <code>{army.factionKey}</code> — showing the replay’s own unit names.

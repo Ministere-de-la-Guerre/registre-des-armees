@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ReplayArmy } from "../domain/replay";
 import { makeRoster, makeUnit } from "../test/factories";
+import { indexRoster, summarize } from "./build";
 import { SAVE_FORMAT_VERSION } from "./saves";
-import { replayBuildName, resolveReplayArmy, savedBuildFromReplayArmy } from "./replayBuild";
+import { replayArmyIssues, replayBuildName, resolveReplayArmy, savedBuildFromReplayArmy } from "./replayBuild";
 
 const FACTION = "ntw3_ac_b09_x4_163";
 
@@ -114,5 +115,41 @@ describe("resolveReplayArmy", () => {
     const { build, missingKeys } = resolveReplayArmy(makeArmy({ staffKey: null }), roster);
     expect(build.staffSlotUnitKey).toBeNull();
     expect(missingKeys).toEqual([]);
+  });
+});
+
+describe("replayArmyIssues", () => {
+  /** Summarise `copies` copies of a unit costing `cost` each. */
+  function summaryFor(cost: number, copies: number) {
+    const card = makeUnit({ unitKey: "u_costly", factionKey: FACTION, cost, cap: 40, groupCap: 40 });
+    const index = indexRoster(makeRoster([card], FACTION));
+    return summarize(index, {
+      instances: Array.from({ length: copies }, (_, i) => ({ id: `i${i}`, unitKey: "u_costly" })),
+      staffSlotUnitKey: null,
+    });
+  }
+
+  it("says nothing about an army inside the limit", () => {
+    expect(replayArmyIssues(summaryFor(1000, 9))).toEqual([]);
+  });
+
+  it("reports an army over the cost ceiling, with the overage", () => {
+    // 12 × 1,000 = 12,000, i.e. 2,000 over the 10,000 ceiling.
+    const issues = replayArmyIssues(summaryFor(1000, 12));
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain("12,000 MP");
+    expect(issues[0]).toContain("2,000 over");
+    expect(issues[0]).toContain("higher funds level");
+  });
+
+  it("does not fire exactly at the ceiling", () => {
+    expect(replayArmyIssues(summaryFor(1000, 10))).toEqual([]);
+  });
+
+  it("passes through the rules engine's own limit violations", () => {
+    // 34 cheap copies: under cost, but over the 31-card maximum.
+    const issues = replayArmyIssues(summaryFor(10, 34));
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues.join(" ")).toMatch(/31/);
   });
 });

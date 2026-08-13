@@ -151,6 +151,9 @@ input::placeholder { color: #6f7888; }
 .replay-armies { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .replay-army { width: 100%; cursor: pointer; }
 .replay-army.active { background: var(--panel-2); border-left-color: var(--gold-bright); }
+/* An army over the cost ceiling reads at a glance in the list, not only once
+   its detail panel is open. */
+.replay-army .corps-meta .over { color: var(--bad); font-weight: 600; }
 .replay-detail {
   min-width: 0; overflow: hidden;
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);

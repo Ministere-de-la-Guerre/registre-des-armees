@@ -8,7 +8,8 @@
 
 import type { ReplayArmy, ReplayBattle } from "../domain/replay";
 import type { FactionRoster } from "../domain/types";
-import type { BuildState } from "./build";
+import { MAX_BUILD_COST } from "../rules/rules";
+import type { BuildState, BuildSummary } from "./build";
 import { SAVE_FORMAT_VERSION, type SavedBuild, makeId, resolveSavedBuild } from "./saves";
 
 /** A replay the user has opened, plus the rosters its armies price against.
@@ -61,4 +62,23 @@ export interface ResolvedReplayArmy {
 export function resolveReplayArmy(army: ReplayArmy, roster: FactionRoster): ResolvedReplayArmy {
   const { build, missingKeys } = resolveSavedBuild(savedBuildFromReplayArmy(army), roster);
   return { build, missingKeys };
+}
+
+/** Ways an imported army breaks a rule the builder enforces.
+ *
+ *  A replay is a record of a battle that already happened, so this reports
+ *  rather than blocks: NTW3 matches are fought at several funds levels, and an
+ *  army over this builder's ceiling is far more likely to come from a
+ *  higher-funds game than to be illegitimate. Empty for a legal army. */
+export function replayArmyIssues(summary: BuildSummary): string[] {
+  const issues: string[] = [];
+  const over = summary.price.finalCost - MAX_BUILD_COST;
+  if (over > 0) {
+    issues.push(
+      `${summary.price.finalCost.toLocaleString()} MP — ${over.toLocaleString()} over the ` +
+        `${MAX_BUILD_COST.toLocaleString()} this builder allows. The battle was probably fought at a higher funds level.`,
+    );
+  }
+  issues.push(...summary.violationMessages);
+  return issues;
 }
