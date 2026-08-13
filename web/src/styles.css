@@ -132,6 +132,49 @@ input::placeholder { color: #6f7888; }
 .corps-card .corps-name { display: block; font-weight: 700; font-size: 13px; line-height: 1.2; }
 .corps-card .corps-meta { display: block; font-size: 11px; color: var(--text-soft); margin-top: 3px; }
 
+/* --- replay build checker --- */
+.replay-screen.dragging { outline: 2px dashed var(--gold); outline-offset: -10px; }
+.replay-meta { font-size: 12px; color: var(--text-soft); }
+
+.replay-drop { display: flex; align-items: center; justify-content: center; min-height: 58vh; }
+.replay-drop-inner {
+  max-width: 520px; text-align: center; padding: 28px 32px;
+  background: var(--panel); border: 1px dashed var(--line-2); border-radius: var(--radius);
+}
+.replay-drop-icon { font-size: 40px; line-height: 1; color: var(--gold); }
+.replay-drop-inner h3 { font-size: 19px; color: var(--gold-bright); margin: 10px 0 8px; }
+.replay-drop-inner p { font-size: 13px; line-height: 1.5; color: var(--text-soft); margin-bottom: 10px; }
+.replay-drop-hint code { font-size: 12px; background: var(--bg-2); padding: 1px 5px; border-radius: 4px; }
+.replay-drop .btn { margin-top: 6px; }
+
+.replay-body { display: grid; grid-template-columns: minmax(210px, 262px) 1fr; gap: 14px; align-items: start; }
+.replay-armies { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.replay-army { width: 100%; cursor: pointer; }
+.replay-army.active { background: var(--panel-2); border-left-color: var(--gold-bright); }
+.replay-detail {
+  min-width: 0; overflow: hidden;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+}
+/* The detail header carries four stats plus two actions — let it wrap rather than
+   squeeze the corps title to nothing on a narrow window. The two actions wrap as
+   one block so "Open in builder" never strands itself on a line of its own. */
+.replay-detail .corps-header { flex-wrap: wrap; }
+.replay-actions { display: flex; gap: 8px; margin-left: auto; }
+.replay-units { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 14px; }
+.replay-unit { flex: none; }
+.replay-unit.fallback {
+  display: flex; flex-direction: column; gap: 2px; font-size: 12px;
+  padding: 6px 9px; border: 1px solid var(--line); border-radius: var(--radius);
+}
+.replay-fallback-name { font-weight: 600; }
+.replay-fallback-officer { font-size: 11px; color: var(--gold); }
+
+@media (max-width: 860px) {
+  .replay-body { grid-template-columns: 1fr; }
+  .replay-armies { flex-direction: row; flex-wrap: wrap; }
+  .replay-army { width: auto; flex: 1 1 220px; }
+}
+
 /* --- builder --- */
 .builder { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .corps-header {

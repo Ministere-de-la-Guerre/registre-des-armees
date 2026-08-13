@@ -3,11 +3,14 @@ import { Builder } from "./components/Builder";
 import { CorpsSelect, type CorpsUiState } from "./components/CorpsSelect";
 import { FactionOfflineButton } from "./components/FactionOfflineButton";
 import { OfflinePanel } from "./components/OfflinePanel";
+import { ReplayScreen } from "./components/ReplayScreen";
 import { UpdateToast } from "./components/UpdateToast";
 import { loadCorpsIndex, loadFaction } from "./data/load";
 import { applyUpdate, isWebTarget, registerPwa } from "./pwa";
 import { isCoarsePointer, isTabletTouch, useCoarsePointer } from "./components/useCoarsePointer";
 import type { CorpsEntry, CorpsIndex, FactionRoster } from "./domain/types";
+import type { SavedBuild } from "./state/saves";
+import { type ReplaySession, emptyReplaySession } from "./state/replayBuild";
 
 export default function App() {
   const [index, setIndex] = useState<CorpsIndex | null>(null);
@@ -18,6 +21,15 @@ export default function App() {
   // Corps-selection state persists across builder visits (scroll + filters).
   const [corpsUi, setCorpsUi] = useState<CorpsUiState>({ search: "", side: "all", acOnly: false, towOnly: false });
   const corpsScroll = useRef(0);
+  // Which of the two entry screens is showing behind the builder: the corps
+  // picker or the replay build checker. `pendingSaved` seeds the builder when an
+  // army is opened from a replay; `returnToReplay` sends Back there afterwards.
+  const [screen, setScreen] = useState<"corps" | "replay">("corps");
+  const [pendingSaved, setPendingSaved] = useState<SavedBuild | null>(null);
+  const [returnToReplay, setReturnToReplay] = useState(false);
+  // The loaded replay lives here, not in ReplayScreen, so visiting the builder
+  // (which unmounts that screen) does not discard the parsed file.
+  const [replaySession, setReplaySession] = useState<ReplaySession>(emptyReplaySession);
 
   // PWA plumbing (web target only; a no-op inside the Electron desktop app).
   const [needRefresh, setNeedRefresh] = useState(false);
@@ -64,10 +76,11 @@ export default function App() {
     return [...keys];
   }, [index]);
 
-  const openCorps = (entry: CorpsEntry) => {
+  const openCorps = (entry: CorpsEntry, saved: SavedBuild | null = null) => {
     setSelected(entry);
     setRoster(null);
     setError(null);
+    setPendingSaved(saved);
     setLoadingRoster(true);
     loadFaction(entry.factionKey)
       .then(setRoster)
@@ -75,9 +88,18 @@ export default function App() {
       .finally(() => setLoadingRoster(false));
   };
 
+  /** Open one army out of a replay in the full builder, then come back here. */
+  const openFromReplay = (entry: CorpsEntry, saved: SavedBuild) => {
+    setReturnToReplay(true);
+    openCorps(entry, saved);
+  };
+
   const back = () => {
     setSelected(null);
     setRoster(null);
+    setPendingSaved(null);
+    setScreen(returnToReplay ? "replay" : "corps");
+    setReturnToReplay(false);
   };
 
   const builderActive = !!(selected && roster);
@@ -101,6 +123,11 @@ export default function App() {
         <span className="topbar-sub" style={{ fontSize: 12, opacity: 0.8 }}>NTW3 Army Builder</span>
         <span className="spacer" />
         {selected && <span style={{ fontSize: 12, opacity: 0.85 }}>{selected.name}</span>}
+        {!selected && screen === "corps" && (
+          <button className="btn ghost small" onClick={() => setScreen("replay")} title="Read army builds from a replay">
+            ⛊ Replay builds
+          </button>
+        )}
         {web && roster && <FactionOfflineButton roster={roster} />}
         {web && (
           <button className="btn ghost small" onClick={() => setShowOffline(true)} title="Offline & storage">
@@ -111,7 +138,17 @@ export default function App() {
 
       {error && <div className="error-box">⚠ {error}</div>}
 
-      {!selected && !error &&
+      {!selected && screen === "replay" && (
+        <ReplayScreen
+          corpsIndex={index}
+          session={replaySession}
+          onSessionChange={setReplaySession}
+          onBack={() => setScreen("corps")}
+          onOpenInBuilder={openFromReplay}
+        />
+      )}
+
+      {!selected && screen === "corps" && !error &&
         (index ? (
           <CorpsSelect
             index={index}
@@ -121,7 +158,7 @@ export default function App() {
             onScrollChange={(v) => {
               corpsScroll.current = v;
             }}
-            onSelect={openCorps}
+            onSelect={(entry) => openCorps(entry)}
           />
         ) : (
           <div className="loading">Loading corps…</div>
@@ -130,7 +167,12 @@ export default function App() {
       {selected && loadingRoster && <div className="loading">Loading {selected.name}…</div>}
 
       {selected && roster && (
-        <Builder roster={roster} postFlag={selected.postSelectionFlag ?? selected.flag} onBack={back} />
+        <Builder
+          roster={roster}
+          postFlag={selected.postSelectionFlag ?? selected.flag}
+          onBack={back}
+          initialSaved={pendingSaved}
+        />
       )}
 
       {showOffline && (

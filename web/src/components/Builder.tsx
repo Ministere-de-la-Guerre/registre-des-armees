@@ -29,7 +29,7 @@ import {
 } from "../state/build";
 import { type FilterState, defaultFilters, isFilterActive, isHiddenByGeneralSwitch, matchesCard } from "../state/filters";
 import { combinedTowLayout, orderBrigadeCards } from "../state/ordering";
-import { type BuildConfig, type LoadResult, type SavedBuild, isDirty } from "../state/saves";
+import { type BuildConfig, type LoadResult, type SavedBuild, isDirty, resolveSavedBuild } from "../state/saves";
 import { BottomTray } from "./BottomTray";
 import { BuilderGrid, type DivisionGroup, type GroupMeta, type MedallionHandlers } from "./BuilderGrid";
 import { DetailsPanel } from "./DetailsPanel";
@@ -75,10 +75,15 @@ export function Builder({
   roster,
   postFlag,
   onBack,
+  initialSaved = null,
 }: {
   roster: FactionRoster;
   postFlag: string | null;
   onBack: () => void;
+  /** Seed the build with an already-assembled army (e.g. one imported from a
+   *  replay) instead of starting empty. Must be a stable reference — it is an
+   *  effect dependency. Left unsaved, so the tray reads as having changes. */
+  initialSaved?: SavedBuild | null;
 }) {
   const index = useMemo(() => indexRoster(roster), [roster]);
   const [build, setBuild] = useState<BuildState>(emptyBuild);
@@ -128,9 +133,20 @@ export function Builder({
   const combinedView = isCustom || (isTow && combinedTow);
 
   useEffect(() => {
-    setBuild(emptyBuild());
+    // A seeded army (imported from a replay) resolves through the same path as a
+    // loaded save, so unknown keys drop out and get reported the same way.
+    const seed = initialSaved?.factionKey === roster.factionKey ? initialSaved : null;
+    const seeded = seed ? resolveSavedBuild(seed, roster) : null;
+    setBuild(seeded ? seeded.build : emptyBuild());
     setFilters(defaultFiltersFor(roster.factionKey));
     setLoadedSaved(null);
+    setMessage(
+      seed && seeded
+        ? `Imported “${seed.name}”${
+            seeded.missingKeys.length ? ` — ${seeded.missingKeys.length} unknown unit(s) skipped` : ""
+          }. Not saved yet.`
+        : null,
+    );
     setHovered(null);
     setPeek(null);
     setPrimedKey(null);
@@ -142,7 +158,7 @@ export function Builder({
     // Enable every source corps by default (the combined view pools them all;
     // >4 is over the game's roll size, which the header banner flags).
     setEnabledCorps(isTowFactionKey(roster.factionKey) ? new Set(allTowSourceCorpsIds(roster.cards)) : null);
-  }, [roster.factionKey, roster.cards]);
+  }, [roster, initialSaved]);
 
   // Any number of corps may be enabled; enabling more than the game rolls at once
   // is allowed but flagged with a non-blocking warning (here and in the popup).
