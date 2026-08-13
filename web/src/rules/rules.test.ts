@@ -8,6 +8,7 @@ import {
   capGroupKey,
   checkKnownLimits,
   generalCaps,
+  isCavalryOnlyCorps,
 } from "./rules";
 
 interface CardOpts {
@@ -339,6 +340,68 @@ describe("limits", () => {
     const rules = new Set(result.violations.map((v) => v.rule));
     expect(rules).toEqual(new Set(["artillery_foot", "artillery_horse"]));
     expect(MAX_BRIGADE_SLOTS_PER_DIVISION).toBe(7);
+  });
+
+  it("a cavalry-only corps takes two horse batteries instead of one", () => {
+    const faction = "ntw3_ac_test_x5_001";
+    // Reserve-cavalry corps roster: cavalry + horse artillery, no infantry.
+    const roster = [
+      card("staff", { faction, unitClass: "general", menRaw: 16 }),
+      card("cav_0", { faction, unitClass: "cavalry_heavy" }),
+      card("cav_1", { faction, unitClass: "cavalry_light" }),
+      card("horse_0", { faction, unitClass: "artillery_horse" }),
+      card("horse_1", { faction, unitClass: "artillery_horse" }),
+      card("horse_2", { faction, unitClass: "artillery_horse" }),
+    ];
+    expect(isCavalryOnlyCorps(roster, faction)).toBe(true);
+
+    const two = [card("horse_0", { faction, unitClass: "artillery_horse" }), card("horse_1", { faction, unitClass: "artillery_horse" })];
+    expect(checkKnownLimits(two, faction, { recruitable: roster }).valid).toBe(true);
+    // Without the roster the cap falls back to the standard 1.
+    expect(checkKnownLimits(two, faction).violations.map((v) => v.rule)).toEqual(["artillery_horse"]);
+
+    const three = [...two, card("horse_2", { faction, unitClass: "artillery_horse" })];
+    const over = checkKnownLimits(three, faction, { recruitable: roster });
+    expect(over.violations).toEqual([{ rule: "artillery_horse", actual: 3, maximum: 2 }]);
+  });
+
+  it("a corps with any infantry keeps the single horse-artillery cap", () => {
+    const faction = "ntw3_ac_test_x5_001";
+    const roster = [
+      card("cav_0", { faction, unitClass: "cavalry_heavy" }),
+      card("inf_0", { faction, unitClass: "infantry_line" }),
+      card("horse_0", { faction, unitClass: "artillery_horse" }),
+      card("horse_1", { faction, unitClass: "artillery_horse" }),
+    ];
+    expect(isCavalryOnlyCorps(roster, faction)).toBe(false);
+    const two = [card("horse_0", { faction, unitClass: "artillery_horse" }), card("horse_1", { faction, unitClass: "artillery_horse" })];
+    expect(checkKnownLimits(two, faction, { recruitable: roster }).violations.map((v) => v.rule)).toEqual([
+      "artillery_horse",
+    ]);
+  });
+
+  it("a cavalry corps is judged by the units its generals lead, and foot artillery does not disqualify it", () => {
+    const faction = "ntw3_ac_test_x5_001";
+    // A cavalry corps may still hold a foot battery (12. Murat / RC does) — only
+    // infantry disqualifies it. A combat general counts as the unit it leads.
+    const cavalryCorps = [
+      card("cav_0", { faction, unitClass: "cavalry_heavy" }),
+      card("cav_0_com_1", { faction, unitClass: "general", underlyingUnitClass: "cavalry_heavy", menRaw: 80 }),
+      card("foot_0", { faction, unitClass: "artillery_foot" }),
+      card("horse_0", { faction, unitClass: "artillery_horse" }),
+    ];
+    expect(isCavalryOnlyCorps(cavalryCorps, faction)).toBe(true);
+
+    // An infantry-leading combat general does disqualify it.
+    const withInfantryGeneral = [
+      ...cavalryCorps,
+      card("inf_0_com_1", { faction, unitClass: "general", underlyingUnitClass: "infantry_line", menRaw: 80 }),
+    ];
+    expect(isCavalryOnlyCorps(withInfantryGeneral, faction)).toBe(false);
+
+    // Another corps' cards are ignored.
+    const other = [...cavalryCorps, card("inf_x", { faction: "ntw3_ac_test_x5_002", unitClass: "infantry_line" })];
+    expect(isCavalryOnlyCorps(other, faction)).toBe(true);
   });
 
   it("combat generals count against the artillery caps of the unit they lead", () => {

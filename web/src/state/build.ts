@@ -10,11 +10,11 @@ import {
   MAX_BUILD_COST,
   MAX_FOOT_ARTILLERY,
   MAX_HEAVY_CAVALRY,
-  MAX_HORSE_ARTILLERY,
   MAX_TOTAL_UNIT_CARDS,
   calculateArmyCost,
   checkKnownLimits,
   generalCaps,
+  horseArtilleryMax,
 } from "../rules/rules";
 
 export interface SelectedInstance {
@@ -149,8 +149,12 @@ export function evaluateAdd(
   if (addedClass === "artillery_foot" && classCount("artillery_foot") >= MAX_FOOT_ARTILLERY) {
     return { reason: `Foot-artillery limit (${MAX_FOOT_ARTILLERY}) reached.` };
   }
-  if (addedClass === "artillery_horse" && classCount("artillery_horse") >= MAX_HORSE_ARTILLERY) {
-    return { reason: `Horse-artillery limit (${MAX_HORSE_ARTILLERY}) reached.` };
+  if (addedClass === "artillery_horse") {
+    // Cavalry-only corps may take two horse batteries instead of one.
+    const horseMax = horseArtilleryMax(index.roster.cards, index.roster.factionKey);
+    if (classCount("artillery_horse") >= horseMax) {
+      return { reason: `Horse-artillery limit (${horseMax}) reached.` };
+    }
   }
   if (addedClass === "cavalry_heavy" && classCount("cavalry_heavy") >= MAX_HEAVY_CAVALRY) {
     return { reason: `Heavy-cavalry limit (${MAX_HEAVY_CAVALRY}) reached.` };
@@ -547,6 +551,7 @@ export function summarize(index: RosterIndex, build: BuildState): BuildSummary {
   try {
     limits = checkKnownLimits(expanded.cards, faction, {
       staffSlotIndex: expanded.staffSlotIndex,
+      recruitable: index.roster.cards,
     });
   } catch {
     limits = { counts: {}, violations: [], valid: true };

@@ -15,6 +15,7 @@ from tools.army_builder_rules import (
     calculate_army_cost,
     check_known_limits,
     general_caps,
+    is_cavalry_only_corps,
     resolve_cap_groups,
 )
 
@@ -311,6 +312,98 @@ class LimitTests(unittest.TestCase):
         rules = {violation.rule for violation in result.violations}
         self.assertEqual(rules, {"artillery_foot", "artillery_horse"})
         self.assertEqual(MAX_BRIGADE_SLOTS_PER_DIVISION, 7)
+
+    def test_cavalry_only_corps_takes_two_horse_batteries(self) -> None:
+        # Mirrors rules.test.ts "a cavalry-only corps takes two horse batteries
+        # instead of one".
+        faction = "ntw3_ac_test_x5_001"
+        roster = [
+            card("staff", faction=faction, unit_class="general", men=16),
+            card("cav_0", faction=faction, unit_class="cavalry_heavy"),
+            card("cav_1", faction=faction, unit_class="cavalry_light"),
+            card("horse_0", faction=faction, unit_class="artillery_horse"),
+            card("horse_1", faction=faction, unit_class="artillery_horse"),
+            card("horse_2", faction=faction, unit_class="artillery_horse"),
+        ]
+        self.assertTrue(is_cavalry_only_corps(roster, faction))
+
+        two = [
+            card(f"horse_{index}", faction=faction, unit_class="artillery_horse")
+            for index in range(2)
+        ]
+        self.assertTrue(
+            check_known_limits(two, faction, recruitable_cards=roster).valid
+        )
+        # Without the roster the cap falls back to the standard 1.
+        self.assertEqual(
+            [violation.rule for violation in check_known_limits(two, faction).violations],
+            ["artillery_horse"],
+        )
+
+        three = two + [card("horse_2", faction=faction, unit_class="artillery_horse")]
+        over = check_known_limits(three, faction, recruitable_cards=roster)
+        self.assertEqual(
+            [(v.rule, v.actual, v.maximum) for v in over.violations],
+            [("artillery_horse", 3, 2)],
+        )
+
+    def test_corps_with_infantry_keeps_the_single_horse_artillery_cap(self) -> None:
+        faction = "ntw3_ac_test_x5_001"
+        roster = [
+            card("cav_0", faction=faction, unit_class="cavalry_heavy"),
+            card("inf_0", faction=faction, unit_class="infantry_line"),
+            card("horse_0", faction=faction, unit_class="artillery_horse"),
+            card("horse_1", faction=faction, unit_class="artillery_horse"),
+        ]
+        self.assertFalse(is_cavalry_only_corps(roster, faction))
+        two = [
+            card(f"horse_{index}", faction=faction, unit_class="artillery_horse")
+            for index in range(2)
+        ]
+        self.assertEqual(
+            [
+                violation.rule
+                for violation in check_known_limits(
+                    two, faction, recruitable_cards=roster
+                ).violations
+            ],
+            ["artillery_horse"],
+        )
+
+    def test_cavalry_only_corps_is_judged_by_the_units_its_generals_lead(self) -> None:
+        # A cavalry corps may still hold a foot battery (12. Murat / RC does) — only
+        # infantry disqualifies it. A combat general counts as the unit it leads.
+        faction = "ntw3_ac_test_x5_001"
+        cavalry_corps = [
+            card("cav_0", faction=faction, unit_class="cavalry_heavy"),
+            card(
+                "cav_0_com_1",
+                faction=faction,
+                unit_class="general",
+                men=80,
+                underlying_unit_class="cavalry_heavy",
+            ),
+            card("foot_0", faction=faction, unit_class="artillery_foot"),
+            card("horse_0", faction=faction, unit_class="artillery_horse"),
+        ]
+        self.assertTrue(is_cavalry_only_corps(cavalry_corps, faction))
+
+        with_infantry_general = cavalry_corps + [
+            card(
+                "inf_0_com_1",
+                faction=faction,
+                unit_class="general",
+                men=80,
+                underlying_unit_class="infantry_line",
+            )
+        ]
+        self.assertFalse(is_cavalry_only_corps(with_infantry_general, faction))
+
+        # Another corps' cards are ignored.
+        other = cavalry_corps + [
+            card("inf_x", faction="ntw3_ac_test_x5_002", unit_class="infantry_line")
+        ]
+        self.assertTrue(is_cavalry_only_corps(other, faction))
 
     def test_combat_general_counts_against_the_artillery_cap_it_leads(self) -> None:
         # Two foot batteries (at MAX_FOOT_ARTILLERY=2) + a combat general leading a

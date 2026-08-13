@@ -68,6 +68,33 @@ describe("evaluateAdd blocking", () => {
     expect(evaluateAdd(idx, b(["p", "p", "p", "q", "q", "q"]), z, 5)).toBeNull();
   });
 
+  it("lets a cavalry-only corps add a second horse battery, but not a third", () => {
+    // Reserve-cavalry corps (Murat / Uxbridge / Platov …): no infantry on the
+    // roster, so the horse-artillery cap is 2 rather than 1.
+    const cav = makeUnit({ unitKey: "cav", unitClass: "cavalry_heavy", underlyingUnitClass: "cavalry_heavy", cost: 500 });
+    const horse = (key: string) =>
+      makeUnit({
+        unitKey: key, unitClass: "artillery_horse", underlyingUnitClass: "artillery_horse",
+        cost: 300, capGroupKey: key, baseUnitKey: key, placement: { division: 5, brigade: 2 },
+      });
+    const [h0, h1, h2] = [horse("h0"), horse("h1"), horse("h2")];
+    const idx = indexRoster(makeRoster([cav, h0, h1, h2]));
+    expect(evaluateAdd(idx, b(["h0"]), h1, 5)).toBeNull();
+    expect(evaluateAdd(idx, b(["h0", "h1"]), h2, 5)?.reason).toMatch(/horse-artillery limit \(2\)/i);
+  });
+
+  it("blocks a second horse battery once the corps has infantry", () => {
+    const inf = makeUnit({ unitKey: "inf", cost: 500 });
+    const horse = (key: string) =>
+      makeUnit({
+        unitKey: key, unitClass: "artillery_horse", underlyingUnitClass: "artillery_horse",
+        cost: 300, capGroupKey: key, baseUnitKey: key, placement: { division: 5, brigade: 2 },
+      });
+    const [h0, h1] = [horse("h0"), horse("h1")];
+    const idx = indexRoster(makeRoster([inf, h0, h1]));
+    expect(evaluateAdd(idx, b(["h0"]), h1, 5)?.reason).toMatch(/horse-artillery limit \(1\)/i);
+  });
+
   it("blocks the same combat general twice (one general per unit)", () => {
     const g = makeUnit({
       unitKey: "g", cost: 100, cap: 1, groupCap: 1, isGeneral: true, generalKind: "combat", unitClass: "general",

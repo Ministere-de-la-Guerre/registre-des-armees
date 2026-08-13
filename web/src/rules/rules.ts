@@ -40,6 +40,9 @@ export const MAX_TOTAL_UNIT_CARDS = 31;
 export const MAX_BUILD_COST = 10000;
 export const MAX_FOOT_ARTILLERY = 2;
 export const MAX_HORSE_ARTILLERY = 1;
+/** A cavalry-only corps (see isCavalryOnlyCorps) may field two horse batteries
+ *  instead of the usual one. */
+export const MAX_HORSE_ARTILLERY_CAVALRY_ONLY = 2;
 export const MAX_HEAVY_CAVALRY = 10;
 export const MAX_BRIGADE_SLOTS_PER_DIVISION = 7;
 
@@ -153,6 +156,45 @@ function cappedClassOf(card: RulesUnit): string {
     return card.underlyingUnitClass;
   }
   return card.unitClass;
+}
+
+/** Class a roster card contributes to the corps' arm mix. A general is classed by
+ *  the unit it leads; a staff general leads nothing and so counts for nothing. */
+function armClassOf(card: RulesUnit): string {
+  if (card.isGeneral) return card.underlyingUnitClass ?? "";
+  return card.unitClass;
+}
+
+/** True when a corps can recruit cavalry but no infantry at all — the pure
+ *  cavalry corps (Murat's / Pajol's / Kellermann's RC, Uxbridge's CC, Platov's
+ *  Atamanstvo…). The game lets these field a second horse battery, so their
+ *  horse-artillery cap is {@link MAX_HORSE_ARTILLERY_CAVALRY_ONLY}. Artillery is a
+ *  support arm and never disqualifies a corps; only infantry does. Keep in parity
+ *  with is_cavalry_only_corps in tools/army_builder_rules.py. */
+export function isCavalryOnlyCorps(
+  recruitable: readonly RulesUnit[],
+  factionKey: string,
+): boolean {
+  let hasCavalry = false;
+  for (const card of recruitable) {
+    if (card.factionKey !== factionKey) continue;
+    const cls = armClassOf(card);
+    if (cls.startsWith("infantry")) return false;
+    if (cls.startsWith("cavalry")) hasCavalry = true;
+  }
+  return hasCavalry;
+}
+
+/** The corps' horse-artillery cap: two for a cavalry-only corps, otherwise one.
+ *  Without the corps roster it falls back to the standard cap. */
+export function horseArtilleryMax(
+  recruitable: readonly RulesUnit[] | null | undefined,
+  factionKey: string,
+): number {
+  if (!recruitable) return MAX_HORSE_ARTILLERY;
+  return isCavalryOnlyCorps(recruitable, factionKey)
+    ? MAX_HORSE_ARTILLERY_CAVALRY_ONLY
+    : MAX_HORSE_ARTILLERY;
 }
 
 export interface GroupTotal {
@@ -411,6 +453,10 @@ export function acSelectionGeneralMaxima(factionKey: string): GeneralCaps {
 export interface CheckOptions {
   acSelectionBehavior?: boolean;
   staffSlotIndex?: number | null;
+  /** The corps' full recruitable card list. Only needed for the caps that depend
+   *  on the corps' composition (the cavalry-only horse-artillery cap); omitting it
+   *  falls back to the standard caps. */
+  recruitable?: readonly RulesUnit[] | null;
 }
 
 export function checkKnownLimits(
@@ -418,7 +464,7 @@ export function checkKnownLimits(
   factionKey: string,
   options: CheckOptions = {},
 ): LimitCheck {
-  const { acSelectionBehavior = false, staffSlotIndex = null } = options;
+  const { acSelectionBehavior = false, staffSlotIndex = null, recruitable = null } = options;
   const counts: Record<string, number> = {};
   for (const card of selected) {
     counts[card.unitClass] = (counts[card.unitClass] ?? 0) + 1;
@@ -469,7 +515,7 @@ export function checkKnownLimits(
   const maxima: Record<string, number> = {
     total_cards: MAX_TOTAL_UNIT_CARDS,
     artillery_foot: MAX_FOOT_ARTILLERY,
-    artillery_horse: MAX_HORSE_ARTILLERY,
+    artillery_horse: horseArtilleryMax(recruitable, factionKey),
     cavalry_heavy: MAX_HEAVY_CAVALRY,
     staff_slot_occupants: caps.staff,
     combat_generals_against_cap: caps.combat,

@@ -53,6 +53,9 @@ SUPPORT_DIVISION_BRIGADE_DISCOUNT_FACTIONS = frozenset(
 MAX_TOTAL_UNIT_CARDS = 31
 MAX_FOOT_ARTILLERY = 2
 MAX_HORSE_ARTILLERY = 1
+# A cavalry-only corps (see is_cavalry_only_corps) may field two horse batteries
+# instead of the usual one.
+MAX_HORSE_ARTILLERY_CAVALRY_ONLY = 2
 MAX_HEAVY_CAVALRY = 10
 MAX_BRIGADE_SLOTS_PER_DIVISION = 7
 
@@ -505,12 +508,55 @@ def _capped_class_of(card: UnitCard) -> str:
     return card.unit_class
 
 
+def _arm_class_of(card: UnitCard) -> str:
+    """Class a roster card contributes to the corps' arm mix. A general is classed
+    by the unit it leads; a staff general leads nothing and so counts for nothing.
+    Mirrors armClassOf in web/src/rules/rules.ts."""
+    if card.is_general:
+        return card.underlying_unit_class or ""
+    return card.unit_class
+
+
+def is_cavalry_only_corps(
+    recruitable_cards: Iterable[UnitCard], faction_key: str
+) -> bool:
+    """True when a corps can recruit cavalry but no infantry at all — the pure
+    cavalry corps (Murat's / Pajol's / Kellermann's RC, Uxbridge's CC, Platov's
+    Atamanstvo…). The game lets these field a second horse battery, so their
+    horse-artillery cap is MAX_HORSE_ARTILLERY_CAVALRY_ONLY. Artillery is a support
+    arm and never disqualifies a corps; only infantry does. Keep in parity with
+    isCavalryOnlyCorps in web/src/rules/rules.ts."""
+    has_cavalry = False
+    for card in recruitable_cards:
+        if card.faction_key != faction_key:
+            continue
+        arm_class = _arm_class_of(card)
+        if arm_class.startswith("infantry"):
+            return False
+        if arm_class.startswith("cavalry"):
+            has_cavalry = True
+    return has_cavalry
+
+
+def horse_artillery_max(
+    recruitable_cards: Iterable[UnitCard] | None, faction_key: str
+) -> int:
+    """The corps' horse-artillery cap: two for a cavalry-only corps, otherwise one.
+    Without the corps roster it falls back to the standard cap."""
+    if recruitable_cards is None:
+        return MAX_HORSE_ARTILLERY
+    if is_cavalry_only_corps(recruitable_cards, faction_key):
+        return MAX_HORSE_ARTILLERY_CAVALRY_ONLY
+    return MAX_HORSE_ARTILLERY
+
+
 def check_known_limits(
     selected_cards: Sequence[UnitCard],
     faction_key: str,
     *,
     ac_selection_behavior: bool = False,
     staff_slot_index: int | None = None,
+    recruitable_cards: Sequence[UnitCard] | None = None,
 ) -> LimitCheck:
     counts = Counter(card.unit_class for card in selected_cards)
     # Recount the capped classes (artillery / heavy cavalry) by underlying class so
@@ -555,7 +601,7 @@ def check_known_limits(
     maxima = {
         "total_cards": MAX_TOTAL_UNIT_CARDS,
         "artillery_foot": MAX_FOOT_ARTILLERY,
-        "artillery_horse": MAX_HORSE_ARTILLERY,
+        "artillery_horse": horse_artillery_max(recruitable_cards, faction_key),
         "cavalry_heavy": MAX_HEAVY_CAVALRY,
         "staff_slot_occupants": caps.staff,
         "combat_generals_against_cap": caps.combat,
