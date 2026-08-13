@@ -11,7 +11,14 @@
 // the same dist over app:// and never registers a service worker (see pwa.ts).
 import { precacheAndRoute, cleanupOutdatedCaches, matchPrecache } from "workbox-precaching";
 import { registerRoute } from "workbox-routing";
-import { dataVersionKey, runtimeCacheName, offlineCacheName } from "./data/version";
+import {
+  dataVersionKey,
+  runtimeCacheName,
+  offlineCacheName,
+  runtimeCachePrefix,
+  offlineCachePrefix,
+  isLegacyUnscopedCacheName,
+} from "./data/version";
 
 declare const self: ServiceWorkerGlobalScope & { __WB_MANIFEST: Array<{ url: string; revision: string | null }> };
 
@@ -73,13 +80,19 @@ registerRoute(isUnitIcon, ({ request }) => cacheFirst(request), "GET");
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
-      // Drop runtime/offline caches from a previous data-version.
+      // Drop runtime/offline caches from a previous data-version, plus the
+      // pre-scoping names that nothing reads any more. Matching THIS deployment's
+      // prefixes rather than a bare "rda-" is what stops the stable and beta sites
+      // — same origin, different path — from deleting each other's offline
+      // factions whenever their data versions differ (see data/version.ts).
       const key = await currentVersionKey();
       const keep = new Set([runtimeCacheName(key), offlineCacheName(key)]);
+      const mine = [runtimeCachePrefix(), offlineCachePrefix()];
       const names = await caches.keys();
       await Promise.all(
         names
-          .filter((n) => (n.startsWith("rda-runtime-") || n.startsWith("rda-offline-")) && !keep.has(n))
+          .filter((n) => mine.some((p) => n.startsWith(p)) || isLegacyUnscopedCacheName(n))
+          .filter((n) => !keep.has(n))
           .map((n) => caches.delete(n)),
       );
       // Control open clients immediately so offline downloads work without reload.
