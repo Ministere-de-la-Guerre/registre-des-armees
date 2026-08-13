@@ -303,7 +303,6 @@ function ArmyDetail({ view, onSave, onOpen }: { view: ArmyView; onSave: () => vo
         .filter((c): c is UnitCard => Boolean(c))
     : [];
   const staffCard = index && build.staffSlotUnitKey ? index.byKey.get(build.staffSlotUnitKey) : undefined;
-  const qtyOfKey = (key: string) => build.instances.reduce((n, i) => (i.unitKey === key ? n + 1 : n), 0);
 
   return (
     <div className="replay-detail">
@@ -370,7 +369,9 @@ function ArmyDetail({ view, onSave, onOpen }: { view: ArmyView; onSave: () => vo
         {index
           ? copies.map((card, i) => (
               <div className="replay-unit" key={`${card.unitKey}-${i}`}>
-                <Medallion card={card} qty={qtyOfKey(card.unitKey)} selected showSpeed />
+                {/* One medallion per fielded copy, so qty stays 1 — a "×2" badge on
+                    each of two identical medallions would just say it twice. */}
+                <Medallion card={card} qty={1} selected showSpeed />
               </div>
             ))
           : army.units.map((u, i) => (
