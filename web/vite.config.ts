@@ -42,7 +42,11 @@ export default defineConfig({
         description: "Napoleon Total War 3 army builder — build, price and save corps offline.",
         lang: "fr",
         display: "standalone",
-        orientation: "any",
+        // No `orientation` member on purpose. Chromium maps an explicit "any" to
+        // Android's SCREEN_ORIENTATION_FULL_SENSOR, which rotates the installed app
+        // even when the user has auto-rotate locked. Omitting it leaves the activity
+        // UNSPECIFIED, so the phone's own rotation lock is honoured (and landscape
+        // still works for anyone who has rotation unlocked).
         start_url: ".",
         scope: "./",
         theme_color: "#15223f",

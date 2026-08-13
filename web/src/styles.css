@@ -146,7 +146,11 @@ input::placeholder { color: #6f7888; }
 .hstat .val { font-family: var(--serif); font-size: 17px; font-weight: 700; }
 .hstat .val.over { color: var(--bad); }
 
-.stage { flex: 1; min-height: 0; display: flex; }
+/* position:relative is load-bearing: under 1000px the filters drawer is absolutely
+   positioned, and without a positioned ancestor here it would resolve against the
+   initial containing block (the viewport) — making it as tall as the whole screen
+   starting below the header, so its scroll bottom fell off-screen. */
+.stage { flex: 1; min-height: 0; display: flex; position: relative; }
 .filters-drawer {
   width: 296px; flex: none; overflow: auto; background: var(--panel); border-right: 1px solid var(--line); padding: 12px;
 }
@@ -612,7 +616,13 @@ input::placeholder { color: #6f7888; }
 .hstat .val.cost.over { color: var(--bad); }
 
 @media (max-width: 1000px) {
-  .filters-drawer { position: absolute; z-index: 35; height: calc(100% - var(--tray-h)); }
+  /* Overlay the grid instead of taking a column. Anchored top-to-bottom of .stage
+     rather than given a viewport-derived height, so it always ends exactly where the
+     scrollable area ends — no matter how tall the chrome above it is (wrapped topbar,
+     corps header, ToW banner) or whether that chrome is collapsed. The desktop tray is
+     an in-flow sibling below .stage, so bottom:0 already clears it; the touch tray is
+     position:fixed and out of flow, so the coarse block below adds its footprint. */
+  .filters-drawer { position: absolute; top: 0; bottom: 0; height: auto; z-index: 35; }
 }
 
 /* --- PWA: update toast + offline/storage panel (web target only) --- */
@@ -839,6 +849,17 @@ input::placeholder { color: #6f7888; }
   }
   /* Reserve the fixed strip's footprint so the final grid row clears it. */
   .map { padding-bottom: calc(16px + var(--tray-h) + env(safe-area-inset-bottom, 0px)); }
+  /* Same reservation for the drawer, which overlays .stage down to its bottom edge:
+     end it above the fixed strip (home indicator included) instead of behind it.
+     The scroll-end padding is slack for the iOS standalone dvh over-report noted
+     above — that pushes .stage's bottom below the visible area by the status-bar
+     height, which env(safe-area-inset-top) measures, so the last filter row stays
+     reachable there too. */
+  .filters-drawer {
+    bottom: calc(var(--tray-h) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(16px + env(safe-area-inset-top, 0px));
+    overscroll-behavior: contain;
+  }
   .tray-strip .tray-stat { color: var(--text-soft); font-variant-numeric: tabular-nums; }
   .tray-strip .tray-stat b { color: var(--text); font-weight: 700; }
   .tray-strip .tray-stat b.over { color: var(--bad); }
