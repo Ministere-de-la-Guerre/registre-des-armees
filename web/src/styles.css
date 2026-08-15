@@ -92,6 +92,7 @@ input::placeholder { color: #6f7888; }
   border: 1px solid var(--line-2); background: rgba(255, 255, 255, 0.04); white-space: nowrap;
 }
 .tag.good { border-color: var(--good); color: var(--good); }
+.tag.beta { border-color: var(--azure); color: var(--azure); font-weight: 600; text-transform: uppercase; }
 
 /* --- app frame --- */
 .app { height: 100%; display: flex; flex-direction: column; }

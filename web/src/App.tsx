@@ -124,8 +124,12 @@ export default function App() {
         <span className="spacer" />
         {selected && <span style={{ fontSize: 12, opacity: 0.85 }}>{selected.name}</span>}
         {!selected && screen === "corps" && (
-          <button className="btn ghost small" onClick={() => setScreen("replay")} title="Read army builds from a replay">
-            ⛊ Replay builds
+          <button
+            className="btn ghost small"
+            onClick={() => setScreen("replay")}
+            title="Read army builds from a replay — beta feature, still being tested"
+          >
+            ⛊ Replay builds <span className="tag beta">Beta</span>
           </button>
         )}
         {web && roster && <FactionOfflineButton roster={roster} />}
