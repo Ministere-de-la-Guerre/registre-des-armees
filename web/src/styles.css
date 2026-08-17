@@ -959,3 +959,92 @@ input::placeholder { color: #6f7888; }
 .download-all-run { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 8px; }
 .download-bar { height: 8px; border-radius: 4px; background: var(--panel-3); overflow: hidden; }
 .download-bar-fill { height: 100%; background: linear-gradient(var(--gold-bright), var(--gold)); transition: width 0.2s ease; }
+
+/* --- pick rates (optional feature; see src/features/pickRates) ---------------
+   Drawn under a grid medallion. The three "no number" cases get visibly different
+   marks on purpose: a never-picked unit is a FINDING (a real 0 out of n) and must
+   never be mistaken for missing data. See docs/PICK_RATES.md. */
+.pickrate { width: 100%; margin-top: 3px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.pickrate .pr-track {
+  width: 100%; height: 4px; border-radius: 2px; background: #262d37; overflow: hidden;
+}
+.pickrate .pr-fill { height: 100%; border-radius: 2px; background: var(--azure); }
+/* Never picked: filled track + a red end-cap. Solid, not hollow. */
+.pickrate .pr-track.never { background: #2a1d1b; box-shadow: inset 0 0 0 1px #57302a; }
+.pickrate .pr-track.never .pr-fill { width: 3px; background: var(--bad); }
+/* No data of any kind: dashed and hollow — a different KIND of mark, not a short bar. */
+.pickrate .pr-track.nodata { background: none; border: 1px dashed #3d4756; }
+.pickrate .pr-text {
+  font-size: 9.5px; line-height: 1.2; color: var(--text-soft); font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pickrate .pr-text.never { color: var(--bad); }
+.pickrate .pr-text.nodata { color: #6d7787; font-style: italic; }
+
+/* Provenance + sample size. Deliberately adjacent to the numbers rather than tucked
+   in a corner: a percentage read without its sample size is the failure mode. */
+.pr-header { display: flex; flex-direction: column; gap: 8px; margin: 0 0 10px; }
+.pr-chip {
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+  border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px;
+  font-size: 12px; background: var(--panel); color: var(--text-soft);
+}
+.pr-chip b { color: var(--text); font-weight: 600; }
+.pr-chip .pr-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-soft); }
+.pr-chip.solid { border-color: #2f6a4a; background: #152218; }
+.pr-chip.solid .pr-dot { background: var(--good); }
+.pr-chip.moderate { border-color: var(--azure-deep); background: #14202b; }
+.pr-chip.moderate .pr-dot { background: var(--azure); }
+.pr-chip.thin, .pr-chip.very-thin { border-color: #6b5a22; background: #221e12; }
+.pr-chip.thin .pr-dot, .pr-chip.very-thin .pr-dot { background: var(--gold); }
+.pr-chip.none { border-color: #5c3a33; background: #241814; }
+.pr-chip.none .pr-dot { background: var(--bad); }
+.pr-chip .pr-src { opacity: 0.75; }
+
+.pr-notice {
+  border: 1px solid var(--line); border-left: 3px solid var(--text-soft);
+  border-radius: var(--radius); background: var(--panel);
+  padding: 10px 13px; max-width: 68ch; font-size: 12.5px; color: var(--text-soft);
+}
+.pr-notice b { color: var(--text); }
+.pr-notice.unplayed { border-left-color: var(--gold); }
+.pr-notice.thin { border-left-color: var(--azure); }
+/* Pick-rate colour tiers, red -> green.
+   Breakpoints come from the observed distribution, not an even 0-100 split: the median
+   picked card sits at 20%, so an even ramp would paint most of the roster red (see
+   docs/PICK_RATES.md). The ramp's LIGHTNESS rises monotonically across the whole scale
+   (OKLCH L 0.465 -> 0.915, validated), so its order still reads in greyscale and with
+   red-green colour blindness — colour is never the only cue, and the bar length and the
+   fraction beside it always say the same thing. */
+.pickrate .pr-track.t-never       { background: #2a1d1b; box-shadow: inset 0 0 0 1px #57302a; }
+.pickrate .pr-track.t-never .pr-fill { width: 3px; background: #98302f; }
+.pickrate .pr-track.t-fringe      .pr-fill { background: #b6443a; }
+.pickrate .pr-track.t-situational .pr-fill { background: #c56916; }
+.pickrate .pr-track.t-common      .pr-fill { background: #c8900f; }
+.pickrate .pr-track.t-popular     .pr-fill { background: #bfb750; }
+.pickrate .pr-track.t-core        .pr-fill { background: #a2df80; }
+.pickrate .pr-track.t-auto-include .pr-fill { background: #9efcb8; }
+
+.pickrate .pr-text.t-never        { color: #d87972; }
+.pickrate .pr-text.t-fringe       { color: #da8378; }
+.pickrate .pr-text.t-situational  { color: #e59f6f; }
+.pickrate .pr-text.t-common       { color: #e0b771; }
+.pickrate .pr-text.t-popular      { color: #d3ce89; }
+.pickrate .pr-text.t-core         { color: #b8e3a1; font-weight: 600; }
+.pickrate .pr-text.t-auto-include { color: #b0f2c1; font-weight: 600; }
+
+/* Pick-rate range slider. The rail carries the same red -> green ramp the medallion
+   marks use, with the stops at the real tier breakpoints — so dragging the handles
+   shows which tiers you are keeping, and the filter and the grid read as one thing. */
+.dual-pickrate .dual-rail {
+  background: linear-gradient(
+    to right,
+    #98302f 0%, #b6443a 1%, #b6443a 10%, #c56916 10%, #c56916 20%,
+    #c8900f 20%, #c8900f 35%, #bfb750 35%, #bfb750 55%,
+    #a2df80 55%, #a2df80 85%, #9efcb8 85%, #9efcb8 100%
+  );
+  opacity: 0.5;
+}
+/* Outside the selected span the ramp recedes; the chosen span stays saturated. */
+.dual-pickrate .dual-fill { background: none; box-shadow: inset 0 0 0 1px var(--gold); border-radius: 3px; }
+.dual-hint { font-size: 10.5px; color: #6d7787; margin-top: 4px; line-height: 1.35; }

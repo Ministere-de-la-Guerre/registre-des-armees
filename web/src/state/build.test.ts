@@ -4,6 +4,7 @@ import { makeRoster, makeUnit } from "../test/factories";
 import {
   type BuildState,
   addWouldExceedBudget,
+  staffGeneralAction,
   autoPickCombatGenerals,
   evaluateAdd,
   generalSwapFor,
@@ -21,6 +22,40 @@ const b = (instances: string[], staff: string | null = null): BuildState => ({
 });
 
 describe("evaluateAdd blocking", () => {
+  // A build holds at most one staff general, wherever it sits. Being commanded by a
+  // combat general does not buy a second one — but it does leave the staff general
+  // free to be recruited as an ordinary unit, which the game allows.
+  describe("staff generals", () => {
+    const gen = (unitKey: string, kind: "staff" | "combat") =>
+      makeUnit({
+        unitKey,
+        unitClass: "general",
+        isGeneral: true,
+        generalKind: kind,
+        menRaw: kind === "staff" ? 32 : 80,
+        cap: 1,
+        groupCap: 1,
+      });
+    const roster = () => makeRoster([gen("staff_a", "staff"), gen("staff_b", "staff"), gen("combat", "combat")]);
+
+    it("blocks a second staff general when one already holds the slot", () => {
+      const idx = indexRoster(roster());
+      const reason = evaluateAdd(idx, b([], "staff_a"), idx.byKey.get("staff_b")!, 5)?.reason;
+      expect(reason).toMatch(/one staff general/i);
+    });
+
+    it("blocks a second staff general when one is already a recruited unit", () => {
+      const idx = indexRoster(roster());
+      const reason = evaluateAdd(idx, b(["staff_a"]), idx.byKey.get("staff_b")!, 5)?.reason;
+      expect(reason).toMatch(/one staff general/i);
+    });
+
+    it("allows the staff general as a unit while a combat general commands", () => {
+      const idx = indexRoster(roster());
+      expect(evaluateAdd(idx, b([], "combat"), idx.byKey.get("staff_a")!, 5)).toBeNull();
+    });
+  });
+
   it("blocks once 31 cards are selected", () => {
     const roster = makeRoster([makeUnit({ unitKey: "a", cost: 10, cap: 99, groupCap: 99 })]);
     const idx = indexRoster(roster);
@@ -460,5 +495,60 @@ describe("priceBuild soft cost ceiling", () => {
     // Taking the commander first spends 600, so the 4th copy hits 10,600 and is over
     // budget: the division never legitimately completes, so no discount is credited.
     expect(priceBuild(idx, b(["u", "u", "u", "u"], "gen")).finalCost).toBe(10600);
+  });
+});
+
+describe("staffGeneralAction", () => {
+  const gen = (unitKey: string, kind: "staff" | "combat") =>
+    makeUnit({
+      unitKey,
+      unitClass: "general",
+      isGeneral: true,
+      generalKind: kind,
+      menRaw: kind === "staff" ? 32 : 80,
+      cap: 1,
+      groupCap: 1,
+    });
+  const idx = () =>
+    indexRoster(makeRoster([gen("staff_a", "staff"), gen("staff_b", "staff"), gen("combat", "combat")]));
+
+  it("sets the commander when the slot is empty", () => {
+    const i = idx();
+    expect(staffGeneralAction(i, b([]), i.byKey.get("staff_a")!)).toBe("set-commander");
+  });
+
+  it("unsets when the card already holds the slot", () => {
+    const i = idx();
+    expect(staffGeneralAction(i, b([], "staff_a"), i.byKey.get("staff_a")!)).toBe("set-commander");
+  });
+
+  it("swaps when another staff general commands", () => {
+    const i = idx();
+    expect(staffGeneralAction(i, b([], "staff_a"), i.byKey.get("staff_b")!)).toBe("set-commander");
+  });
+
+  // The case that produced the wrong red frame: a combat general commands, so the
+  // click recruits rather than replacing him — and must be priced that way.
+  it("recruits when a combat general commands", () => {
+    const i = idx();
+    expect(staffGeneralAction(i, b([], "combat"), i.byKey.get("staff_a")!)).toBe("recruit");
+  });
+
+  it("a recruit-action staff general is priced as an add, not as a commander swap", () => {
+    // Commander costs 5,000; the staff general 1,000. Replacing the commander would
+    // free 5,000, so a swap is trivially affordable — but recruiting adds on top.
+    const roster = makeRoster([
+      makeUnit({ unitKey: "combat", unitClass: "general", isGeneral: true, generalKind: "combat",
+                 menRaw: 80, cost: 5000, cap: 1, groupCap: 1 }),
+      makeUnit({ unitKey: "staff_a", unitClass: "general", isGeneral: true, generalKind: "staff",
+                 menRaw: 32, cost: 1000, cap: 1, groupCap: 1 }),
+      makeUnit({ unitKey: "filler", cost: 4500, cap: 9, groupCap: 9 }),
+    ]);
+    const i = indexRoster(roster);
+    const build = b(["filler"], "combat"); // 9,500 committed
+    const staff = i.byKey.get("staff_a")!;
+    expect(staffGeneralAction(i, build, staff)).toBe("recruit");
+    // Recruiting: 9,500 + 1,000 = 10,500 -> over. A swap would have read as affordable.
+    expect(addWouldExceedBudget(i, build, staff)).toBe(true);
   });
 });

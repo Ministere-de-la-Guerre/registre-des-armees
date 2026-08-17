@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { assetUrl } from "../data/assets";
 import { CLASS_LABELS } from "../domain/labels";
 import type { UnitCard } from "../domain/types";
@@ -69,6 +69,10 @@ export interface MedallionProps {
   /** The copy this medallion shows is currently led by a combat general (lights the
    *  ★ badge). */
   ledByGeneral?: boolean;
+  /** How often real players field this unit, drawn under the name. Optional feature
+   *  (see features/pickRates); absent unless the build enables it and the user has it
+   *  switched on. Grid only — never in the tray or the details head. */
+  pickRate?: ReactNode;
 }
 
 /** Oval unit portrait used in the grid, build tray, and details modal. */
@@ -94,6 +98,7 @@ export function Medallion({
   peekOn = "longpress",
   onSwapGeneral,
   ledByGeneral = false,
+  pickRate,
 }: MedallionProps) {
   const [failed, setFailed] = useState(false);
   const coarse = isCoarsePointer();
@@ -262,6 +267,7 @@ export function Medallion({
         </span>
       </div>
       {!hideName && <div className="name" title={card.name}>{card.name}</div>}
+      {!hideName && pickRate}
     </div>
   );
 }

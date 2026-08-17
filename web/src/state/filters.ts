@@ -47,6 +47,9 @@ export interface FilterState {
   /** When on, combat & staff generals not in the current local-time rotation
    *  window are removed from the grid (see Builder's rotation-offered set). */
   onlyOfferedNow: boolean;
+  /** How often real players field the card, as a percentage of that corps' builds.
+   *  Optional feature (see features/pickRates); inert when it is off or absent. */
+  pickRate: NumericRange;
 }
 
 export type BroadCategory = "infantry" | "cavalry" | "artillery" | "generals" | "other";
@@ -172,6 +175,7 @@ export function defaultFilters(): FilterState {
     abilities,
     showCombatGenerals: true,
     onlyOfferedNow: false,
+    pickRate: emptyRange(),
   };
 }
 
@@ -187,8 +191,16 @@ function rangeActive(r: NumericRange): boolean {
   return r.min !== null || r.max !== null;
 }
 
-/** True when a card matches the ordinary (dimming) filters. */
-export function matchesCard(card: UnitCard, f: FilterState): boolean {
+/** True when a card matches the ordinary (dimming) filters.
+ *
+ *  `pickRatePct` supplies the card's pick rate (0-100), or null when the dataset
+ *  cannot speak about it. It is a callback rather than a card field because the
+ *  pick-rate data is an optional, separately-loaded feature. */
+export function matchesCard(
+  card: UnitCard,
+  f: FilterState,
+  pickRatePct?: (card: UnitCard) => number | null,
+): boolean {
   if (f.search.trim() && !matchesSearch(`${card.name} ${card.unitKey}`, f.search)) return false;
   for (const def of GLOBAL_FIELDS) {
     if (!inRange(def.get(card), f.numeric[def.id])) return false;
@@ -216,6 +228,14 @@ export function matchesCard(card: UnitCard, f: FilterState): boolean {
     if (tri === "yes" && !card.abilities[key]) return false;
     if (tri === "no" && card.abilities[key]) return false;
   }
+  if (rangeActive(f.pickRate)) {
+    const pct = pickRatePct?.(card) ?? null;
+    // Deliberately UNLIKE the other numeric filters, which exclude blanks: a card the
+    // dataset cannot speak about is never excluded here. 41% of corps have no data at
+    // all, so excluding blanks would dim an entire roster the moment the slider moved
+    // and read as a broken filter rather than an honest absence.
+    if (pct !== null && !inRange(pct, f.pickRate)) return false;
+  }
   return true;
 }
 
@@ -230,5 +250,6 @@ export function isFilterActive(f: FilterState): boolean {
   for (const def of GLOBAL_FIELDS) if (rangeActive(f.numeric[def.id])) return true;
   for (const sc of STAT_CLASSES) for (const def of CLASS_FIELDS) if (rangeActive(f.classStats[sc][def.id])) return true;
   for (const k of ABILITY_KEYS) if (f.abilities[k] !== "any") return true;
+  if (rangeActive(f.pickRate)) return true;
   return false;
 }

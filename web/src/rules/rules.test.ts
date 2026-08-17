@@ -429,7 +429,7 @@ describe("limits", () => {
     );
     expect(result.counts.staff_generals).toBe(2);
     expect(result.counts.combat_generals).toBe(1);
-    expect(new Set(result.violations.map((v) => v.rule))).toEqual(new Set(["staff_slot_occupants"]));
+    expect(new Set(result.violations.map((v) => v.rule))).toEqual(new Set(["staff_generals"]));
   });
 
   it("missing general men is not guessed", () => {
@@ -466,7 +466,10 @@ describe("limits", () => {
     expect(withSlot.counts.staff_slot_occupants).toBe(1);
   });
 
-  it("combat general cannot share staff slot with staff general", () => {
+  // The game allows this and real replays contain it: a corps commanded by a combat
+  // general that also fields its own staff general as an ordinary unit. Only the card
+  // actually in the slot occupies it.
+  it("a staff general recruited as a unit does not occupy the staff slot", () => {
     const faction = "ntw3_ac_test_x7_001";
     const result = checkKnownLimits(
       [
@@ -476,7 +479,41 @@ describe("limits", () => {
       faction,
       { staffSlotIndex: 0 },
     );
-    expect(new Set(result.violations.map((v) => v.rule))).toEqual(new Set(["staff_slot_occupants"]));
+    expect(result.violations).toHaveLength(0);
+    expect(result.counts.staff_slot_occupants).toBe(1);
+    expect(result.counts.staff_generals).toBe(1);
+    // ...and it is not a free combat general either — it is simply a unit.
+    expect(result.counts.combat_generals_against_cap).toBe(0);
+  });
+
+  it("the ordinary case is unchanged: staff general in the slot, combat generals beside it", () => {
+    const faction = "ntw3_ac_test_x7_001";
+    const result = checkKnownLimits(
+      [
+        card("staff", { faction, unitClass: "general", menRaw: 32 }),
+        card("combat", { faction, unitClass: "general", menRaw: 80 }),
+      ],
+      faction,
+      { staffSlotIndex: 0 },
+    );
+    expect(result.violations).toHaveLength(0);
+    expect(result.counts.staff_slot_occupants).toBe(1);
+    expect(result.counts.combat_generals_against_cap).toBe(1);
+  });
+
+  // Never two staff generals, however they are placed: one commanding and one
+  // recruited as a unit is still two.
+  it("rejects a second staff general whether or not one holds the slot", () => {
+    const faction = "ntw3_ac_test_x7_001";
+    const pair = [
+      card("staff_a", { faction, unitClass: "general", menRaw: 32 }),
+      card("staff_b", { faction, unitClass: "general", menRaw: 122 }),
+    ];
+    for (const opts of [{}, { staffSlotIndex: 0 }]) {
+      const result = checkKnownLimits(pair, faction, opts);
+      expect(result.counts.staff_generals).toBe(2);
+      expect(result.violations.map((v) => v.rule)).toContain("staff_generals");
+    }
   });
 
   it("commander variant uses its underlying unit cap", () => {

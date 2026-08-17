@@ -53,6 +53,7 @@ CATALOG_JSON = GENERATED_DATA / "army_corps_catalog.json"
 WEB_PUBLIC = PROJECT_ROOT / "web" / "public"
 OUT_DATA = WEB_PUBLIC / "data"
 OUT_ASSETS = WEB_PUBLIC / "assets"
+PICK_RATES_SRC = PROJECT_ROOT / "data" / "pick_rates"
 
 COMMANDER_SUFFIX = "_com_"
 
@@ -425,6 +426,18 @@ def main() -> int:
         "towRows": tow_rows,
     }, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    # 5b. Pick-rate datasets (optional feature data; see docs/PICK_RATES.md).
+    # These are a committed source artifact rather than something derived here — the
+    # replay corpus they come from is never in the repo — so this step is a straight
+    # copy, and silently does nothing when no season has been built.
+    pick_rates_copied = 0
+    if PICK_RATES_SRC.is_dir():
+        out_pick_rates = OUT_DATA / "pick-rates"
+        out_pick_rates.mkdir(parents=True, exist_ok=True)
+        for season_file in sorted(PICK_RATES_SRC.glob("*.json")):
+            shutil.copy2(season_file, out_pick_rates / season_file.name)
+            pick_rates_copied += 1
+
     # 6. Validation report.
     report = OUT_DATA / "build-report.txt"
     lines = [
@@ -438,6 +451,7 @@ def main() -> int:
         f"assets_skipped_up_to_date={assets.skipped}",
         f"missing_assets={len(assets.missing)}",
         f"validation_errors={len(errors)}",
+        f"pick_rate_seasons={pick_rates_copied}",
     ]
     if assets.missing:
         lines.append("--- missing assets (first 20) ---")

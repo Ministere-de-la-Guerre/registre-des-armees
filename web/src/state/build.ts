@@ -120,6 +120,17 @@ export function evaluateAdd(
 
   const isCombatGeneral = card.isGeneral && card.generalKind === "combat";
 
+  // A build holds at most one staff general, wherever it sits — in the staff slot or
+  // recruited as an ordinary unit. (Being commanded by a combat general does not buy a
+  // second one.) `cards` includes the staff-slot card, so this covers both placements.
+  if (
+    card.isGeneral &&
+    card.generalKind === "staff" &&
+    cards.some((c) => c.isGeneral && c.generalKind === "staff")
+  ) {
+    return { reason: "Only one staff general allowed in a build." };
+  }
+
   if (
     isCombatGeneral &&
     cards.some((c) => c.isGeneral && c.generalKind === "combat" && c.capGroupKey === card.capGroupKey)
@@ -183,6 +194,32 @@ export function evaluateAdd(
  *  trigger does not count toward affording it — matching the game). */
 export function addWouldExceedBudget(index: RosterIndex, build: BuildState, card: UnitCard): boolean {
   return priceBuild(index, build).finalCost + card.cost > MAX_BUILD_COST;
+}
+
+export type StaffGeneralAction = "set-commander" | "recruit";
+
+/** What a left-click on a staff general in the grid actually does, given who holds the
+ *  staff slot right now:
+ *
+ *    - slot empty, or holding this same card -> set / unset the commander;
+ *    - another STAFF general commands        -> swap the commander;
+ *    - a COMBAT general commands             -> recruit this staff general as a unit
+ *      (the game allows one staff general anywhere in the build).
+ *
+ *  Exported so the click handler and the affordability warning cannot answer different
+ *  questions about the same click — colouring a card red for "you could not afford to
+ *  make him commander" while the click would merely recruit him is exactly that bug.
+ */
+export function staffGeneralAction(
+  index: RosterIndex,
+  build: BuildState,
+  card: UnitCard,
+): StaffGeneralAction {
+  const slotKey = build.staffSlotUnitKey;
+  if (!slotKey || slotKey === card.unitKey) return "set-commander";
+  const occupant = index.byKey.get(slotKey);
+  if (occupant?.isGeneral && occupant.generalKind === "staff") return "set-commander";
+  return "recruit";
 }
 
 /** True when assigning `card` to the staff slot would push the final cost past the

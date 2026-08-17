@@ -584,8 +584,16 @@ def check_known_limits(
     for index, card in enumerate(selected_cards):
         classification = classify_general(card)
         if classification == "staff":
+            # Two separate rules, easily conflated:
+            #   * a corps may hold at most ONE staff general anywhere in the build — slot
+            #     or not (capped via staff_generals below);
+            #   * the staff SLOT holds exactly one card, which need not be a staff general
+            #     — the game lets a combat general command, and the corps' own staff
+            #     general then be recruited as an ordinary unit (real replays do this).
+            # So a staff general occupies the slot only when it IS the slot card.
             counts["staff_generals"] += 1
-            counts["staff_slot_occupants"] += 1
+            if index == staff_slot_index:
+                counts["staff_slot_occupants"] += 1
         elif classification == "combat":
             counts["combat_generals"] += 1
             if index == staff_slot_index:
@@ -600,6 +608,8 @@ def check_known_limits(
     )
     maxima = {
         "total_cards": MAX_TOTAL_UNIT_CARDS,
+        # Never two staff generals in one build, wherever they sit.
+        "staff_generals": caps.staff,
         "artillery_foot": MAX_FOOT_ARTILLERY,
         "artillery_horse": horse_artillery_max(recruitable_cards, faction_key),
         "cavalry_heavy": MAX_HEAVY_CAVALRY,

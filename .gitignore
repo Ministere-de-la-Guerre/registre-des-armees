@@ -12,3 +12,10 @@ __pycache__/
 /_github_assets/
 /_github_assets_beta/
 
+# Local investigation scratch (replays, samples, throwaway scripts)
+/work_in_progress/
+
+# Replay-corpus statistics: regenerated from a local folder of .replay files, large
+# (parse cache + per-unit fact tables), and derived from data that is not in the repo.
+/reports/replay_stats/
+

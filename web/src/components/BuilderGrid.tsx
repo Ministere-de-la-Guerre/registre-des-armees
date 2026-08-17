@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { UnitCard } from "../domain/types";
 import { orderBrigadeCards, sortStaffGenerals } from "../state/ordering";
 import { Medallion } from "./Medallion";
@@ -41,6 +42,10 @@ export interface MedallionHandlers {
    *  (add / set commander) instead of re-showing its stat card. Always false on
    *  desktop; drives the primed ring. */
   isPrimed: (key: string) => boolean;
+  /** Optional pick-rate mark drawn under the medallion (features/pickRates). Returns
+   *  null when the feature is off, absent from the build, or still loading — so the
+   *  grid renders exactly as before. */
+  pickRateOf?: (card: UnitCard) => ReactNode;
 }
 
 function UnitMedallion({ card, h }: { card: UnitCard; h: MedallionHandlers }) {
@@ -64,6 +69,7 @@ function UnitMedallion({ card, h }: { card: UnitCard; h: MedallionHandlers }) {
       onContextMenu={() => h.onDetails(card)}
       onHover={h.onHover}
       onHoverEnd={h.onHoverEnd}
+      pickRate={h.pickRateOf?.(card)}
     />
   );
 }
@@ -101,16 +107,20 @@ export function BuilderGrid({
             <Medallion
               key={g.unitKey}
               card={g}
-              selected={handlers.inStaffSlot(g.unitKey)}
+              qty={handlers.qtyOf(g.unitKey)}
+              capCount={handlers.groupQtyOf(g)}
+              selected={handlers.inStaffSlot(g.unitKey) || handlers.isSelected(g.unitKey)}
               inStaffSlot={handlers.inStaffSlot(g.unitKey)}
               primed={handlers.isPrimed(g.unitKey)}
               dimmed={handlers.isDimmed(g)}
+              atCap={handlers.atCapOf(g)}
               overBudget={handlers.isOverBudget(g)}
               overCorps={handlers.isOverCorps(g)}
               onClick={(anchor) => onStaffToggle(g, anchor)}
               onContextMenu={() => handlers.onDetails(g)}
               onHover={handlers.onHover}
               onHoverEnd={handlers.onHoverEnd}
+              pickRate={handlers.pickRateOf?.(g)}
             />
           ))}
         </div>
@@ -143,16 +153,20 @@ export function BuilderGrid({
                         <Medallion
                           key={card.unitKey}
                           card={card}
-                          selected={handlers.inStaffSlot(card.unitKey)}
+                          qty={handlers.qtyOf(card.unitKey)}
+                          capCount={handlers.groupQtyOf(card)}
+                          selected={handlers.inStaffSlot(card.unitKey) || handlers.isSelected(card.unitKey)}
                           inStaffSlot={handlers.inStaffSlot(card.unitKey)}
                           primed={handlers.isPrimed(card.unitKey)}
                           dimmed={handlers.isDimmed(card)}
+                          atCap={handlers.atCapOf(card)}
                           overBudget={handlers.isOverBudget(card)}
                           overCorps={handlers.isOverCorps(card)}
                           onClick={(anchor) => onStaffToggle(card, anchor)}
                           onContextMenu={() => handlers.onDetails(card)}
                           onHover={handlers.onHover}
                           onHoverEnd={handlers.onHoverEnd}
+                          pickRate={handlers.pickRateOf?.(card)}
                         />
                       ) : (
                         <UnitMedallion key={card.unitKey} card={card} h={handlers} />

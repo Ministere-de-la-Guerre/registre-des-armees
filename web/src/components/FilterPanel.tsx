@@ -33,12 +33,16 @@ export function FilterPanel({
   cards,
   matchCount,
   totalCount,
+  showPickRate = false,
 }: {
   filters: FilterState;
   onChange: (next: FilterState) => void;
   cards: UnitCard[];
   matchCount: number;
   totalCount: number;
+  /** Show the pick-rate range slider — only when the optional feature is enabled,
+   *  switched on, and a dataset actually loaded. */
+  showPickRate?: boolean;
 }) {
   const [statTab, setStatTab] = useState<StatClass>("infantry");
 
@@ -163,6 +167,23 @@ export function FilterPanel({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {showPickRate && (
+        <div className="filter-section">
+          <h4>Pick rate</h4>
+          <DualRange
+            label="Fielded in"
+            min={0}
+            max={100}
+            unit="%"
+            variant="pickrate"
+            valueMin={filters.pickRate.min}
+            valueMax={filters.pickRate.max}
+            onChange={(lo, hi) => onChange({ ...filters, pickRate: { min: lo, max: hi } })}
+            hint="Units the dataset can't speak about are never dimmed by this filter."
+          />
         </div>
       )}
 

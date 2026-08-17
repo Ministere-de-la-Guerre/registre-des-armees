@@ -10,6 +10,9 @@ export function DualRange({
   valueMax,
   step = 1,
   onChange,
+  variant,
+  unit = "",
+  hint,
 }: {
   label: string;
   min: number;
@@ -18,6 +21,13 @@ export function DualRange({
   valueMax: number | null;
   step?: number;
   onChange: (lo: number | null, hi: number | null) => void;
+  /** Extra modifier class on the root, e.g. "pickrate" to paint the rail with the
+   *  pick-rate colour ramp so the slider shows which tiers it is selecting. */
+  variant?: string;
+  /** Suffix on the value readout, e.g. "%". */
+  unit?: string;
+  /** Small note under the slider. */
+  hint?: string;
 }) {
   const id = useId();
   const lo = valueMin ?? min;
@@ -36,11 +46,11 @@ export function DualRange({
   if (max <= min) return null;
 
   return (
-    <div className="dual">
+    <div className={`dual${variant ? ` dual-${variant}` : ""}`}>
       <div className="dual-head">
         <span>{label}</span>
         <span className={`dual-val${active ? " on" : ""}`}>
-          {lo} – {hi}
+          {lo}{unit} – {hi}{unit}
         </span>
       </div>
       <div className="dual-track">
@@ -66,6 +76,7 @@ export function DualRange({
           id={id}
         />
       </div>
+      {hint && <div className="dual-hint">{hint}</div>}
     </div>
   );
 }

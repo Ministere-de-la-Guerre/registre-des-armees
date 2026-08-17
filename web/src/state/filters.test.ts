@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeUnit } from "../test/factories";
-import { defaultFilters, isFilterActive, isHiddenByGeneralSwitch, matchesCard } from "./filters";
+import { type FilterState, defaultFilters, isFilterActive, isHiddenByGeneralSwitch, matchesCard } from "./filters";
 
 describe("ordinary filters (dimming, not removal)", () => {
   it("matches everything by default and reports inactive", () => {
@@ -110,5 +110,42 @@ describe("combat-general visibility switch (removal)", () => {
 
   it("shows combat generals when on", () => {
     expect(isHiddenByGeneralSwitch(combat, defaultFilters())).toBe(false);
+  });
+});
+
+describe("pick-rate filter", () => {
+  const card = makeUnit();
+  const withRange = (min: number | null, max: number | null): FilterState => ({
+    ...defaultFilters(),
+    pickRate: { min, max },
+  });
+
+  it("is inactive until a handle moves", () => {
+    expect(isFilterActive(defaultFilters())).toBe(false);
+    expect(isFilterActive(withRange(20, null))).toBe(true);
+    expect(isFilterActive(withRange(null, 80))).toBe(true);
+  });
+
+  it("keeps cards inside the range and drops those outside", () => {
+    const rate = () => 40;
+    expect(matchesCard(card, withRange(20, 60), rate)).toBe(true);
+    expect(matchesCard(card, withRange(50, 100), rate)).toBe(false);
+    expect(matchesCard(card, withRange(0, 30), rate)).toBe(false);
+  });
+
+  it("treats never-picked as a real 0, so 0-0 isolates the dead cards", () => {
+    expect(matchesCard(card, withRange(null, 0), () => 0)).toBe(true);
+    expect(matchesCard(card, withRange(1, null), () => 0)).toBe(false);
+  });
+
+  // Unlike every other numeric filter, which excludes blanks: 41% of corps have no
+  // data, so excluding blanks would dim a whole roster the moment a handle moved.
+  it("never dims a card the dataset cannot speak about", () => {
+    expect(matchesCard(card, withRange(80, 100), () => null)).toBe(true);
+    expect(matchesCard(card, withRange(80, 100), undefined)).toBe(true);
+  });
+
+  it("does nothing at all while the range is untouched", () => {
+    expect(matchesCard(card, defaultFilters(), () => 3)).toBe(true);
   });
 });

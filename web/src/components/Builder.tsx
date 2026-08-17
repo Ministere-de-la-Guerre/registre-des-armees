@@ -22,6 +22,7 @@ import {
   makeInstanceId,
   qtyOf as qtyOfBuild,
   resetCombatGenerals,
+  staffGeneralAction,
   staffSetWouldExceedBudget,
   summarize,
   swapInstanceUnit,
@@ -33,6 +34,9 @@ import { type BuildConfig, type LoadResult, type SavedBuild, isDirty, resolveSav
 import { BottomTray } from "./BottomTray";
 import { BuilderGrid, type DivisionGroup, type GroupMeta, type MedallionHandlers } from "./BuilderGrid";
 import { DetailsPanel } from "./DetailsPanel";
+import { PICK_RATES_ENABLED } from "../features/pickRates/flag";
+import { PickRateBar, PickRateChip, PickRateNotice } from "../features/pickRates/PickRateBar";
+import { usePickRates } from "../features/pickRates/usePickRates";
 import { FilterPanel } from "./FilterPanel";
 import { Medallion } from "./Medallion";
 import { combatPool, offeredCombatKeys, offeredStaffKeys, rotationApplies, staffPool } from "../state/rotation";
@@ -112,6 +116,11 @@ export function Builder({
   const [loadedSaved, setLoadedSaved] = useState<SavedBuild | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [rotationOpen, setRotationOpen] = useState(false);
+  // Optional pick-rate overlay (features/pickRates). Inert — and never fetches —
+  // unless the build enabled the feature and the user switched it on.
+  // When combat generals are hidden their medallions are gone, so their builds fold
+  // into the plain unit's number rather than vanishing from the grid.
+  const pickRates = usePickRates(roster.factionKey, !filters.showCombatGenerals);
   const [towRollOpen, setTowRollOpen] = useState(false);
   const [towGenerateOpen, setTowGenerateOpen] = useState(false);
   // Source-corps ids the player has enabled for a Theatres-of-War roster (≤4).
@@ -235,9 +244,12 @@ export function Builder({
   const overBudgetCards = useMemo(() => {
     const m = new Map<string, boolean>();
     for (const c of roster.cards) {
-      const over = c.isGeneral && c.generalKind === "staff"
-        ? staffSetWouldExceedBudget(index, build, c)
-        : addWouldExceedBudget(index, build, c);
+      // Ask the question the click will actually answer: a staff general whose click
+      // recruits him is priced like any other unit, not like a commander swap.
+      const over =
+        c.isGeneral && c.generalKind === "staff" && staffGeneralAction(index, build, c) === "set-commander"
+          ? staffSetWouldExceedBudget(index, build, c)
+          : addWouldExceedBudget(index, build, c);
       m.set(c.unitKey, over);
     }
     return m;
@@ -253,7 +265,20 @@ export function Builder({
     const cap = effectiveCap(index, card);
     return cap > 0 && groupQty(card) >= cap;
   };
-  const isDimmed = (card: UnitCard) => isFilterActive(filters) && !matchesCard(card, filters);
+  // Pick rate as a plain 0-100 number for the filter. Never-picked is a real 0;
+  // anything the dataset cannot speak about is null and the filter leaves it alone.
+  const pickRatePct = useCallback(
+    (card: UnitCard): number | null => {
+      const r = pickRates.rateOf(card.unitKey, card.baseUnitKey);
+      if (!r) return null;
+      if (r.kind === "never") return 0;
+      if (r.kind !== "data") return null;
+      return (100 * r.builds) / r.n;
+    },
+    [pickRates],
+  );
+
+  const isDimmed = (card: UnitCard) => isFilterActive(filters) && !matchesCard(card, filters, pickRatePct);
   const isBlocked = (card: UnitCard) => blockReasons.get(card.unitKey) != null;
   const isOverBudget = (card: UnitCard) => overBudgetCards.get(card.unitKey) === true;
   // Soft 4-corps ceiling (TOW): a card is "over" when its source corps is already
@@ -323,6 +348,25 @@ export function Builder({
       return { ...b, instances: b.instances.filter((i) => i.unitKey !== card.unitKey), staffSlotUnitKey: card.unitKey };
     });
   };
+
+  /** Left-click on a staff general in the grid.
+   *
+   *  The staff slot holds one card, so a plain "always toggle" click has nothing
+   *  sensible to do once somebody else is commanding. What the click should mean
+   *  depends on who that somebody is:
+   *
+   *    - slot empty, or holding this same card -> set / unset the commander;
+   *    - another STAFF general commands        -> swap the commander, one click
+   *      (only 16% of corps offer more than one, but swapping is the obvious intent);
+   *    - a COMBAT general commands             -> the player has deliberately picked a
+   *      non-standard commander, so clicking a staff general means "field it as an
+   *      ordinary unit" — which the game allows (see docs/HANDOFF.md).
+   *
+   *  The details panel's "Recruit as a unit" remains the explicit route for the
+   *  remaining case: recruiting a second staff general while one already commands.
+   */
+  const staffClick = (card: UnitCard) =>
+    staffGeneralAction(index, build, card) === "recruit" ? tryAdd(card) : toggleStaff(card);
 
   const clearStaff = () => setBuild((b) => ({ ...b, staffSlotUnitKey: null }));
   const clearBuild = () => {
@@ -437,6 +481,10 @@ export function Builder({
     onHover: (card, anchor) => setHovered({ card, anchor }),
     onHoverEnd: () => setHovered(null),
     isPrimed: (key) => primedKey === key,
+    pickRateOf: (card) => {
+      const rate = pickRates.rateOf(card.unitKey, card.baseUnitKey);
+      return rate ? <PickRateBar rate={rate} thresholds={pickRates.season?.thresholds} /> : null;
+    },
   };
 
   // Set of general unitKeys offered in this corps's current local-time rotation
@@ -559,9 +607,9 @@ export function Builder({
   const matchCount = useMemo(
     () =>
       roster.cards.filter(
-        (c) => matchesCard(c, filters) && !isHiddenByGeneralSwitch(c, filters) && !hiddenByRotation(c),
+        (c) => matchesCard(c, filters, pickRatePct) && !isHiddenByGeneralSwitch(c, filters) && !hiddenByRotation(c),
       ).length,
-    [roster.cards, filters, hiddenByRotation],
+    [roster.cards, filters, hiddenByRotation, pickRatePct],
   );
 
   const current = { build, config, factionKey: roster.factionKey, armyCorpsName: roster.armyCorpsName };
@@ -690,6 +738,35 @@ export function Builder({
             Corps roll
           </button>
         )}
+        {/* Optional feature: absent entirely unless the build set VITE_PICK_RATES=1
+            (the condition folds to a literal, so this is dropped at minify time). */}
+        {PICK_RATES_ENABLED && pickRates.available && (
+          <label
+            style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}
+            title="Show how often real players field each unit, from recorded battle replays"
+          >
+            <input
+              type="checkbox"
+              checked={pickRates.show}
+              onChange={(e) => pickRates.setShow(e.target.checked)}
+            />
+            Pick rates <span className="tag beta">Beta</span>
+          </label>
+        )}
+        {PICK_RATES_ENABLED && pickRates.show && (pickRates.index?.seasons.length ?? 0) > 1 && (
+          <select
+            className="btn small"
+            value={pickRates.seasonId ?? ""}
+            onChange={(e) => pickRates.setSeasonId(e.target.value)}
+            title="Which recorded dataset the pick rates come from"
+          >
+            {pickRates.index!.seasons.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label} — {s.patch}
+              </option>
+            ))}
+          </select>
+        )}
         <button className="btn small" onClick={() => setFiltersOpen((o) => !o)}>
           {filtersOpen ? "Hide filters" : "Filters"}
         </button>
@@ -748,10 +825,24 @@ export function Builder({
             cards={roster.cards}
             matchCount={matchCount}
             totalCount={roster.cards.length}
+            showPickRate={PICK_RATES_ENABLED && pickRates.show && !!pickRates.season}
           />
         </div>
 
         <div className={`map density-${density}`}>
+          {PICK_RATES_ENABLED && pickRates.show && (
+            <div className="pr-header">
+              <PickRateChip
+                corps={pickRates.corps}
+                summary={pickRates.index?.seasons.find((s) => s.id === pickRates.seasonId) ?? null}
+                loading={pickRates.loading}
+              />
+              <PickRateNotice
+                corps={pickRates.corps}
+                minSample={pickRates.season?.thresholds.minSampleForPercent ?? 5}
+              />
+            </div>
+          )}
           <BuilderGrid
             staffGenerals={staffGenerals}
             divisions={divisions}
@@ -759,7 +850,7 @@ export function Builder({
             brigadeMeta={combinedView ? EMPTY_BRIGADE_META : brigadeMeta}
             divisionNames={divisionNames}
             handlers={handlers}
-            onStaffToggle={coarse ? (card, anchor) => primeOrAct(card, toggleStaff, anchor ?? new DOMRect()) : toggleStaff}
+            onStaffToggle={coarse ? (card, anchor) => primeOrAct(card, staffClick, anchor ?? new DOMRect()) : staffClick}
           />
           {unplaced.length > 0 && (
             <section className="division" aria-label="Other units">
@@ -837,7 +928,28 @@ export function Builder({
           card={detail}
           inStaffSlot={inStaffSlot(detail.unitKey)}
           onSetCommander={detail.isGeneral ? () => toggleStaff(detail) : undefined}
+          // Staff generals are only ever routed to the commander slot by the grid, but
+          // the game lets a corps field one as an ordinary unit (with a combat general
+          // commanding instead) — real replays do exactly that. Offer the second path
+          // here rather than overloading the grid click.
+          onRecruitAsUnit={
+            detail.isGeneral && detail.generalKind === "staff" && !inStaffSlot(detail.unitKey)
+              ? () => {
+                  tryAdd(detail);
+                  setDetail(null);
+                }
+              : undefined
+          }
+          recruitBlockedReason={
+            detail.isGeneral && detail.generalKind === "staff"
+              ? (evaluateAdd(index, build, detail, combatCap)?.reason ?? null)
+              : null
+          }
           onClose={() => setDetail(null)}
+          pickRate={pickRates.rateOf(detail.unitKey, detail.baseUnitKey)}
+          pickRateCombined={pickRates.combineVariants}
+          pickRateRegiment={pickRates.regimentOf(detail.baseUnitKey || detail.unitKey)}
+          pickRateSeason={pickRates.season}
         />
       )}
       {generalSwap && (
@@ -890,6 +1002,7 @@ function UnplacedMedallion({ card, h }: { card: UnitCard; h: MedallionHandlers }
       onContextMenu={() => h.onDetails(card)}
       onHover={h.onHover}
       onHoverEnd={h.onHoverEnd}
+      pickRate={h.pickRateOf?.(card)}
     />
   );
 }

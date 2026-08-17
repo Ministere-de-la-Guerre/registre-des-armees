@@ -16,7 +16,6 @@ const STRING_TAG = 0x0e;
  *  is the corps *type* (`x` line, `r` reserve cavalry), so it must not be pinned. */
 const ARMY_KEY_RE = /^ntw3_(?:ac|tow)_[a-z]\d{2}_[a-z]\d+_(\d+)$/;
 const FLAG_RE = /^data\\ui\\flags\\/i;
-const STAFF_PREFIX = "ntw3_gen_staff_";
 const UNIT_PREFIXES = ["ntw3_inf_", "ntw3_cav_", "ntw3_art_", "ntw3_nav_", "ntw3_gen_"];
 const CORPS_NAME_RE = /^\d+\.\s/;
 /** `Officer Name (Regiment) [C4]` | `Regiment [L4]` — tier tag is always last. */
@@ -225,14 +224,26 @@ export function parseReplay(blob: Uint8Array): ReplayBattle {
       };
       byKey.set(key, army);
       battle.armies.push(army);
+      // The FIRST key in the block is the commander slot, whatever key sits in it.
+      // The role is positional, not a property of the key: the game lets a player put
+      // a *combat* general in command (and then field the corps' own staff general as
+      // an ordinary unit), which reading the `ntw3_gen_staff_` prefix would get exactly
+      // backwards — reporting the wrong general, or none at all. Both readings agree
+      // for the overwhelming majority of armies; only the positional one is correct.
+      let commanderTaken = false;
       for (const s of body) {
         if (FLAG_RE.test(s)) {
           army.flag = s;
           break;
         }
-        if (s.startsWith(STAFF_PREFIX)) army.staffKey = s;
-        else if (isUnitKey(s)) army.units.push({ key: s, name: "", regiment: "", officer: "", tier: "" });
-        else if (CORPS_NAME_RE.test(s)) army.corpsName = s;
+        if (isUnitKey(s)) {
+          if (!commanderTaken) {
+            commanderTaken = true;
+            army.staffKey = s;
+          } else {
+            army.units.push({ key: s, name: "", regiment: "", officer: "", tier: "" });
+          }
+        } else if (CORPS_NAME_RE.test(s)) army.corpsName = s;
         else if (!army.player) army.player = s;
       }
       continue;

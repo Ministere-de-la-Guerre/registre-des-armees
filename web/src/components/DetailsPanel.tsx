@@ -2,6 +2,9 @@ import { useEffect } from "react";
 import { ABILITY_KEYS, ABILITY_LABELS, type UnitCard } from "../domain/types";
 import { classLabel } from "../domain/labels";
 import { Medallion } from "./Medallion";
+import { PICK_RATES_ENABLED } from "../features/pickRates/flag";
+import { bucketOf, longLabel } from "../features/pickRates/pickRates";
+import type { PickRateSeason, RegimentRollup, UnitPickRate } from "../features/pickRates/types";
 
 function StatRow({ k, v }: { k: string; v: number | string | null }) {
   return (
@@ -17,12 +20,34 @@ export function DetailsPanel({
   card,
   inStaffSlot,
   onSetCommander,
+  onRecruitAsUnit,
+  recruitBlockedReason = null,
   onClose,
+  pickRate = null,
+  pickRateRegiment = null,
+  pickRateCombined = false,
+  pickRateSeason = null,
 }: {
   card: UnitCard;
   inStaffSlot?: boolean;
   onSetCommander?: () => void;
+  /** Recruit this card as an ordinary unit rather than putting it in the staff slot.
+   *  Offered for staff generals, which the grid otherwise only ever routes to the
+   *  commander slot — the game allows fielding one as a normal unit (real replays do
+   *  it, with a combat general commanding instead). */
+  onRecruitAsUnit?: () => void;
+  /** Why recruiting is currently impossible (cap reached, etc.); disables the button. */
+  recruitBlockedReason?: string | null;
   onClose: () => void;
+  /** Optional feature (features/pickRates): null when off or still loading. */
+  pickRate?: UnitPickRate | null;
+  /** The regiment behind this card, across all its variants. */
+  pickRateRegiment?: RegimentRollup | null;
+  /** Whether `pickRate` is already the combined (unit + generals) figure, which it is
+   *  when combat generals are hidden. Only the wording changes — the headline must
+   *  always name the same number the medallion shows. */
+  pickRateCombined?: boolean;
+  pickRateSeason?: PickRateSeason | null;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -51,11 +76,23 @@ export function DetailsPanel({
           </button>
         </div>
         <div className="modal-body">
-          {onSetCommander && (
+          {(onSetCommander || onRecruitAsUnit) && (
             <div className="modal-actions">
-              <button className={`btn small ${inStaffSlot ? "gold" : "primary"}`} onClick={onSetCommander}>
-                {inStaffSlot ? "★ Remove from staff slot" : "★ Set as corps commander (staff slot)"}
-              </button>
+              {onSetCommander && (
+                <button className={`btn small ${inStaffSlot ? "gold" : "primary"}`} onClick={onSetCommander}>
+                  {inStaffSlot ? "★ Remove from staff slot" : "★ Set as corps commander (staff slot)"}
+                </button>
+              )}
+              {onRecruitAsUnit && (
+                <button
+                  className="btn small"
+                  onClick={onRecruitAsUnit}
+                  disabled={!!recruitBlockedReason}
+                  title={recruitBlockedReason ?? "Add this general to the build as an ordinary unit"}
+                >
+                  + Recruit as a unit
+                </button>
+              )}
             </div>
           )}
           <div className="stat-grid">
@@ -74,6 +111,39 @@ export function DetailsPanel({
             <StatRow k="Melee defence" v={card.stats.meleeDefense} />
             <StatRow k="Charge bonus" v={card.stats.chargeBonus} />
           </div>
+          {PICK_RATES_ENABLED && pickRate && (
+            <>
+              <div className="section-title">
+                Pick rate{pickRateSeason ? ` · ${pickRateSeason.label}` : ""}
+              </div>
+              <div className="stat-grid">
+                <StatRow
+                  k={pickRateCombined ? "This unit + its generals" : "This card"}
+                  v={longLabel(pickRate)}
+                />
+                {pickRate.kind === "data" && (
+                  <StatRow k="Copies when picked" v={pickRate.copies.toFixed(2)} />
+                )}
+                {/* The other question — shown only when it isn't already the headline,
+                    so the panel never states the same number twice under two names. */}
+                {pickRateRegiment && !pickRateCombined && (
+                  <StatRow
+                    k="This regiment (all variants)"
+                    v={`${pickRateRegiment.builds} of ${pickRateRegiment.n}`}
+                  />
+                )}
+                {pickRateRegiment && pickRateRegiment.officerBuilds > 0 && (
+                  <StatRow
+                    k="…led by an officer"
+                    v={`${pickRateRegiment.officerBuilds} of ${pickRateRegiment.builds}`}
+                  />
+                )}
+                {pickRateSeason && bucketOf(pickRate, pickRateSeason.thresholds) && (
+                  <StatRow k="Bucket" v={bucketOf(pickRate, pickRateSeason.thresholds)} />
+                )}
+              </div>
+            </>
+          )}
           <div className="section-title">Abilities</div>
           {abilities.length === 0 ? (
             <div style={{ fontSize: 12, color: "var(--ink-soft)" }}>No special abilities listed.</div>

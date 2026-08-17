@@ -497,8 +497,15 @@ export function checkKnownLimits(
   selected.forEach((card, index) => {
     const classification = classifyGeneral(card);
     if (classification === "staff") {
+      // Two separate rules, easily conflated:
+      //   * a corps may hold at most ONE staff general anywhere in the build — slot or
+      //     not (capped via staff_generals below);
+      //   * the staff SLOT holds exactly one card, which need not be a staff general —
+      //     the game lets a combat general command, and the corps' own staff general
+      //     then be recruited as an ordinary unit (real replays do this).
+      // So a staff general occupies the slot only when it IS the slot card.
       counts.staff_generals += 1;
-      counts.staff_slot_occupants += 1;
+      if (index === staffSlotIndex) counts.staff_slot_occupants += 1;
     } else if (classification === "combat") {
       counts.combat_generals += 1;
       if (index === staffSlotIndex) {
@@ -514,6 +521,8 @@ export function checkKnownLimits(
     : generalCaps(factionKey);
   const maxima: Record<string, number> = {
     total_cards: MAX_TOTAL_UNIT_CARDS,
+    // Never two staff generals in one build, wherever they sit.
+    staff_generals: caps.staff,
     artillery_foot: MAX_FOOT_ARTILLERY,
     artillery_horse: horseArtilleryMax(recruitable, factionKey),
     cavalry_heavy: MAX_HEAVY_CAVALRY,
