@@ -206,6 +206,34 @@ describe("parseReplay", () => {
     expect(b.units[1].regiment).toBe("2e dragons 'le Condé-Dragons'");
   });
 
+  it("finds a reserve-cavalry corps, whose key carries an `r` slot instead of `x`", () => {
+    // The letter before the slot count is the corps *type*; pinning it to `x`
+    // drops every reserve-cavalry corps in the game on the floor.
+    const reserve = {
+      key: "ntw3_ac_a11_r5_131",
+      staff: "ntw3_gen_staff_131_2_0170",
+      player: "Djokodal",
+      units: ["ntw3_cav_stand_131_023_1703", "ntw3_cav_heavy_131_999_0177"],
+      corpsName: "10. Murat / RC",
+      flag: "data\\ui\\flags\\f_11a_ac131",
+    };
+    const parsed = parseReplay(
+      file(
+        keyBlock(reserve),
+        nameBlock({
+          ...reserve,
+          general: "Joachim Murat 'le Roi Franconi' [C4]",
+          names: ["23e dragons 'le Royal-Piémont' [C3]", "Cuirassiers saxons 'von Zastrow' [C1]"],
+        }),
+      ),
+    );
+    expect(parsed.armies.map((a) => a.factionKey)).toEqual([reserve.key]);
+    expect(parsed.armies[0].corpsName).toBe("10. Murat / RC");
+    expect(parsed.armies[0].player).toBe("Djokodal");
+    expect(parsed.armies[0].units.map((u) => u.key)).toEqual(reserve.units);
+    expect(parsed.warnings).toEqual([]);
+  });
+
   it("returns an empty battle for a file that is not a replay", () => {
     const battleOfNothing = parseReplay(Uint8Array.from([1, 2, 3, 4, 5]));
     expect(battleOfNothing.armies).toEqual([]);
@@ -229,6 +257,111 @@ describe("alignment self-check", () => {
     expect(parsed.warnings[0]).toContain("display names discarded");
     // Keys survive — only the untrustworthy names are dropped.
     expect(parsed.armies[0].units.map((u) => u.key)).toEqual(ARMY_A.units);
+    expect(parsed.armies[0].units.every((u) => u.name === "")).toBe(true);
+  });
+
+  // Every shape in the game where the key writes as one number what the name
+  // splits apart. Swept out of the full roster set, not just one replay:
+  // formations raised from several parents, plus Ottoman calibres.
+  const COMPOSITES: [key: string, name: string][] = [
+    ["ntw3_art_foot_126_014_0310", "1./4. Fußbatterien, 6-Pfünder 'Huet/Ludwig' [F3]"],
+    ["ntw3_inf_grena_124_037_0555", "¤ Grenadiere der 3./7. [G3]"],
+    ["ntw3_art_horse_131_034_15947", "3e/4e d'artillerie à cheval polonaise de 6 livres [H3]"],
+    ["ntw3_inf_grena_118_012_6545", "¤ Grenadiers suisses du 1er/2e [G4]"],
+    ["ntw3_inf_grena_119_418_0529", "¤ Grenadiers du 4e/18e [G4]"],
+    ["ntw3_art_foot_249_910_15879", "9-ya/10ya peshaya artilleriya, 6-funtov [F3]"],
+    ["ntw3_inf_line_057_022_2309", "Lijn infanterie No. 2/2 uit Nassau 'von Normann' [L3]"],
+    ["ntw3_art_foot_069_015_0188", "1.5 okka abüs [F2]"], // calibre, not a regiment
+  ];
+
+  it.each(COMPOSITES)("accepts the split-number name %s", (key, name) => {
+    const army = {
+      key: "ntw3_ac_a11_x7_126",
+      staff: "ntw3_gen_staff_126_2_0162",
+      units: [key],
+      corpsName: "5. Macdonald / X.C",
+      flag: "data\\ui\\flags\\f_11a_ac126",
+    };
+    const parsed = parseReplay(
+      file(keyBlock(army), nameBlock({ ...army, general: "Jacques MacDonald", names: [name] })),
+    );
+    expect(alignmentErrors(parsed.armies[0])).toEqual([]);
+    expect(parsed.warnings).toEqual([]);
+  });
+
+  it("does not join two numbers that are merely near each other", () => {
+    // The separator admits no whitespace, so "4. Batterie … 6-Pfünder" must not
+    // be read as regiment 46 — otherwise the check would accept anything.
+    const army = {
+      key: "ntw3_ac_a11_x7_122",
+      staff: "ntw3_gen_staff_122_2_0162",
+      units: ["ntw3_art_foot_122_046_0294", "ntw3_art_foot_122_003_0311"],
+      corpsName: "6. Wrede / VI.C",
+      flag: "data\\ui\\flags\\f_11a_ac122",
+    };
+    const parsed = parseReplay(
+      file(
+        keyBlock(army),
+        nameBlock({
+          ...army,
+          general: "Carl Philipp von Wrede",
+          names: ["4. Linien-Batterie, 6-Pfünder 'Berchem/Roys' [F3]", "3. Fußbatterie 'Ziegler' [F4]"],
+        }),
+      ),
+    );
+    expect(alignmentErrors(parsed.armies[0])).toHaveLength(1);
+  });
+
+  it("keeps the corps' names when a lone name is the only thing it cannot read", () => {
+    // One unreadable name is not evidence of a shift — a shift lands *every*
+    // later name on the wrong unit — so it must not cost the corps the rest.
+    const army = {
+      key: "ntw3_ac_b09_x4_163",
+      staff: "ntw3_gen_staff_163_8_0195",
+      units: ["ntw3_inf_light_163_043_1366", "ntw3_inf_line_163_048_3031", "ntw3_cav_light_163_014_1134"],
+      corpsName: "13. Wellesley / Peninsular",
+      flag: "data\\ui\\flags\\f_09b_ac163",
+    };
+    const parsed = parseReplay(
+      file(
+        keyBlock(army),
+        nameBlock({
+          ...army,
+          general: "Arthur Wellesley 'Wellington'",
+          names: [
+            "¤ the Monmouthshire Light Foot [L6]", // no "43" anywhere
+            "¤ 48th (Northamptonshire) Foot [L4]",
+            "14th (the King's) Light Dragoons [C4]",
+          ],
+        }),
+      ),
+    );
+    expect(alignmentErrors(parsed.armies[0])).toHaveLength(1);
+    expect(parsed.warnings).toEqual([]);
+    expect(parsed.armies[0].units[1].regiment).toBe("¤ 48th (Northamptonshire) Foot");
+  });
+
+  it("still discards when the corps' only checkable unit is the one that mismatches", () => {
+    // Nothing left to corroborate against, so the lone mismatch has to be taken
+    // at face value.
+    const army = {
+      key: "ntw3_ac_b09_x4_163",
+      staff: "ntw3_gen_staff_163_8_0195",
+      units: ["ntw3_inf_light_163_043_1366", "ntw3_inf_line_163_999_3031"],
+      corpsName: "13. Wellesley / Peninsular",
+      flag: "data\\ui\\flags\\f_09b_ac163",
+    };
+    const parsed = parseReplay(
+      file(
+        keyBlock(army),
+        nameBlock({
+          ...army,
+          general: "Arthur Wellesley 'Wellington'",
+          names: ["¤ 48th (Northamptonshire) Foot [L4]", "1st Detachments [L4]"],
+        }),
+      ),
+    );
+    expect(parsed.warnings).toHaveLength(1);
     expect(parsed.armies[0].units.every((u) => u.name === "")).toBe(true);
   });
 

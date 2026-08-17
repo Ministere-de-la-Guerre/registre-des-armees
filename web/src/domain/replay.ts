@@ -12,7 +12,9 @@
 
 const STRING_TAG = 0x0e;
 
-const ARMY_KEY_RE = /^ntw3_(?:ac|tow)_[a-z]\d{2}_x\d+_(\d+)$/;
+/** `ntw3_ac_a11_x5_117` / `ntw3_ac_a11_r5_131` — the letter before the slot count
+ *  is the corps *type* (`x` line, `r` reserve cavalry), so it must not be pinned. */
+const ARMY_KEY_RE = /^ntw3_(?:ac|tow)_[a-z]\d{2}_[a-z]\d+_(\d+)$/;
 const FLAG_RE = /^data\\ui\\flags\\/i;
 const STAFF_PREFIX = "ntw3_gen_staff_";
 const UNIT_PREFIXES = ["ntw3_inf_", "ntw3_cav_", "ntw3_art_", "ntw3_nav_", "ntw3_gen_"];
@@ -21,6 +23,15 @@ const CORPS_NAME_RE = /^\d+\.\s/;
 const DISPLAY_NAME_RE = /^(?:([^()]+?)\s*\((.+)\)|(.+?))\s*\[([A-Z]\d)\]$/;
 /** The 3-digit regiment number embedded in a unit key, e.g. …_163_**043**_1366. */
 const REGIMENT_NO_RE = /^ntw3_\w+?_\d+_(\d{3})_/;
+/** Numbers the key writes as one run but the name splits apart, so the name's
+ *  own digit runs never spell the key's number. Two kinds occur:
+ *    - formations raised from several parents — `1./4.`, `3e/4e`, `1er/2e`,
+ *      `9-ya/10ya`, `No. 2/2` — keyed by concatenation (1 and 4 → `014`);
+ *    - Ottoman calibres — `1.5 okka` keyed `015`.
+ *  Both are digit groups joined by a tight separator: an optional ordinal
+ *  suffix or hyphen, then a `.` or `/`. The separator admits no whitespace, so
+ *  two merely adjacent numbers ("6-Pfünder 'Berchem/Roys'") never pair up. */
+const COMPOSITE_NO_RE = /\d+(?:[a-zA-Z-]{0,3}[./]{1,2}\d+)+/g;
 
 /** Typographic punctuation that legitimately appears in localised unit names. */
 const QUOTES = new Set([0x2013, 0x2014, 0x2018, 0x2019, 0x201c, 0x201d]);
@@ -130,19 +141,48 @@ function blocks(strings: string[]): { key: string; body: string[] }[] {
   }));
 }
 
-/** Self-check: the 3-digit regiment number in a unit key must appear in that
- *  unit's display name. Catches any off-by-one in the key↔name pairing. */
+const unpad = (n: string) => n.replace(/^0+/, "") || "0";
+
+/** The regiment number a unit key claims, or null when it carries none
+ *  (999 marks an un-numbered formation). */
+function keyRegimentNo(key: string): string | null {
+  const m = REGIMENT_NO_RE.exec(key);
+  return !m || m[1] === "999" ? null : unpad(m[1]);
+}
+
+/** Every regiment number a display name can legitimately be claiming: each of
+ *  its digit runs, plus the concatenation behind any `1./4.`-style composite. */
+function nameRegimentNos(regiment: string): Set<string> {
+  const out = new Set((regiment.match(/\d+/g) ?? []).map(unpad));
+  for (const composite of regiment.match(COMPOSITE_NO_RE) ?? []) {
+    out.add(unpad((composite.match(/\d+/g) ?? []).join("")));
+  }
+  return out;
+}
+
+/** Self-check: the regiment number in a unit key must appear in that unit's
+ *  display name. Catches any off-by-one in the key↔name pairing. */
 export function alignmentErrors(army: ReplayArmy): string[] {
   const bad: string[] = [];
   army.units.forEach((u, i) => {
-    const m = REGIMENT_NO_RE.exec(u.key);
-    if (!m || m[1] === "999" || !u.name) return; // 999 = un-numbered formation
-    const n = m[1].replace(/^0+/, "") || "0";
-    if (!new RegExp(`(?<!\\d)${n}(?!\\d)`).test(u.regiment)) {
-      bad.push(`#${i + 1} ${u.key} → ${u.regiment}`);
-    }
+    const n = keyRegimentNo(u.key);
+    if (n === null || !u.name) return;
+    if (!nameRegimentNos(u.regiment).has(n)) bad.push(`#${i + 1} ${u.key} → ${u.regiment}`);
   });
   return bad;
+}
+
+/** Whether the mismatches add up to a genuine shift, which is the only thing
+ *  worth throwing a whole corps' names away for. An off-by-one lands *every*
+ *  later name on the wrong unit, so it trips many units at once; a single
+ *  mismatch is nearly always one name the self-check cannot read rather than a
+ *  pairing bug — unless it is the corps' only checkable unit, which leaves
+ *  nothing to corroborate it either way. */
+export function namesMisaligned(army: ReplayArmy): boolean {
+  const bad = alignmentErrors(army);
+  if (!bad.length) return false;
+  const checkable = army.units.filter((u) => u.name && keyRegimentNo(u.key) !== null).length;
+  return bad.length >= 2 || bad.length === checkable;
 }
 
 export function parseReplay(blob: Uint8Array): ReplayBattle {
@@ -209,8 +249,8 @@ export function parseReplay(blob: Uint8Array): ReplayBattle {
     }
     // If the pairing failed its self-check, drop the names rather than show a
     // regiment (or worse, an officer) against the wrong unit. Keys stay valid.
-    const bad = alignmentErrors(army);
-    if (bad.length) {
+    if (namesMisaligned(army)) {
+      const bad = alignmentErrors(army);
       battle.warnings.push(
         `${army.corpsName || army.factionKey}: display names discarded (${bad.length} misaligned, e.g. ${bad[0]}).`,
       );
