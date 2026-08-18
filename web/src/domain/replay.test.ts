@@ -175,6 +175,28 @@ describe("parseReplay", () => {
     expect(battle.warnings).toEqual([]);
   });
 
+  it("keeps separate armies when multiple players choose the same corps", () => {
+    const duplicate = {
+      ...ARMY_A,
+      player: "Wolfe",
+      units: ["ntw3_inf_line_163_048_3031"],
+    };
+    const parsed = parseReplay(
+      file(
+        keyBlock(ARMY_A),
+        keyBlock(duplicate),
+        nameBlock({ ...ARMY_A, general: "Arthur Wellesley 'Wellington'", names: ARMY_A_NAMES }),
+        nameBlock({ ...duplicate, general: "William Wolfe", names: ["¤ 48th (Northamptonshire) Foot [L4]"] }),
+      ),
+    );
+
+    expect(parsed.armies).toHaveLength(2);
+    expect(parsed.armies.map((army) => army.factionKey)).toEqual([ARMY_A.key, ARMY_A.key]);
+    expect(parsed.armies.map((army) => army.player)).toEqual(["Tac", "Wolfe"]);
+    expect(parsed.armies.map((army) => army.general)).toEqual(["Arthur Wellesley 'Wellington'", "William Wolfe"]);
+    expect(parsed.armies.map((army) => army.units.map((unit) => unit.key))).toEqual([ARMY_A.units, duplicate.units]);
+  });
+
   it("keeps the ordered unit keys including duplicate copies", () => {
     expect(battle.armies[0].units.map((u) => u.key)).toEqual(ARMY_A.units);
   });

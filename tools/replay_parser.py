@@ -219,10 +219,13 @@ def parse(blob: bytes) -> Battle:
         elif not battle.wind and s.startswith("wind_level_"):
             battle.wind = s
 
-    by_key: dict[str, Army] = {}
+    # A battle may contain the same corps more than once. The setup writes every
+    # army's key block first, followed by the matching name blocks, so match each
+    # name block to the next unresolved occurrence of its corps key rather than
+    # treating army_key as an army identity.
+    awaiting_names: dict[str, list[Army]] = {}
     for army_key, body in _blocks(strings):
-        army = by_key.get(army_key)
-        if army is None:
+        if any(_is_unit_key(s) for s in body):
             # --- key block: [staff][player][unit keys…][player][corps name][flag]
             m = ARMY_KEY_RE.match(army_key)
             army = Army(
@@ -230,8 +233,8 @@ def parse(blob: bytes) -> Battle:
                 corps_id=m.group(1) if m else "",
                 side=army_key.split("_")[2] if len(army_key.split("_")) > 2 else "",
             )
-            by_key[army_key] = army
             battle.armies.append(army)
+            awaiting_names.setdefault(army_key, []).append(army)
             # The FIRST key in the block is the commander slot, whatever key sits in
             # it. The role is positional, not a property of the key: the game lets a
             # player put a *combat* general in command (and then field the corps' own
@@ -255,6 +258,10 @@ def parse(blob: bytes) -> Battle:
             continue
 
         # --- name block: [player][flag][general][unit display names…]
+        pending = awaiting_names.get(army_key)
+        if not pending:
+            continue
+        army = pending.pop(0)
         start = next((i for i, s in enumerate(body) if FLAG_RE.match(s)), -1)
         if start < 0 or start + 1 >= len(body):
             continue

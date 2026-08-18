@@ -484,7 +484,7 @@ class LimitTests(unittest.TestCase):
         rules = {violation.rule for violation in result.violations}
         self.assertEqual(result.counts["staff_generals"], 2)
         self.assertEqual(result.counts["combat_generals"], 1)
-        self.assertEqual(rules, {"staff_slot_occupants"})
+        self.assertEqual(rules, {"staff_generals"})
 
     def test_missing_general_men_is_not_guessed(self) -> None:
         unknown = card("unknown", faction="france", unit_class="general", men=None)
@@ -537,15 +537,15 @@ class LimitTests(unittest.TestCase):
         self.assertEqual(with_slot.counts["combat_generals_against_cap"], 2)
         self.assertEqual(with_slot.counts["staff_slot_occupants"], 1)
 
-    def test_combat_general_cannot_share_staff_slot_with_staff_general(self) -> None:
+    def test_staff_general_recruited_as_a_unit_does_not_occupy_the_staff_slot(self) -> None:
         faction = "ntw3_ac_test_x7_001"
         combat = card("combat", faction=faction, unit_class="general", men=80)
         staff = card("staff", faction=faction, unit_class="general", men=32)
         result = check_known_limits([combat, staff], faction, staff_slot_index=0)
-        self.assertEqual(
-            {violation.rule for violation in result.violations},
-            {"staff_slot_occupants"},
-        )
+        self.assertFalse(result.violations)
+        self.assertEqual(result.counts["staff_slot_occupants"], 1)
+        self.assertEqual(result.counts["staff_generals"], 1)
+        self.assertEqual(result.counts["combat_generals_against_cap"], 0)
 
     def test_commander_variant_uses_its_underlying_unit_cap(self) -> None:
         faction = "france"

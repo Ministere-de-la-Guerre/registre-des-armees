@@ -205,13 +205,16 @@ export function parseReplay(blob: Uint8Array): ReplayBattle {
     } else if (!battle.wind && s.startsWith("wind_level_")) battle.wind = s;
   }
 
-  const byKey = new Map<string, ReplayArmy>();
+  // A battle may contain the same corps more than once. The setup writes every
+  // army's key block first, followed by the matching name blocks, so match each
+  // name block to the next unresolved occurrence of its corps key rather than
+  // treating factionKey as an army identity.
+  const awaitingNames = new Map<string, ReplayArmy[]>();
   for (const { key, body } of blocks(strings)) {
-    let army = byKey.get(key);
-    if (!army) {
+    if (body.some(isUnitKey)) {
       // --- key block: [staff][player][unit keys…][player][corps name][flag]
       const m = ARMY_KEY_RE.exec(key);
-      army = {
+      const army: ReplayArmy = {
         factionKey: key,
         corpsId: m?.[1] ?? "",
         side: key.split("_")[2] ?? "",
@@ -222,8 +225,10 @@ export function parseReplay(blob: Uint8Array): ReplayBattle {
         general: "",
         units: [],
       };
-      byKey.set(key, army);
       battle.armies.push(army);
+      const queued = awaitingNames.get(key);
+      if (queued) queued.push(army);
+      else awaitingNames.set(key, [army]);
       // The FIRST key in the block is the commander slot, whatever key sits in it.
       // The role is positional, not a property of the key: the game lets a player put
       // a *combat* general in command (and then field the corps' own staff general as
@@ -250,6 +255,8 @@ export function parseReplay(blob: Uint8Array): ReplayBattle {
     }
 
     // --- name block: [player][flag][general][unit display names…]
+    const army = awaitingNames.get(key)?.shift();
+    if (!army) continue;
     const start = body.findIndex((s) => FLAG_RE.test(s));
     if (start < 0 || start + 1 >= body.length) continue;
     army.general = body[start + 1];

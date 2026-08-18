@@ -19,15 +19,15 @@ export interface ReplaySession {
   battle: ReplayBattle | null;
   fileName: string;
   rosters: Map<string, FactionRoster>;
-  /** factionKey of the army currently shown in the detail panel. */
-  activeKey: string | null;
+  /** Position of the army currently shown in the detail panel. Corps can repeat. */
+  activeIndex: number | null;
 }
 
 export const emptyReplaySession = (): ReplaySession => ({
   battle: null,
   fileName: "",
   rosters: new Map(),
-  activeKey: null,
+  activeIndex: null,
 });
 
 /** Default save name for an imported army: "Player — 13. Wellesley / Peninsular". */

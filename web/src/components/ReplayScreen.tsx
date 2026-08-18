@@ -64,7 +64,7 @@ export function ReplayScreen({
   onBack: () => void;
   onOpenInBuilder: (entry: CorpsEntry, saved: SavedBuild) => void;
 }) {
-  const { battle, fileName, rosters, activeKey } = session;
+  const { battle, fileName, rosters, activeIndex } = session;
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -102,7 +102,7 @@ export function ReplayScreen({
         battle: parsed,
         fileName: file.name,
         rosters: new Map(),
-        activeKey: parsed.armies[0].factionKey,
+        activeIndex: 0,
       };
       onSessionChange(base); // show the armies straight away, price them as rosters arrive
 
@@ -144,7 +144,7 @@ export function ReplayScreen({
     });
   }, [battle, rosters, entryByKey]);
 
-  const active = views.find((v) => v.army.factionKey === activeKey) ?? views[0] ?? null;
+  const active = activeIndex === null ? (views[0] ?? null) : (views[activeIndex] ?? views[0] ?? null);
 
   const save = (view: ArmyView) => {
     const suggested = replayBuildName(view.army);
@@ -248,12 +248,12 @@ export function ReplayScreen({
       {battle && views.length > 0 && (
         <div className="replay-body">
           <div className="replay-armies">
-            {views.map((v) => (
+            {views.map((v, i) => (
               <ArmyCard
-                key={v.army.factionKey}
+                key={`${v.army.factionKey}-${i}`}
                 view={v}
-                active={v.army.factionKey === active?.army.factionKey}
-                onClick={() => onSessionChange({ ...session, activeKey: v.army.factionKey })}
+                active={v === active}
+                onClick={() => onSessionChange({ ...session, activeIndex: i })}
               />
             ))}
           </div>
