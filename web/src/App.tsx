@@ -127,9 +127,9 @@ export default function App() {
           <button
             className="btn ghost small"
             onClick={() => setScreen("replay")}
-            title="Read army builds from a replay — beta feature, still being tested"
+            title="Read army builds from a replay"
           >
-            ⛊ Replay builds <span className="tag beta">Beta</span>
+            ⛊ Replay builds
           </button>
         )}
         {web && roster && <FactionOfflineButton roster={roster} />}
