@@ -164,6 +164,9 @@ input::placeholder { color: #6f7888; }
    one block so "Open in builder" never strands itself on a line of its own. */
 .replay-detail .corps-header { flex-wrap: wrap; }
 .replay-actions { display: flex; gap: 8px; margin-left: auto; }
+/* Inside the army panel the notices line up with the medallion row's gutter. */
+.replay-detail .error-box.notice { margin: 10px 14px 0; }
+.replay-detail .error-box.notice + .error-box.notice { margin-top: 6px; }
 .replay-units { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 14px; }
 .replay-unit { flex: none; }
 .replay-unit.fallback {
@@ -539,6 +542,14 @@ input::placeholder { color: #6f7888; }
 
 .loading, .error-box { padding: 40px; text-align: center; font-size: 16px; color: var(--text); }
 .error-box { color: var(--bad); }
+/* A note shown *beside* content rather than in place of it — a rule breach on one
+   replay army, a corps whose roster is missing. The page-level .error-box above is
+   sized to stand alone in an empty view; at 40px of centred padding each, a couple
+   of these would push the very units they annotate off the fold. */
+.error-box.notice {
+  margin: 0 0 10px; padding: 7px 10px; text-align: left; font-size: 13px; line-height: 1.45;
+  background: rgba(138, 53, 40, 0.2); border: 1px solid var(--bad-deep); border-radius: 6px;
+}
 /* A transient status message. It is purely informational and floats over live
    controls (the tray on desktop, the header on touch), so it must never take a click
    meant for what is underneath it. */

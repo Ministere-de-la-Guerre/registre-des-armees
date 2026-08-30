@@ -13,7 +13,10 @@
 const STRING_TAG = 0x0e;
 
 /** `ntw3_ac_a11_x5_117` / `ntw3_ac_a11_r5_131` — the letter before the slot count
- *  is the corps *type* (`x` line, `r` reserve cavalry), so it must not be pinned. */
+ *  is the corps *type* (`x` line, `r` reserve cavalry), so it must not be pinned.
+ *  Matches army-corps and TOW corps only: a *custom army* is keyed by its bare
+ *  faction key (`denmark`, `britain`, `aaa_lordz`…), which no pattern can pick
+ *  out of a stream of localised text — see `armyKeys`. */
 const ARMY_KEY_RE = /^ntw3_(?:ac|tow)_[a-z]\d{2}_[a-z]\d+_(\d+)$/;
 const FLAG_RE = /^data\\ui\\flags\\/i;
 const UNIT_PREFIXES = ["ntw3_inf_", "ntw3_cav_", "ntw3_art_", "ntw3_nav_", "ntw3_gen_"];
@@ -127,12 +130,34 @@ export function splitDisplayName(name: string): { officer: string; regiment: str
 
 const isUnitKey = (s: string) => UNIT_PREFIXES.some((p) => s.startsWith(p));
 
+/** Every string this file uses as an army marker.
+ *
+ *  Army-corps and TOW corps announce themselves with a recognisable key, but a
+ *  custom army's marker is its bare faction key — `denmark`, `aaa_lordz` — an
+ *  ordinary word, so it has to be found by *position* instead: in a key block
+ *  the army key is the string immediately before the commander slot. The only
+ *  other string a unit key follows is the player name, and that one is itself
+ *  preceded by a unit key (the commander), which tells the two apart.
+ *
+ *  Name blocks hold no unit keys at all, so they are never found this way; they
+ *  are picked up by string equality against the keys the key blocks yielded. */
+function armyKeys(strings: string[]): Set<string> {
+  const keys = new Set<string>();
+  strings.forEach((s, i) => {
+    if (ARMY_KEY_RE.test(s)) keys.add(s);
+    else if (isUnitKey(s) || FLAG_RE.test(s)) return;
+    else if (isUnitKey(strings[i + 1] ?? "") && !isUnitKey(strings[i - 1] ?? "")) keys.add(s);
+  });
+  return keys;
+}
+
 /** Split the string stream into (armyKey, block) runs at each army-key marker, so
  *  trailing footer strings can never bleed from one army into the next. */
 function blocks(strings: string[]): { key: string; body: string[] }[] {
+  const keys = armyKeys(strings);
   const starts: number[] = [];
   strings.forEach((s, i) => {
-    if (ARMY_KEY_RE.test(s)) starts.push(i);
+    if (keys.has(s)) starts.push(i);
   });
   return starts.map((start, n) => ({
     key: strings[start],
@@ -217,7 +242,8 @@ export function parseReplay(blob: Uint8Array): ReplayBattle {
       const army: ReplayArmy = {
         factionKey: key,
         corpsId: m?.[1] ?? "",
-        side: key.split("_")[2] ?? "",
+        // Side and corps id live in the key pattern; a custom army has neither.
+        side: m ? (key.split("_")[2] ?? "") : "",
         player: "",
         corpsName: "",
         flag: "",

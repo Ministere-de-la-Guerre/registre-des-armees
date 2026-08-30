@@ -219,7 +219,7 @@ export function ReplayScreen({
 
       {error && <div className="error-box">⚠ {error}</div>}
       {battle?.warnings.map((w) => (
-        <div className="error-box" key={w}>
+        <div className="error-box notice" key={w}>
           ⚠ {w}
         </div>
       ))}
@@ -363,17 +363,17 @@ function ArmyDetail({ view, onSave, onOpen }: { view: ArmyView; onSave: () => vo
       </div>
 
       {issues.map((issue) => (
-        <div className="error-box" key={issue}>
+        <div className="error-box notice" key={issue}>
           ⚠ {issue}
         </div>
       ))}
       {!index && (
-        <div className="error-box">
+        <div className="error-box notice">
           ⚠ No roster data for <code>{army.factionKey}</code> — showing the replay’s own unit names.
         </div>
       )}
       {missingKeys.length > 0 && (
-        <div className="error-box">
+        <div className="error-box notice">
           ⚠ {missingKeys.length} unit{missingKeys.length === 1 ? "" : "s"} in this replay are not in the current
           dataset and were dropped: {missingKeys.join(", ")}
         </div>

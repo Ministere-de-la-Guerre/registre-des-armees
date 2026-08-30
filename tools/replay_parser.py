@@ -23,6 +23,9 @@ STRING_TAG = 0x0E
 
 #: `ntw3_ac_a11_x5_117` / `ntw3_ac_a11_r5_131` — the letter before the slot count is
 #: the corps *type* (`x` line, `r` reserve cavalry), so it must not be pinned.
+#: Army-corps and TOW corps only: a *custom army* is keyed by its bare faction key
+#: (`denmark`, `britain`, `aaa_lordz`…), which no pattern can pick out of a
+#: stream of localised text — see `_army_keys`.
 ARMY_KEY_RE = re.compile(r"^ntw3_(?:ac|tow)_[a-z]\d{2}_[a-z]\d+_(\d+)$")
 FLAG_RE = re.compile(r"^data\\ui\\flags\\", re.I)
 UNIT_PREFIXES = ("ntw3_inf_", "ntw3_cav_", "ntw3_art_", "ntw3_nav_", "ntw3_gen_")
@@ -145,10 +148,38 @@ def _is_unit_key(s: str) -> bool:
     return s.startswith(UNIT_PREFIXES)
 
 
+def _army_keys(strings: list[str]) -> set[str]:
+    """Every string this file uses as an army marker.
+
+    Army-corps and TOW corps announce themselves with a recognisable key, but a
+    custom army's marker is its bare faction key — `denmark`, `aaa_lordz` — an
+    ordinary word, so it has to be found by *position* instead: in a key block the
+    army key is the string immediately before the commander slot. The only other
+    string a unit key follows is the player name, and that one is itself preceded
+    by a unit key (the commander), which tells the two apart.
+
+    Name blocks hold no unit keys at all, so they are never found this way; they
+    are picked up by string equality against the keys the key blocks yielded."""
+    keys: set[str] = set()
+    for i, s in enumerate(strings):
+        if ARMY_KEY_RE.match(s):
+            keys.add(s)
+        elif _is_unit_key(s) or FLAG_RE.match(s):
+            continue
+        elif (
+            i + 1 < len(strings)
+            and _is_unit_key(strings[i + 1])
+            and (i == 0 or not _is_unit_key(strings[i - 1]))
+        ):
+            keys.add(s)
+    return keys
+
+
 def _blocks(strings: list[str]) -> list[tuple[str, list[str]]]:
     """Split the string stream into (army_key, block) runs at each army-key marker, so
     trailing footer strings can never bleed from one army into the next."""
-    starts = [i for i, s in enumerate(strings) if ARMY_KEY_RE.match(s)]
+    keys = _army_keys(strings)
+    starts = [i for i, s in enumerate(strings) if s in keys]
     out = []
     for n, i in enumerate(starts):
         end = starts[n + 1] if n + 1 < len(starts) else len(strings)
@@ -231,7 +262,8 @@ def parse(blob: bytes) -> Battle:
             army = Army(
                 army_key=army_key,
                 corps_id=m.group(1) if m else "",
-                side=army_key.split("_")[2] if len(army_key.split("_")) > 2 else "",
+                # Side and corps id live in the key pattern; a custom army has neither.
+                side=army_key.split("_")[2] if m and len(army_key.split("_")) > 2 else "",
             )
             battle.armies.append(army)
             awaiting_names.setdefault(army_key, []).append(army)
@@ -299,7 +331,8 @@ def main() -> None:
     for w in battle.warnings:
         print(f"!! {w}")
     for a in battle.armies:
-        print(f"\n{'=' * 78}\n{a.corps_name or a.army_key}   [{a.army_key}]  side {a.side}")
+        side = f"  side {a.side}" if a.side else ""
+        print(f"\n{'=' * 78}\n{a.corps_name or a.army_key}   [{a.army_key}]{side}")
         print(f"  player   : {a.player or '(AI / unassigned)'}")
         print(f"  general  : {a.general}   [{a.staff_key}]")
         print(f"  units    : {len(a.units)}")

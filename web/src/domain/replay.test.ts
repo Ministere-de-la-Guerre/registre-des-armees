@@ -256,6 +256,55 @@ describe("parseReplay", () => {
     expect(parsed.warnings).toEqual([]);
   });
 
+  it("finds a custom army, whose key is a bare faction key and matches no pattern", () => {
+    // Custom armies (`denmark`, `britain`, `aaa_lordz`…) are keyed by the faction
+    // key straight out of the factions table, so a key *pattern* cannot see them
+    // and the whole army silently vanishes from the battle.
+    const danish = {
+      key: "denmark",
+      staff: "ntw3_gen_staff_005_1_0539",
+      player: "Frederik",
+      units: ["ntw3_art_foot_005_003_0450", "ntw3_cav_heavy_005_999_0228"],
+      corpsName: "7. Danmark",
+      flag: "data\\ui\\flags\\f_cu_denmark",
+    };
+    const parsed = parseReplay(
+      file(
+        keyBlock(ARMY_A),
+        keyBlock(danish),
+        nameBlock({ ...ARMY_A, general: "Arthur Wellesley 'Wellington'", names: ARMY_A_NAMES }),
+        nameBlock({
+          ...danish,
+          general: "Christian von Augustenbrog",
+          names: ["3-pund artilleri til fods [F6]", "Holstenske Ryttere 'Dorrien' [C2]"],
+        }),
+      ),
+    );
+
+    expect(parsed.armies.map((a) => a.factionKey)).toEqual([ARMY_A.key, danish.key]);
+    const dk = parsed.armies[1];
+    expect(dk.player).toBe("Frederik");
+    expect(dk.corpsName).toBe("7. Danmark");
+    expect(dk.staffKey).toBe(danish.staff);
+    expect(dk.general).toBe("Christian von Augustenbrog");
+    expect(dk.units.map((u) => u.key)).toEqual(danish.units);
+    expect(dk.units[0].regiment).toBe("3-pund artilleri til fods");
+    // Neither field is encoded in a custom army's key, so both stay blank rather
+    // than being carved out of an arbitrary word.
+    expect(dk.side).toBe("");
+    expect(dk.corpsId).toBe("");
+    expect(parsed.warnings).toEqual([]);
+  });
+
+  it("does not mistake the player name for an army key", () => {
+    // The player name is the *other* string a unit key follows; what separates it
+    // is that a unit key (the commander) comes right before it. Read as a marker,
+    // it would split the corps in two and strand its units in a phantom army.
+    const parsed = parseReplay(file(keyBlock(ARMY_A)));
+    expect(parsed.armies.map((a) => a.factionKey)).toEqual([ARMY_A.key]);
+    expect(parsed.armies[0].units.map((u) => u.key)).toEqual(ARMY_A.units);
+  });
+
   it("returns an empty battle for a file that is not a replay", () => {
     const battleOfNothing = parseReplay(Uint8Array.from([1, 2, 3, 4, 5]));
     expect(battleOfNothing.armies).toEqual([]);
