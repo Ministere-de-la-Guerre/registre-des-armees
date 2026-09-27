@@ -323,7 +323,7 @@ describe("rollTowGeneralKeys", () => {
 });
 
 describe("rollTowArmy", () => {
-  it("keeps non-generals from rolled source corps and generals selected by the legacy general roll", () => {
+  it("keeps only rolled source corps' cards, and of the generals only those the legacy roll selected", () => {
     const at = new Date(2026, 5, 23, 14);
     const cards = [
       staff("081"),
@@ -340,10 +340,13 @@ describe("rollTowArmy", () => {
     const result = rollTowArmy(cards, at);
 
     expect(result.sourceCorpsIds).toEqual(sourceCorpsIds);
-    expect(result.cards.filter((card) => !card.isGeneral).every((card) => sourceCorpsIds.includes(card.towSourceCorpsId!))).toBe(true);
-    expect(result.cards.filter((card) => card.isGeneral).map((card) => card.unitKey).sort()).toEqual(
-      [...result.generalKeys.allKeys].sort(),
+    expect(result.cards.every((card) => sourceCorpsIds.includes(card.towSourceCorpsId!))).toBe(true);
+    // Staff generals of unrolled corps are in the Lua list but not recruitable.
+    const offeredGenerals = result.generalKeys.allKeys.filter((key) =>
+      sourceCorpsIds.includes(cards.find((card) => card.unitKey === key)!.towSourceCorpsId!),
     );
+    expect(offeredGenerals.length).toBeLessThan(result.generalKeys.allKeys.length);
+    expect(result.cards.filter((card) => card.isGeneral).map((card) => card.unitKey).sort()).toEqual(offeredGenerals.sort());
   });
 });
 
@@ -412,13 +415,16 @@ describe("build-derived roll helpers", () => {
     expect(towSourceCorpsIdsInBuild(build, index)).toEqual(["081", "082"]);
   });
 
-  it("ignores staff generals' corps — ToWFgenerals offers every staff general", () => {
-    // Commander from 082, units only from 081: the roll needs only 081.
-    expect(towSourceCorpsIdsInBuild(buildOf([cards[3].unitKey], cards[1].unitKey), index)).toEqual(["081"]);
+  it("counts a staff general's own corps — he is offered only when it rolls", () => {
+    // Commander from 082, units only from 081: the roll needs both.
+    expect(towSourceCorpsIdsInBuild(buildOf([cards[3].unitKey], cards[1].unitKey), index)).toEqual(["081", "082"]);
     // Same for a staff general recruited as a unit under a combat commander.
     expect(towSourceCorpsIdsInBuild(buildOf([cards[3].unitKey, cards[1].unitKey], cards[2].unitKey), index)).toEqual([
       "081",
+      "082",
     ]);
+    // A build of only a staff commander still needs his corps.
+    expect(towSourceCorpsIdsInBuild(buildOf([], cards[1].unitKey), index)).toEqual(["082"]);
   });
 
   it("counts a combat general in the staff slot like any combat general", () => {
@@ -459,21 +465,21 @@ describe("towCorpsCeiling", () => {
     expect(isCardOverCorpsCeiling(lineOf("085"), c)).toBe(true);
   });
 
-  it("tallies selected copies per corps, leaving out the staff commander", () => {
+  it("tallies selected copies per corps, including the staff commander", () => {
     const build = buildOf([lineOf("081").unitKey, lineOf("081").unitKey], staff("082").unitKey);
     const c = towCorpsCeiling(build, index);
     expect(c.counts.get("081")).toBe(2);
-    expect(c.counts.has("082")).toBe(false);
+    expect(c.counts.get("082")).toBe(1);
   });
 
-  it("is not over with four unit corps and a commander from a fifth", () => {
+  it("counts a commander from a fifth corps toward the ceiling", () => {
     const build = buildOf(["081", "082", "083", "084"].map((id) => lineOf(id).unitKey), staff("085").unitKey);
     const c = towCorpsCeiling(build, index);
-    expect(c.count).toBe(4);
-    expect(c.over).toBe(false);
-    // Staff generals are never over the ceiling; a fifth corps' units still are.
-    expect(isCardOverCorpsCeiling(staff("086"), c)).toBe(false);
-    expect(isCardOverCorpsCeiling(lineOf("085"), c)).toBe(true);
+    expect(c.count).toBe(5);
+    expect(c.over).toBe(true);
+    // Staff generals need their corps like any unit: a sixth corps' staff general is over.
+    expect(isCardOverCorpsCeiling(staff("086"), c)).toBe(true);
+    expect(isCardOverCorpsCeiling(lineOf("081"), c)).toBe(false);
   });
 
   it("marks a would-be fifth corps over only once four are already used", () => {
@@ -527,19 +533,29 @@ describe("findTowBuildRollTime", () => {
     expect(corpsOnly.closest?.getTime() ?? null).toBe(combi.closest?.getTime() ?? null);
   });
 
-  it("finds a window for four unit corps under a commander from a fifth corps", () => {
+  it("times a build of only a staff commander by his own corps", () => {
+    const index = indexRoster(makeRoster(cards, "ntw3_tow_a03_x8_032"));
+    const staff085 = cards.find((c) => c.unitKey.includes("_staff_085_"))!;
+    const build = buildOf([], staff085.unitKey);
+    const corps = towSourceCorpsIdsInBuild(build, index);
+    expect(corps).toEqual(["085"]);
+    const now = new Date(2026, 5, 23, 14, 20);
+    const result = findTowBuildRollTime(cards, corps, towCombatGeneralKeysInBuild(build, index), now);
+    expect(result.closest).not.toBeNull();
+    expect(result.closestSourceCorpsIds).toContain("085");
+    expect(rollTowArmy(cards, result.closest!).cards.map((c) => c.unitKey)).toContain(staff085.unitKey);
+  });
+
+  it("finds no window for four unit corps under a commander from a fifth corps", () => {
     const withLines = [...cards, ...["081", "082", "083", "084"].map((id) => towUnit(id, "line"))];
     const index = indexRoster(makeRoster(withLines, "ntw3_tow_a03_x8_032"));
     const staff085 = withLines.find((c) => c.unitKey.includes("_staff_085_"))!;
     const lines = withLines.filter((c) => !c.isGeneral).map((c) => c.unitKey);
     const build = buildOf(lines, staff085.unitKey);
     const corps = towSourceCorpsIdsInBuild(build, index);
-    expect(corps).toEqual(["081", "082", "083", "084"]);
-    const now = new Date(2026, 5, 23, 14, 20);
-    const result = findTowBuildRollTime(withLines, corps, towCombatGeneralKeysInBuild(build, index), now);
-    expect(result.closest).not.toBeNull();
-    // The staff commander is offered in that window even though 085 did not roll.
-    expect(rollTowArmy(withLines, result.closest!).generalKeys.staffKeys).toContain(staff085.unitKey);
+    expect(corps).toEqual(["081", "082", "083", "084", "085"]);
+    const result = findTowBuildRollTime(withLines, corps, [], new Date(2026, 5, 23, 14, 20));
+    expect(result.closest).toBeNull();
   });
 
   it("returns no window for an impossible corps id", () => {

@@ -87,9 +87,8 @@ export function TowGenerateModal({
         <div className="modal-body">
           {!result ? (
             <div className="rot-note">
-              Your build has no Theatres-of-War units that depend on the roll yet (staff generals are
-              offered in every window). Select the units you want from the grid, then reopen this to find
-              the nearest in-game time that lets you recruit them.
+              Your build has no Theatres-of-War units yet. Select the units you want from the grid, then
+              reopen this to find the nearest in-game time that lets you recruit them.
             </div>
           ) : (
             <div className="tow-times">
