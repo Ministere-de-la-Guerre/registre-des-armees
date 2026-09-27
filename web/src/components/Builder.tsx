@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { assetUrl } from "../data/assets";
 import type { FactionRoster, UnitCard } from "../domain/types";
 import {
@@ -140,9 +140,15 @@ export function Builder({
   // "divisions" are brigade types pooled across corps. On by default; sticky
   // across corps switches within a session; harmless (unused) for non-TOW rosters.
   const [combinedTow, setCombinedTow] = useState(true);
+  // Locate mode (tray "Locate units" button): the grid rings every unit in the build,
+  // and clicking one in the tray scrolls the grid to it and flashes it. TOW shows
+  // the separate corps while it is on, so each unit sits under its own corps.
+  const [locating, setLocating] = useState(false);
+  const [locateFlash, setLocateFlash] = useState<string | null>(null);
+  const mapRef = useRef<HTMLDivElement>(null);
   // Whether the grid uses the pooled brigade-type layout: always for custom
-  // armies, and for TOW when the "Combine corps" toggle is on.
-  const combinedView = isCustom || (isTow && combinedTow);
+  // armies, and for TOW when the "Combine corps" toggle is on (unless locating).
+  const combinedView = isCustom || (isTow && combinedTow && !locating);
 
   useEffect(() => {
     // A seeded army (imported from a replay) resolves through the same path as a
@@ -167,6 +173,8 @@ export function Builder({
     setSwapInstanceId(null);
     setTowRollOpen(false);
     setTowGenerateOpen(false);
+    setLocating(false);
+    setLocateFlash(null);
     // Enable every source corps by default (the combined view pools them all;
     // >4 is over the game's roll size, which the header banner flags).
     setEnabledCorps(isTowFactionKey(roster.factionKey) ? new Set(allTowSourceCorpsIds(roster.cards)) : null);
@@ -415,6 +423,41 @@ export function Builder({
     setMessage(`Removed all units from ${info ? `${roman(info.division)} · ${info.name}` : `corps ${sourceCorpsId}`}.`);
   };
 
+  const toggleLocate = () => {
+    setLocateFlash(null);
+    setLocating(!locating);
+    if (!locating)
+      setMessage(`Locate: your units are ringed in the grid — ${coarse ? "tap" : "click"} one in the bar to jump to it.`);
+  };
+
+  // Find a build unit in the grid. A TOW unit whose corps is switched off in the
+  // Corps roll menu has no grid card, so its corps is switched back on first.
+  const locateUnit = (card: UnitCard) => {
+    const id = card.towSourceCorpsId;
+    if (id && enabledCorps && !enabledCorps.has(id)) {
+      toggleCorps(id, true);
+      const info = towCorpsInfo?.get(id);
+      setMessage(`Turned ${info ? `${roman(info.division)} · ${info.name}` : `corps ${id}`} back on to show this unit.`);
+    }
+    setLocateFlash(card.unitKey);
+  };
+
+  // Scroll the located card into view once the grid has rendered it, and let the
+  // flash run out. No card means a filter is hiding it.
+  useEffect(() => {
+    if (!locateFlash) return;
+    const frame = requestAnimationFrame(() => {
+      const el = mapRef.current?.querySelector(`[data-unit-key="${CSS.escape(locateFlash)}"]`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+      else setMessage(`${index.byKey.get(locateFlash)?.name ?? "That unit"} is hidden by your filters — clear them to see it.`);
+    });
+    const timer = setTimeout(() => setLocateFlash(null), 2600);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, [locateFlash, index]);
+
   // Upgrade units already in the build by swapping a plain copy for the combat
   // general of the same unit — the cheapest such swaps that fit the remaining cap,
   // leaving any existing combat generals in place. Never adds new units.
@@ -534,6 +577,8 @@ export function Builder({
     onHover: (card, anchor) => setHovered({ card, anchor }),
     onHoverEnd: () => setHovered(null),
     isPrimed: (key) => primedKey === key,
+    locateOf: (card) =>
+      locateFlash === card.unitKey ? "flash" : locating && isSelected(card.unitKey) ? "mark" : null,
     pickRateOf: (card) => {
       const rate = pickRates.rateOf(card.unitKey, card.baseUnitKey);
       return rate ? <PickRateBar rate={rate} thresholds={pickRates.season?.thresholds} /> : null;
@@ -804,7 +849,8 @@ export function Builder({
           >
             <input
               type="checkbox"
-              checked={combinedTow}
+              checked={combinedTow && !locating}
+              disabled={locating}
               onChange={(e) => setCombinedTow(e.target.checked)}
             />
             Combine corps
@@ -948,7 +994,7 @@ export function Builder({
           />
         </div>
 
-        <div className={`map density-${density}`}>
+        <div className={`map density-${density}`} ref={mapRef}>
           {PICK_RATES_ENABLED && pickRates.show && (
             <div className="pr-header">
               <PickRateChip
@@ -1022,6 +1068,9 @@ export function Builder({
           setPeek({ card, anchor });
         }}
         corpsStat={isTow && towBuild ? { count: towBuild.count, max: LEGACY_TOW_MAX_SOURCE_CORPS, over: towBuild.over } : null}
+        locating={locating}
+        onToggleLocate={toggleLocate}
+        onLocate={locateUnit}
       />
 
       {hovered && !modalOpen && !peek && (
@@ -1130,6 +1179,7 @@ function UnplacedMedallion({ card, h }: { card: UnitCard; h: MedallionHandlers }
       dimmed={h.isDimmed(card)}
       blocked={blocked}
       overBudget={h.isOverBudget(card)}
+      locate={h.locateOf?.(card)}
       atCap={h.atCapOf(card)}
       onClick={(anchor) => h.onAdd(card, anchor)}
       onContextMenu={() => h.onDetails(card)}

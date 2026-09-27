@@ -53,6 +53,8 @@ export interface MedallionHandlers {
    *  null when the feature is off, absent from the build, or still loading — so the
    *  grid renders exactly as before. */
   pickRateOf?: (card: UnitCard) => ReactNode;
+  /** Locate-mode highlight for this card (see Medallion `locate`). */
+  locateOf?: (card: UnitCard) => "mark" | "flash" | null;
 }
 
 function UnitMedallion({ card, h }: { card: UnitCard; h: MedallionHandlers }) {
@@ -71,6 +73,7 @@ function UnitMedallion({ card, h }: { card: UnitCard; h: MedallionHandlers }) {
       blocked={blocked}
       overBudget={h.isOverBudget(card)}
       overCorps={h.isOverCorps(card)}
+      locate={h.locateOf?.(card)}
       atCap={h.atCapOf(card)}
       onClick={(anchor) => h.onAdd(card, anchor)}
       onContextMenu={() => h.onDetails(card)}
@@ -107,6 +110,7 @@ function StaffMedallion({
       atCap={h.atCapOf(card)}
       overBudget={h.isOverBudget(card)}
       overCorps={h.isOverCorps(card)}
+      locate={h.locateOf?.(card)}
       onClick={(anchor) => onToggle(card, anchor)}
       activateLabel="select"
       onContextMenu={() => h.onDetails(card)}

@@ -44,6 +44,9 @@ export interface MedallionProps {
   /** This unit belongs to a source corps beyond the 4 the game rolls together (or
    *  selecting it would add a 5th). Framed red as a soft warning; still allowed. */
   overCorps?: boolean;
+  /** Locate mode (tray "Locate" button): "mark" rings a unit that is in the build,
+   *  "flash" pulses the one just located. */
+  locate?: "mark" | "flash" | null;
   atCap?: boolean;
   hideName?: boolean;
   /** Force the speed/movement code (e.g. L4) badge in the build tray, where the
@@ -103,6 +106,7 @@ export function Medallion({
   blocked = false,
   overBudget = false,
   overCorps = false,
+  locate = null,
   atCap = false,
   hideName = false,
   showSpeed = false,
@@ -156,10 +160,11 @@ export function Medallion({
     <div
       className={`medallion${selected ? " selected" : ""}${inStaffSlot ? " staff" : ""}${
         primed ? " primed" : ""
-      }${dimmed ? " dimmed" : ""}${blocked ? " blocked" : ""}${overBudget ? " overbudget" : ""}${overCorps ? " overcorps" : ""}${atCap ? " atcap" : ""}${
+      }${dimmed ? " dimmed" : ""}${blocked ? " blocked" : ""}${overBudget ? " overbudget" : ""}${overCorps ? " overcorps" : ""}${locate ? ` locate-${locate}` : ""}${atCap ? " atcap" : ""}${
         hideName ? " tray-mini" : ""
       }`}
       ref={rootRef}
+      data-unit-key={card.unitKey}
       role="button"
       tabIndex={0}
       aria-pressed={selected || inStaffSlot}

@@ -269,6 +269,21 @@ input::placeholder { color: #6f7888; }
    Never set on desktop (no two-tap model). Red warning frames still win their border. */
 .medallion.primed .oval { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold), var(--shadow); }
 .medallion.primed.overbudget .oval, .medallion.primed.overcorps .oval { border-color: var(--bad); }
+/* Locate mode (tray "Locate units"): every unit in the build gets a bright ring in
+   the grid, and the one just located pulses so the eye lands on it after the scroll. */
+/* A unit at its cap is greyed out in the grid; while located it must still read. */
+.medallion.locate-mark, .medallion.locate-flash { opacity: 1; filter: none; }
+.medallion.locate-mark .oval,
+.medallion.locate-mark:hover .oval { border-color: var(--gold-bright); box-shadow: 0 0 0 3px var(--gold-bright), var(--shadow); }
+.medallion.locate-flash .oval { border-color: #fff; animation: locate-pulse 0.65s ease-in-out 4; }
+@keyframes locate-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px var(--gold-bright), 0 0 0 0 rgba(242, 208, 128, 0.9), var(--shadow); }
+  50% { box-shadow: 0 0 0 3px #fff, 0 0 0 14px rgba(242, 208, 128, 0), var(--shadow); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .medallion.locate-flash .oval { animation: none; box-shadow: 0 0 0 4px #fff, var(--shadow); }
+}
+.tray.locating .slots .medallion { cursor: crosshair; }
 
 /* Men count above the oval frame (own stacking context), never clipped. */
 .medallion .men {
