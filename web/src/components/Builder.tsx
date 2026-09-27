@@ -560,16 +560,12 @@ export function Builder({
     [offeredNowKeys],
   );
 
-  // A TOW card is hidden when its source corps is not in the enabled roll. Only
-  // affects display (the build state is untouched); non-TOW cards are unaffected.
-  // Staff generals are exempt: the game offers every staff general in every TOW
-  // window, whichever corps are rolled (see requiredSourceCorpsId in state/towRoll).
+  // A TOW card is hidden when its source corps is not in the enabled roll —
+  // staff generals included, since the game offers one only when his corps rolls.
+  // Only affects display (the build state is untouched); non-TOW cards are unaffected.
   const hiddenByCorpsRoll = useCallback(
     (c: UnitCard) =>
-      enabledCorps != null &&
-      c.towSourceCorpsId != null &&
-      !(c.isGeneral && c.generalKind === "staff") &&
-      !enabledCorps.has(c.towSourceCorpsId),
+      enabledCorps != null && c.towSourceCorpsId != null && !enabledCorps.has(c.towSourceCorpsId),
     [enabledCorps],
   );
 
