@@ -192,12 +192,15 @@ export function evaluateAdd(
  *  10,000 ceiling. Selection is still allowed (the ceiling is soft); the grid uses
  *  this to colour the unit's cost (and portrait) red as a warning. It asks exactly
  *  the question the affordability replay (see priceBuild) will ask of the new copy,
- *  which joins the end of the recruit order: its full face-value price on top of the
- *  discounted total of the cards that were themselves affordable. So a card is red
- *  precisely when it would be excluded from earning a discount — never red yet
- *  credited, nor clear yet refused. */
-export function addWouldExceedBudget(index: RosterIndex, build: BuildState, card: UnitCard): boolean {
-  return affordableRunningCost(index, build) + card.cost > MAX_BUILD_COST;
+ *  which joins the end of the recruit order: its full face-value price on top of
+ *  everything already paid (the build's final cost). So a card is red precisely when
+ *  it would be excluded from earning a discount — never red yet credited, nor clear
+ *  yet refused — and once the build is over the ceiling, every add is red.
+ *
+ *  Takes the build's price (see priceBuild) rather than the build, so a caller
+ *  checking every roster card prices the build once. */
+export function addWouldExceedBudget(price: Pick<PriceResult, "finalCost">, card: UnitCard): boolean {
+  return price.finalCost + card.cost > MAX_BUILD_COST;
 }
 
 /** The build with `unitKey` in the staff slot. Copies of the same card recruited as
@@ -308,21 +311,25 @@ export function staffSetWouldExceedBudget(index: RosterIndex, build: BuildState,
 }
 
 /** The selected cards (in selection order) that are *affordable* — i.e. each one
- *  did not push the running discounted total past the 10,000 ceiling when it was
- *  added. Over-budget units (now selectable, since the ceiling is soft) are paid
- *  for but excluded here so they cannot complete a brigade/division for a discount.
+ *  did not push the running total past the 10,000 ceiling when it was added.
+ *  Over-budget units (now selectable, since the ceiling is soft) are paid for but
+ *  excluded here so they cannot complete a brigade/division for a discount.
  *
- *  The check credits discounts already earned from groups completed *before* the
- *  current card, but NOT a discount the card itself would trigger — exactly the
- *  recruitment rule of the game: you must be able to afford a unit at its face-value
- *  price on top of your current discounted total when you take it. It is therefore
- *  order-sensitive, so the replay walks the cards in the order they were committed:
- *  the commander first (it anchors the army), then each unit in the order it was added. */
+ *  The running total is everything paid so far. It credits discounts already earned
+ *  from groups completed *before* the current card, but NOT a discount the card
+ *  itself would trigger — exactly the recruitment rule of the game: you must be able
+ *  to afford a unit at its face-value price on top of your current discounted total
+ *  when you take it. The first card that fails pays its full price and so leaves the
+ *  total over the ceiling, where every later card fails too: the affordable cards
+ *  are always a leading run of the recruit order. It is therefore order-sensitive,
+ *  so the replay walks the cards in the order they were committed: the commander
+ *  first (it anchors the army), then each unit in the order it was added. */
 function affordableSubset(index: RosterIndex, cards: readonly UnitCard[]): UnitCard[] {
   const affordable: UnitCard[] = [];
   for (const card of cards) {
     const currentFinal = calculateArmyCost(affordable, index.roster.cards, index.roster.factionKey).finalCost;
-    if (currentFinal + card.cost <= MAX_BUILD_COST) affordable.push(card);
+    if (currentFinal + card.cost > MAX_BUILD_COST) break;
+    affordable.push(card);
   }
   return affordable;
 }
@@ -340,13 +347,6 @@ function recruitOrder(index: RosterIndex, build: BuildState): UnitCard[] {
     if (card) order.push(card);
   }
   return order;
-}
-
-/** Discounted total of just the affordable cards — the running total the next
- *  recruit is judged against in the affordability replay. */
-function affordableRunningCost(index: RosterIndex, build: BuildState): number {
-  const affordable = affordableSubset(index, recruitOrder(index, build));
-  return calculateArmyCost(affordable, index.roster.cards, index.roster.factionKey).finalCost;
 }
 
 /** Price a build with the soft-ceiling rule: you pay the full base cost of every
@@ -400,17 +400,29 @@ export interface AutoGeneralsResult {
  *  a cheaper one lowers the running total — which can pull a formation-completing copy
  *  back within face-value budget and so unlock that formation's (often large) discount.
  *
- *  The goal is therefore the *cheapest* build. Because the affordability replay is
- *  order-sensitive (and not monotonic — a copy made affordable adds to the running
- *  total a later, bigger formation needed), *which* copy of a unit takes the general
- *  and *which* of its generals matter, and slot-by-slot greedy choices can be hundreds
- *  of gold off. So every copy of every eligible unit is a candidate, with every general
- *  that leads it, and when the combinations fit {@link AUTO_GENERALS_EXACT_LIMIT} they
- *  are all priced and the cheapest taken; only beyond that does it fall back to greedy
- *  (commit the swap that most lowers the cost, one slot at a time). Either way a swap
- *  set must *strictly* lower the final cost, ties go to fewer generals, and it may take
- *  fewer than the cap allows — spending a slot for no gain is never done. Units that
- *  already carry a combat general are skipped (a unit may have only one). */
+ *  The goal is therefore the *cheapest* build. The final cost is every card's price
+ *  less the discounts of the groups the affordable run completes (see
+ *  affordableSubset). A swap keeps the copy's brigade and division, so it changes
+ *  only prices: it moves the running total, by its cost change, at the copy and at
+ *  every card after it. Discounts only grow as the affordable run gets longer (a
+ *  division's discount is at least its brigades' combined). So:
+ *
+ *    - a general costing the same or more than the copy never lowers the cost (it
+ *      adds to the price and can only shorten the run), so it is not a candidate;
+ *    - a cheaper general is best on the *first* copy of the unit, where it lowers the
+ *      running total for the most cards — a later copy lowers the same prices and
+ *      never lengthens the run further.
+ *
+ *  Which units take a general, and which of their generals, still matter: one pick
+ *  shifts the budget every later formation is judged against, and slot-by-slot greedy
+ *  choices can be hundreds of gold off. So each eligible unit's first copy is a
+ *  candidate with every cheaper general that leads it, and when the combinations fit
+ *  {@link AUTO_GENERALS_EXACT_LIMIT} they are all priced and the cheapest taken; only
+ *  beyond that does it fall back to greedy (commit the swap that most lowers the cost,
+ *  one slot at a time). Either way a swap set must *strictly* lower the final cost,
+ *  ties go to fewer generals, and it may take fewer than the cap allows — spending a
+ *  slot for no gain is never done. Units that already carry a combat general are
+ *  skipped (a unit may have only one). */
 export function autoPickCombatGenerals(
   index: RosterIndex,
   build: BuildState,
@@ -437,21 +449,25 @@ export function autoPickCombatGenerals(
     list.sort((a, b) => a.cost - b.cost || a.unitKey.localeCompare(b.unitKey));
   }
 
-  // Candidate swaps, bucketed by unit (a unit takes at most one general): every
-  // selected plain copy of an eligible unit, paired with each general leading it.
+  // Candidate swaps, bucketed by unit (a unit takes at most one general): the first
+  // selected copy of each eligible plain card, paired with each general leading it
+  // that costs less (see above for why no other swap can win).
   interface Candidate {
     instanceId: string;
     general: UnitCard;
     delta: number;
   }
   const buckets = new Map<string, Candidate[]>();
+  const firstCopies = new Set<string>();
   for (const inst of build.instances) {
     const base = index.byKey.get(inst.unitKey);
     if (!base || base.isGeneral || groupsWithGeneral.has(base.capGroupKey)) continue;
-    const generals = generalsOf.get(base.capGroupKey);
-    if (!generals) continue;
+    if (firstCopies.has(base.unitKey)) continue;
+    firstCopies.add(base.unitKey);
+    const cheaper = (generalsOf.get(base.capGroupKey) ?? []).filter((g) => g.cost < base.cost);
+    if (cheaper.length === 0) continue;
     const bucket = buckets.get(base.capGroupKey) ?? [];
-    for (const general of generals) {
+    for (const general of cheaper) {
       bucket.push({ instanceId: inst.id, general, delta: general.cost - base.cost });
     }
     buckets.set(base.capGroupKey, bucket);

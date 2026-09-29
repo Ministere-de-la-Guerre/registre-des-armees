@@ -127,14 +127,12 @@ export function Tooltip({
   const cls = card.underlyingUnitClass || card.unitClass;
   const s = card.stats;
   const shoots = card.range !== null; // has a ranged weapon
-  // Melee units and generals carry 0 ammunition: no row for them.
-  const ammo = s.ammo ? s.ammo : null;
   let rows: Row[];
   if (cls.startsWith("artillery")) {
     rows = [
       { k: "Range", v: card.range },
       { k: "Accuracy", v: s.accuracy },
-      { k: "Ammo", v: ammo },
+      { k: "Reload", v: s.reloadSkill },
       { k: "Melee def", v: s.meleeDefense },
       { k: "Morale", v: s.morale },
     ];
@@ -152,7 +150,6 @@ export function Tooltip({
       { k: "Range", v: card.range },
       { k: "Accuracy", v: s.accuracy },
       { k: "Reload", v: s.reloadSkill },
-      { k: "Ammo", v: ammo },
       { k: "Melee atk", v: s.meleeAttack },
       { k: "Melee def", v: s.meleeDefense },
       { k: "Morale", v: s.morale },

@@ -144,7 +144,9 @@ export function Builder({
   // and clicking one in the tray scrolls the grid to it and flashes it. TOW shows
   // the separate corps while it is on, so each unit sits under its own corps.
   const [locating, setLocating] = useState(false);
-  const [locateFlash, setLocateFlash] = useState<string | null>(null);
+  // The grid card being flashed; `seq` makes locating the same unit again a new
+  // state, so the grid scrolls back to it even while the last flash is running.
+  const [locateFlash, setLocateFlash] = useState<{ key: string; seq: number } | null>(null);
   const mapRef = useRef<HTMLDivElement>(null);
   // Whether the grid uses the pooled brigade-type layout: always for custom
   // armies, and for TOW when the "Combine corps" toggle is on (unless locating).
@@ -271,11 +273,11 @@ export function Builder({
       const over =
         c.isGeneral && c.generalKind === "staff" && staffGeneralAction(index, build, c) === "set-commander"
           ? staffSetWouldExceedBudget(index, build, c)
-          : addWouldExceedBudget(index, build, c);
+          : addWouldExceedBudget(summary.price, c);
       m.set(c.unitKey, over);
     }
     return m;
-  }, [index, build, roster.cards]);
+  }, [index, build, roster.cards, summary.price]);
 
   // --- selection helpers ---
   const qtyOf = (key: string) => qtyOfBuild(build, key);
@@ -430,26 +432,52 @@ export function Builder({
       setMessage(`Locate: your units are ringed in the grid — ${coarse ? "tap" : "click"} one in the bar to jump to it.`);
   };
 
+  // The grid card that stands for a build unit. With the "Combat generals" switch
+  // off a combat general has no card of his own, so the plain unit he leads (same
+  // brigade) stands in for him.
+  const gridCardFor = useCallback(
+    (card: UnitCard): UnitCard => (isHiddenByGeneralSwitch(card, filters) ? (index.byKey.get(card.baseUnitKey) ?? card) : card),
+    [filters, index],
+  );
+
+  // Grid cards ringed in locate mode: every build unit's stand-in.
+  const locatedKeys = useMemo(() => {
+    if (!locating) return null;
+    const keys = new Set<string>();
+    for (const key of [build.staffSlotUnitKey, ...build.instances.map((i) => i.unitKey)]) {
+      const card = key ? index.byKey.get(key) : undefined;
+      if (card) keys.add(gridCardFor(card).unitKey);
+    }
+    return keys;
+  }, [locating, build, index, gridCardFor]);
+
   // Find a build unit in the grid. A TOW unit whose corps is switched off in the
-  // Corps roll menu has no grid card, so its corps is switched back on first.
+  // Corps roll menu has no grid card, so its corps is switched back on first; a
+  // general outside the current rotation window is hidden by "Offered now".
   const locateUnit = (card: UnitCard) => {
-    const id = card.towSourceCorpsId;
+    const target = gridCardFor(card);
+    if (hiddenByRotation(target)) {
+      setMessage(`${target.name} isn't offered in the current rotation window — turn off "Offered now" to see it.`);
+      return;
+    }
+    const id = target.towSourceCorpsId;
     if (id && enabledCorps && !enabledCorps.has(id)) {
       toggleCorps(id, true);
       const info = towCorpsInfo?.get(id);
       setMessage(`Turned ${info ? `${roman(info.division)} · ${info.name}` : `corps ${id}`} back on to show this unit.`);
     }
-    setLocateFlash(card.unitKey);
+    setLocateFlash((f) => ({ key: target.unitKey, seq: (f?.seq ?? 0) + 1 }));
   };
 
   // Scroll the located card into view once the grid has rendered it, and let the
-  // flash run out. No card means a filter is hiding it.
+  // flash run out. Every way the grid hides a card is handled above, so a missing
+  // card should not happen; say so rather than scroll nowhere.
   useEffect(() => {
     if (!locateFlash) return;
     const frame = requestAnimationFrame(() => {
-      const el = mapRef.current?.querySelector(`[data-unit-key="${CSS.escape(locateFlash)}"]`);
+      const el = mapRef.current?.querySelector(`[data-unit-key="${CSS.escape(locateFlash.key)}"]`);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-      else setMessage(`${index.byKey.get(locateFlash)?.name ?? "That unit"} is hidden by your filters — clear them to see it.`);
+      else setMessage(`${index.byKey.get(locateFlash.key)?.name ?? "That unit"} isn't shown in the grid right now.`);
     });
     const timer = setTimeout(() => setLocateFlash(null), 2600);
     return () => {
@@ -578,7 +606,7 @@ export function Builder({
     onHoverEnd: () => setHovered(null),
     isPrimed: (key) => primedKey === key,
     locateOf: (card) =>
-      locateFlash === card.unitKey ? "flash" : locating && isSelected(card.unitKey) ? "mark" : null,
+      locateFlash?.key === card.unitKey ? "flash" : locatedKeys?.has(card.unitKey) ? "mark" : null,
     pickRateOf: (card) => {
       const rate = pickRates.rateOf(card.unitKey, card.baseUnitKey);
       return rate ? <PickRateBar rate={rate} thresholds={pickRates.season?.thresholds} /> : null;

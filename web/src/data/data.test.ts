@@ -84,6 +84,34 @@ describe("generated data", () => {
     }
   });
 
+  // autoPickCombatGenerals only tries each unit's first copy with its cheaper
+  // generals; that is exact only while a swap leaves the brigade and division alone.
+  it("every combat general sits in the brigade of the plain unit he leads", () => {
+    type Card = {
+      unitKey: string;
+      isGeneral: boolean;
+      generalKind: string | null;
+      capGroupKey: string;
+      baseUnitKey: string;
+      division: number | null;
+      brigade: number | null;
+    };
+    for (const file of readdirSync(resolve(DATA_DIR, "factions"))) {
+      const roster = readJson(`factions/${file}`) as { cards: Card[] };
+      const byKey = new Map(roster.cards.map((c) => [c.unitKey, c]));
+      for (const g of roster.cards) {
+        if (!(g.isGeneral && g.generalKind === "combat")) continue;
+        const base = byKey.get(g.baseUnitKey);
+        expect(base && !base.isGeneral, `${file} ${g.unitKey}`).toBe(true);
+        expect([g.capGroupKey, g.division, g.brigade], `${file} ${g.unitKey}`).toEqual([
+          base!.capGroupKey,
+          base!.division,
+          base!.brigade,
+        ]);
+      }
+    }
+  });
+
   // Real-roster pricing through the app's own path (loadFaction -> summarize), not
   // the rules-unit factories: 13. Davout / I.C (1812 Russia) is the corps whose
   // support-division sapper + skirmisher brigades each earn their own brigade

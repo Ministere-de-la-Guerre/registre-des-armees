@@ -82,7 +82,7 @@ describe("evaluateAdd blocking", () => {
     const bcard = makeUnit({ unitKey: "bb", cost: 6000, cap: 1, groupCap: 1, placement: { division: 1, brigade: 2 } });
     const idx = indexRoster(makeRoster([a, bcard]));
     expect(evaluateAdd(idx, b(["a"]), bcard, 5)).toBeNull();
-    expect(addWouldExceedBudget(idx, b(["a"]), bcard)).toBe(true);
+    expect(addWouldExceedBudget(priceBuild(idx, b(["a"])), bcard)).toBe(true);
   });
 
   it("flags a copy whose face-value running cost would exceed 10,000 even before its own discount", () => {
@@ -94,7 +94,7 @@ describe("evaluateAdd blocking", () => {
     const sol = makeUnit({ unitKey: "sol", cost: 600, cap: 1, groupCap: 1, placement: { division: 1, brigade: 1 } });
     const idx = indexRoster(makeRoster([a, sol]));
     expect(evaluateAdd(idx, b(["a"]), sol, 5)).toBeNull();
-    expect(addWouldExceedBudget(idx, b(["a"]), sol)).toBe(true);
+    expect(addWouldExceedBudget(priceBuild(idx, b(["a"])), sol)).toBe(true);
   });
 
   it("allows a copy that fits once already-earned formation discounts are applied", () => {
@@ -554,7 +554,7 @@ describe("staffGeneralAction", () => {
     const staff = i.byKey.get("staff_a")!;
     expect(staffGeneralAction(i, build, staff)).toBe("recruit");
     // Recruiting: 9,500 + 1,000 = 10,500 -> over. A swap would have read as affordable.
-    expect(addWouldExceedBudget(i, build, staff)).toBe(true);
+    expect(addWouldExceedBudget(priceBuild(i, build), staff)).toBe(true);
   });
 });
 
@@ -658,26 +658,27 @@ describe("autoPickCombatGenerals — exact search", () => {
   const apply = (build: BuildState, replacements: { instanceId: string; generalUnitKey: string }[]) =>
     replacements.reduce((acc, r) => swapInstanceUnit(acc, r.instanceId, r.generalUnitKey), build);
 
-  it("picks the copies whose swap unlocks a discount, not just the first copies", () => {
+  it("cannot unlock a discount with copies recruited after the build went over budget", () => {
     // Brigade 1 = u3×2 + u2×2 + u1 (roster 10,500, 5 copies → 420 discount); u0×2 sits
-    // in brigade 2. Swapping the *first* u3/u2 copies (the old greedy pick) leaves the
-    // later copies over budget (16,800); swapping the *second* copies lets them in and
-    // completes brigade 1 (16,800 − 420).
+    // in brigade 2. Whichever u3/u2 copies are swapped, u0 at i3 takes the paid total
+    // past 10,000, so the copies after it are over budget and brigade 1 never completes:
+    // both picks price at 16,800 and the first copies are kept (an earlier swap lowers
+    // the running total for every card after it, so it is never the worse pick).
     const idx = indexRoster(makeRoster([
       unit("u0", 3900, 2, 2), unit("u1", 2500, 1, 1), unit("u2", 2200, 2, 1), unit("u3", 1800, 2, 1),
       general("u2_com", "u2", 1500, 2, 1), general("u3_com", "u3", 1000, 2, 1),
     ], FK));
     const build = b(["u3", "u2", "u1", "u0", "u3", "u2", "u0"]);
     expect(priceBuild(idx, apply(build, [
-      { instanceId: "i0", generalUnitKey: "u3_com" },
-      { instanceId: "i1", generalUnitKey: "u2_com" },
+      { instanceId: "i4", generalUnitKey: "u3_com" },
+      { instanceId: "i5", generalUnitKey: "u2_com" },
     ])).finalCost).toBe(16800);
     const { replacements } = autoPickCombatGenerals(idx, build, 2);
     expect(replacements).toEqual([
-      { instanceId: "i4", generalUnitKey: "u3_com" },
-      { instanceId: "i5", generalUnitKey: "u2_com" },
+      { instanceId: "i0", generalUnitKey: "u3_com" },
+      { instanceId: "i1", generalUnitKey: "u2_com" },
     ]);
-    expect(priceBuild(idx, apply(build, replacements)).finalCost).toBe(16380);
+    expect(priceBuild(idx, apply(build, replacements)).finalCost).toBe(16800);
   });
 
   it("never spends a slot on a swap that doesn't lower the cost", () => {
@@ -706,20 +707,32 @@ describe("autoPickCombatGenerals — exact search", () => {
 });
 
 describe("addWouldExceedBudget follows the affordability replay", () => {
-  it("does not flag a copy that fits beside the affordable cards and earns its discount", () => {
-    // e (9,000) is affordable, big (3,000) is not, x (500) is. A 2nd x still fits the
-    // affordable running total (9,500 + 500) and completes x's brigade for a discount,
-    // so it must not read as over budget even though the paid total is already 12,500.
-    const FK = "ntw3_ac_test_x5_001";
-    const u = (unitKey: string, cost: number, brigade: number, cap = 1) =>
-      makeUnit({ unitKey, factionKey: FK, cost, cap, groupCap: cap, placement: { division: 1, brigade } });
+  const FK = "ntw3_ac_test_x5_001";
+  const u = (unitKey: string, cost: number, brigade: number, cap = 1) =>
+    makeUnit({ unitKey, factionKey: FK, cost, cap, groupCap: cap, placement: { division: 1, brigade } });
+
+  it("does not flag a copy that fits the paid total and earns its discount", () => {
+    // e (9,000) then x (500): a 2nd x fits (9,500 + 500) and completes x's brigade.
     const idx = indexRoster(makeRoster([u("e", 9000, 9), u("big", 3000, 8), u("x", 500, 1, 2)], FK));
-    const build = b(["e", "big", "x"]);
-    expect(addWouldExceedBudget(idx, build, idx.byKey.get("x")!)).toBe(false);
-    const after = priceBuild(idx, b(["e", "big", "x", "x"]));
+    const build = b(["e", "x"]);
+    expect(addWouldExceedBudget(priceBuild(idx, build), idx.byKey.get("x")!)).toBe(false);
+    const after = priceBuild(idx, b(["e", "x", "x"]));
     expect(after.completedGroups.some((g) => g.groupType === "brigade" && g.brigadeId === 1)).toBe(true);
     // A copy that doesn't fit is still flagged.
-    expect(addWouldExceedBudget(idx, build, idx.byKey.get("big")!)).toBe(true);
+    expect(addWouldExceedBudget(priceBuild(idx, build), idx.byKey.get("big")!)).toBe(true);
+  });
+
+  it("flags every add once an over-budget card has been paid for", () => {
+    // e (9,000) is affordable, big (3,000) is not, so the paid total is already 12,000.
+    // x (500) would fit beside e alone, but the over-budget card was paid for too: x is
+    // red, and a 2nd x recruited after it cannot complete x's brigade for a discount.
+    const idx = indexRoster(makeRoster([u("e", 9000, 9), u("big", 3000, 8), u("x", 500, 1, 2)], FK));
+    const build = b(["e", "big"]);
+    expect(priceBuild(idx, build).finalCost).toBe(12000);
+    expect(addWouldExceedBudget(priceBuild(idx, build), idx.byKey.get("x")!)).toBe(true);
+    const after = priceBuild(idx, b(["e", "big", "x", "x"]));
+    expect(after.completedGroups.some((g) => g.groupType === "brigade" && g.brigadeId === 1)).toBe(false);
+    expect(after.finalCost).toBe(13000);
   });
 });
 
