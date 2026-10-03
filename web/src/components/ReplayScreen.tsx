@@ -25,6 +25,7 @@ import {
 } from "../state/replayBuild";
 import { defaultTickedArmies, planFromReplayArmies } from "../state/replayPlan";
 import { MAX_BUILD_COST } from "../rules/rules";
+import { useConfirm } from "./useConfirm";
 import { Medallion } from "./Medallion";
 import { NamePromptModal } from "./NamePromptModal";
 import { isTabletTouch, useCoarsePointer } from "./useCoarsePointer";
@@ -76,6 +77,7 @@ export function ReplayScreen({
   onSendToPlanner: (plan: CurrentPlan) => void;
 }) {
   const { battle, fileName, rosters, activeIndex } = session;
+  const confirm = useConfirm();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -169,10 +171,15 @@ export function ReplayScreen({
   const active = activeIndex === null ? (views[0] ?? null) : (views[activeIndex] ?? views[0] ?? null);
 
   // Named through an in-app modal: Electron does not support window.prompt().
-  const save = (view: ArmyView, name: string) => {
+  const save = async (view: ArmyView, name: string) => {
     const saved = savedBuildFromReplayArmy(view.army, name);
+    if (
+      repo.findByName(saved.name, saved.factionKey) &&
+      !(await confirm({ message: `“${saved.name}” already exists for this corps. Overwrite it?`, confirmLabel: "Overwrite", danger: true }))
+    )
+      return;
+    // Look again: the library may have changed while the dialog was open.
     const clash = repo.findByName(saved.name, saved.factionKey);
-    if (clash && !window.confirm(`“${saved.name}” already exists for this corps. Overwrite it?`)) return;
     const result = repo.save(clash ? { ...saved, id: clash.id, createdAt: clash.createdAt } : saved);
     setMessage(result.ok ? `Saved “${saved.name}” to your builds.` : (result.error ?? "Could not save."));
   };

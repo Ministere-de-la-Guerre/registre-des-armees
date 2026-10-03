@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { FactionRoster } from "../domain/types";
+import { useConfirm } from "./useConfirm";
 import { NamePromptModal } from "./NamePromptModal";
 import { isTabletTouch, useCoarsePointer } from "./useCoarsePointer";
 import {
@@ -32,7 +33,11 @@ export function SaveLoadBar({
   onSaved: (saved: SavedBuild) => void;
   onMessage: (msg: string) => void;
 }) {
+  const confirm = useConfirm();
   const repo = useMemo(() => new BuildRepository(), []);
+  // The latest props, for callbacks that continue after a confirm dialog or a file read.
+  const latest = useRef({ current, dirty, roster, loaded });
+  latest.current = { current, dirty, roster, loaded };
   const [saves, setSaves] = useState<SavedBuild[]>([]);
   const [open, setOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -55,11 +60,13 @@ export function SaveLoadBar({
     const onPointerDown = (e: PointerEvent) => {
       // The menu may be portaled out of rootRef, so treat a tap inside either the
       // trigger row or the menu itself as "inside".
-      const target = e.target as Node;
+      const target = e.target as Element;
+      // A confirm dialog opened from the menu is outside it, but is not a dismissal.
+      if (target.closest?.(".modal-backdrop")) return;
       if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape" && !document.querySelector('[role="alertdialog"]')) setOpen(false);
     };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -111,13 +118,13 @@ export function SaveLoadBar({
     });
   };
 
-  const saveAsName = (name: string) => {
+  const saveAsName = async (name: string) => {
     // Scope the duplicate-name check to this corps so the same name can exist
     // independently under another corps (each loads its own build).
     const existing = repo.findByName(name, current.factionKey);
     if (existing) {
-      if (!window.confirm(`A build named “${name}” already exists for this corps. Overwrite it?`)) return;
-      const saved = buildToSaved(current, { id: existing.id, name: existing.name, createdAt: existing.createdAt });
+      if (!(await confirm({ message: `A build named “${name}” already exists for this corps. Overwrite it?`, confirmLabel: "Overwrite", danger: true }))) return;
+      const saved = buildToSaved(latest.current.current, { id: existing.id, name: existing.name, createdAt: existing.createdAt });
       if (persistAndReport(repo.save(saved), `Overwrote “${saved.name}”.`)) onSaved(saved);
       return;
     }
@@ -125,13 +132,13 @@ export function SaveLoadBar({
     if (persistAndReport(repo.save(saved), `Saved “${saved.name}”.`)) onSaved(saved);
   };
 
-  const doLoad = (saved: SavedBuild) => {
+  const doLoad = async (saved: SavedBuild) => {
     if (saved.factionKey !== roster.factionKey) {
       onMessage(`“${saved.name}” is for a different corps. Open that corps first.`);
       return;
     }
-    if (dirty && !window.confirm("Discard unsaved changes and load this build?")) return;
-    onLoaded(resolveSavedBuild(saved, roster), saved);
+    if (dirty && !(await confirm({ message: "Discard unsaved changes and load this build?", confirmLabel: "Discard changes", danger: true }))) return;
+    onLoaded(resolveSavedBuild(saved, latest.current.roster), saved);
     setOpen(false);
   };
 
@@ -153,7 +160,7 @@ export function SaveLoadBar({
 
   const doImport = (file: File) => {
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const saved = importBuildJson(String(reader.result));
       if (!saved) {
         onMessage("Import failed: not a valid build file.");
@@ -163,17 +170,18 @@ export function SaveLoadBar({
       // since edited and re-saved would silently clobber the newer stored save.
       // Confirm before overwriting an existing save (Save As confirms too).
       const existing = repo.get(saved.id);
-      if (existing && !window.confirm(`This will overwrite the saved build “${existing.name}” with the imported file. Continue?`)) {
+      if (existing && !(await confirm({ message: `This will overwrite the saved build “${existing.name}” with the imported file. Continue?`, confirmLabel: "Overwrite", danger: true }))) {
         return;
       }
       // Importing into the open corps replaces the on-screen build, discarding
       // unsaved edits — confirm just like Load does.
-      const loadsIntoCurrent = saved.factionKey === roster.factionKey;
-      if (loadsIntoCurrent && dirty && !window.confirm("Discard unsaved changes and load the imported build?")) {
+      // Read the roster and dirty flag now: they may have changed during the dialog above.
+      const loadsIntoCurrent = saved.factionKey === latest.current.roster.factionKey;
+      if (loadsIntoCurrent && latest.current.dirty && !(await confirm({ message: "Discard unsaved changes and load the imported build?", confirmLabel: "Discard changes", danger: true }))) {
         return;
       }
       persistAndReport(repo.save(saved), `Imported “${saved.name}”.`);
-      if (loadsIntoCurrent) onLoaded(resolveSavedBuild(saved, roster), saved);
+      if (loadsIntoCurrent) onLoaded(resolveSavedBuild(saved, latest.current.roster), saved);
       else onMessage(`Imported “${saved.name}” for another corps. Open it to load.`);
     };
     reader.readAsText(file);
@@ -232,15 +240,15 @@ export function SaveLoadBar({
                       title: "Rename build",
                       initial: s.name,
                       submitLabel: "Rename",
-                      onSubmit: (n) => {
+                      onSubmit: async (n) => {
                         // Guard against silently creating two saves that share a
                         // display name in this corps (Save As already checks this).
                         const clash = repo.findByName(n, s.factionKey);
-                        if (clash && clash.id !== s.id && !window.confirm(`Another build named “${n}” already exists for this corps. Keep both with the same name?`)) {
+                        if (clash && clash.id !== s.id && !(await confirm({ message: `Another build named “${n}” already exists for this corps. Keep both with the same name?`, confirmLabel: "Keep both" }))) {
                           return;
                         }
                         persistAndReport(repo.rename(s.id, n), `Renamed to “${n}”.`);
-                        if (loaded?.id === s.id) onSaved({ ...s, name: n });
+                        if (latest.current.loaded?.id === s.id) onSaved({ ...s, name: n });
                       },
                     })
                   }
@@ -258,8 +266,8 @@ export function SaveLoadBar({
                 </button>
                 <button
                   className="btn small"
-                  onClick={() => {
-                    if (window.confirm(`Delete “${s.name}”?`)) persistAndReport(repo.remove(s.id), `Deleted “${s.name}”.`);
+                  onClick={async () => {
+                    if (await confirm({ message: `Delete “${s.name}”?`, confirmLabel: "Delete", danger: true })) persistAndReport(repo.remove(s.id), `Deleted “${s.name}”.`);
                   }}
                 >
                   Delete

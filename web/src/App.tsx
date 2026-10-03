@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Builder } from "./components/Builder";
+import { ConfirmProvider } from "./components/ConfirmProvider";
 import { CorpsSelect, type CorpsUiState } from "./components/CorpsSelect";
 import { FactionOfflineButton } from "./components/FactionOfflineButton";
 import { OfflinePanel } from "./components/OfflinePanel";
@@ -17,6 +18,14 @@ import type { CurrentBuild, SavedBuild } from "./state/saves";
 import { type ReplaySession, emptyReplaySession } from "./state/replayBuild";
 
 export default function App() {
+  return (
+    <ConfirmProvider>
+      <AppBody />
+    </ConfirmProvider>
+  );
+}
+
+function AppBody() {
   const [index, setIndex] = useState<CorpsIndex | null>(null);
   const [selected, setSelected] = useState<CorpsEntry | null>(null);
   const [roster, setRoster] = useState<FactionRoster | null>(null);

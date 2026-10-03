@@ -47,6 +47,7 @@ import { planPoints, plural, pointsTooltip } from "../state/planSummary";
 import { BuildRepository, type SavedBuild, buildToSaved, makeId, resolveSavedBuild } from "../state/saves";
 import type { StorageResult } from "../state/storage";
 import { CorpsPickerModal } from "./CorpsPickerModal";
+import { useConfirm } from "./useConfirm";
 import { DetailsPanel } from "./DetailsPanel";
 import { Medallion } from "./Medallion";
 import { NamePromptModal } from "./NamePromptModal";
@@ -132,6 +133,7 @@ export function PlannerScreen({
   onOpenInBuilder: (slotId: string, entry: CorpsEntry, build: SavedBuild) => void;
 }) {
   const { plan } = current;
+  const confirm = useConfirm();
   const planRepo = useMemo(() => new PlanRepository(), []);
   const buildRepo = useMemo(() => new BuildRepository(), []);
   const coarse = useCoarsePointer();
@@ -175,15 +177,22 @@ export function PlannerScreen({
   useEffect(() => {
     planRef.current = plan;
   }, [plan]);
+  // Likewise the latest loaded-plan id, for callbacks that continue after a confirm.
+  const loadedIdRef = useRef(current.loadedPlanId);
+  useEffect(() => {
+    loadedIdRef.current = current.loadedPlanId;
+  }, [current.loadedPlanId]);
 
   // Dismiss the Load menu on an outside tap or Escape (see SaveLoadBar).
   useEffect(() => {
     if (!menuOpen) return;
     const onPointerDown = (e: PointerEvent) => {
-      const target = e.target as Node;
+      const target = e.target as Element;
+      // A confirm dialog opened from the menu is outside it, but is not a dismissal.
+      if (target.closest?.(".modal-backdrop")) return;
       if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) setMenuOpen(false);
     };
-    const onKeyDown = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
+    const onKeyDown = (e: KeyboardEvent) => e.key === "Escape" && !document.querySelector('[role="alertdialog"]') && setMenuOpen(false);
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     return () => {
@@ -267,32 +276,34 @@ export function PlannerScreen({
       title: "Save plan as",
       initial: savedPlan ? `${plan.name} (copy)` : plan.name,
       submitLabel: "Save",
-      onSubmit: (name) => {
-        const existing = planRepo.findByName(name);
+      onSubmit: async (name) => {
+        let existing = planRepo.findByName(name);
         if (existing) {
-          if (!window.confirm(`A plan named “${name}” already exists. Overwrite it?`)) return;
-          storeAs({ ...plan, id: existing.id, name: existing.name, createdAt: existing.createdAt }, `Overwrote “${existing.name}”.`);
+          if (!(await confirm({ message: `A plan named “${name}” already exists. Overwrite it?`, confirmLabel: "Overwrite", danger: true }))) return;
+          // Re-read both the stored plan and the working plan after the dialog.
+          existing = planRepo.findByName(name) ?? existing;
+          storeAs({ ...planRef.current, id: existing.id, name: existing.name, createdAt: existing.createdAt }, `Overwrote “${existing.name}”.`);
           return;
         }
-        storeAs({ ...plan, id: makePlanId(), name, createdAt: new Date().toISOString() }, `Saved “${name}”.`);
+        storeAs({ ...planRef.current, id: makePlanId(), name, createdAt: new Date().toISOString() }, `Saved “${name}”.`);
       },
     });
 
-  const doLoad = (p: Plan) => {
-    if (dirty && !window.confirm("Discard unsaved changes and load this plan?")) return;
+  const doLoad = async (p: Plan) => {
+    if (dirty && !(await confirm({ message: "Discard unsaved changes and load this plan?", confirmLabel: "Discard changes", danger: true }))) return;
     onChange({ plan: p, loadedPlanId: p.id });
     setMenuOpen(false);
   };
 
-  const doNew = () => {
-    if (!isPlanEmpty(plan) && !window.confirm("Start a new plan? The current plan's armies will be cleared.")) return;
+  const doNew = async () => {
+    if (!isPlanEmpty(plan) && !(await confirm({ message: "Start a new plan? The current plan's armies will be cleared.", confirmLabel: "Replace plan", danger: true }))) return;
     onChange({ plan: emptyPlan(), loadedPlanId: null });
   };
 
   const doImport = (file: File) => {
     const reader = new FileReader();
     reader.onerror = () => setMessage("Import failed: couldn't read the file.");
-    reader.onload = () => {
+    reader.onload = async () => {
       const text = String(reader.result);
       const imported = importPlanJson(text);
       if (!imported) {
@@ -300,7 +311,7 @@ export function PlannerScreen({
         return;
       }
       // Read the plan now, not when the button was clicked: it may have changed.
-      if (!isPlanEmpty(planRef.current) && !window.confirm("Replace the current plan with the imported one?")) return;
+      if (!isPlanEmpty(planRef.current) && !(await confirm({ message: "Replace the current plan with the imported one?", confirmLabel: "Replace plan", danger: true }))) return;
       onChange({ plan: imported, loadedPlanId: null });
       const dropped = rawPlanSlotCount(text) > MAX_PLAN_ARMIES;
       setMessage(`Imported “${imported.name}”${dropped ? `; kept the first ${MAX_PLAN_ARMIES} armies` : ""}.`);
@@ -335,9 +346,14 @@ export function PlannerScreen({
       title: "Save to my builds",
       initial: build.name,
       submitLabel: "Save",
-      onSubmit: (name) => {
+      onSubmit: async (name) => {
+        if (
+          buildRepo.findByName(name, build.factionKey) &&
+          !(await confirm({ message: `“${name}” already exists for this corps. Overwrite it?`, confirmLabel: "Overwrite", danger: true }))
+        )
+          return;
+        // Look again: the library may have changed while the dialog was open.
         const clash = buildRepo.findByName(name, build.factionKey);
-        if (clash && !window.confirm(`“${name}” already exists for this corps. Overwrite it?`)) return;
         const now = new Date().toISOString();
         // The library gets its own record (fresh id unless overwriting), so the slot
         // stays a copy and later edits to it never touch the saved build.
@@ -372,11 +388,11 @@ export function PlannerScreen({
   };
 
   // Units belong to their corps, so changing it drops them; ask first when there are any.
-  const askChangeCorps = (slot: PlanSlot, number: number) => {
+  const askChangeCorps = async (slot: PlanSlot, number: number) => {
     const b = slot.build;
     if (b && (b.instances.length > 0 || b.staffSlotUnitKey)) {
       const from = entryByKey.get(b.factionKey)?.name || b.armyCorpsName || b.factionKey;
-      if (!window.confirm(`Army ${number}'s units belong to ${from} and will be removed. Change corps?`)) return;
+      if (!(await confirm({ message: `Army ${number}'s units belong to ${from} and will be removed. Change corps?`, confirmLabel: "Change corps", danger: true }))) return;
     }
     setCorpsSlot(slot.id);
   };
@@ -505,13 +521,13 @@ export function PlannerScreen({
                               title: "Rename plan",
                               initial: p.name,
                               submitLabel: "Rename",
-                              onSubmit: (n) => {
+                              onSubmit: async (n) => {
                                 const clash = planRepo.findByName(n);
-                                if (clash && clash.id !== p.id && !window.confirm(`Another plan named “${n}” already exists. Keep both with the same name?`)) return;
+                                if (clash && clash.id !== p.id && !(await confirm({ message: `Another plan named “${n}” already exists. Keep both with the same name?`, confirmLabel: "Keep both" }))) return;
                                 // Only follow into the working plan if the storage rename took,
                                 // and not over a rename still pending there.
                                 const renamed = report(planRepo.rename(p.id, n), `Renamed to “${n}”.`);
-                                if (renamed && current.loadedPlanId === p.id)
+                                if (renamed && loadedIdRef.current === p.id)
                                   edit((pl) => (pl.name === p.name ? renamePlan(pl, n) : pl));
                               },
                             })
@@ -530,9 +546,9 @@ export function PlannerScreen({
                         </button>
                         <button
                           className="btn small"
-                          onClick={() => {
-                            if (!window.confirm(`Delete “${p.name}”?`)) return;
-                            if (report(planRepo.remove(p.id), `Deleted “${p.name}”.`) && current.loadedPlanId === p.id)
+                          onClick={async () => {
+                            if (!(await confirm({ message: `Delete “${p.name}”?`, confirmLabel: "Delete", danger: true }))) return;
+                            if (report(planRepo.remove(p.id), `Deleted “${p.name}”.`) && loadedIdRef.current === p.id)
                               onChange((cp) => ({ ...cp, loadedPlanId: null }));
                           }}
                         >
