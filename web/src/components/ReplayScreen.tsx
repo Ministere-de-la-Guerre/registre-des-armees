@@ -7,11 +7,13 @@
 // the device.
 
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { assetUrl } from "../data/assets";
 import { loadFaction } from "../data/load";
 import { type ReplayArmy, parseReplay } from "../domain/replay";
 import type { CorpsEntry, CorpsIndex, FactionRoster, UnitCard } from "../domain/types";
 import { type BuildState, type RosterIndex, indexRoster, summarize } from "../state/build";
+import { type CurrentPlan, MAX_PLAN_ARMIES } from "../state/plan";
 import { BuildRepository, type SavedBuild } from "../state/saves";
 import {
   type ReplaySession,
@@ -21,8 +23,11 @@ import {
   resolveReplayArmy,
   savedBuildFromReplayArmy,
 } from "../state/replayBuild";
+import { defaultTickedArmies, planFromReplayArmies } from "../state/replayPlan";
 import { MAX_BUILD_COST } from "../rules/rules";
 import { Medallion } from "./Medallion";
+import { NamePromptModal } from "./NamePromptModal";
+import { isTabletTouch, useCoarsePointer } from "./useCoarsePointer";
 
 /** Replays are a couple of MB; anything this large is not one, and we would
  *  rather say so than lock the tab up decoding it. */
@@ -57,18 +62,26 @@ export function ReplayScreen({
   onSessionChange,
   onBack,
   onOpenInBuilder,
+  planIsEmpty,
+  onSendToPlanner,
 }: {
   corpsIndex: CorpsIndex | null;
   session: ReplaySession;
   onSessionChange: Dispatch<SetStateAction<ReplaySession>>;
   onBack: () => void;
   onOpenInBuilder: (entry: CorpsEntry, saved: SavedBuild) => void;
+  /** Whether the working plan holds nothing, so sending a team over it needs no warning. */
+  planIsEmpty: boolean;
+  /** Install a new working plan built from the replay and show the planner. */
+  onSendToPlanner: (plan: CurrentPlan) => void;
 }) {
   const { battle, fileName, rosters, activeIndex } = session;
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [savingView, setSavingView] = useState<ArmyView | null>(null);
+  const [sending, setSending] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   // Bumped per opened file; a slower earlier file must not land over a newer one.
   const requestRef = useRef(0);
@@ -155,10 +168,8 @@ export function ReplayScreen({
 
   const active = activeIndex === null ? (views[0] ?? null) : (views[activeIndex] ?? views[0] ?? null);
 
-  const save = (view: ArmyView) => {
-    const suggested = replayBuildName(view.army);
-    const name = window.prompt("Save this build as:", suggested);
-    if (name === null) return;
+  // Named through an in-app modal: Electron does not support window.prompt().
+  const save = (view: ArmyView, name: string) => {
     const saved = savedBuildFromReplayArmy(view.army, name);
     const clash = repo.findByName(saved.name, saved.factionKey);
     if (clash && !window.confirm(`“${saved.name}” already exists for this corps. Overwrite it?`)) return;
@@ -215,6 +226,14 @@ export function ReplayScreen({
         <button className="btn small primary" onClick={() => fileRef.current?.click()} disabled={busy}>
           {busy ? "Reading…" : "Open .replay…"}
         </button>
+        <button
+          className="btn small"
+          onClick={() => setSending(true)}
+          disabled={!battle || views.length === 0}
+          title="Plan a team from this replay's armies"
+        >
+          ⚑ Send to Ordre de Bataille <span className="tag beta">Beta</span>
+        </button>
         {fileName && <span className="match-count">{fileName}</span>}
         <span className="spacer" style={{ flex: 1 }} />
         {battle && (
@@ -266,13 +285,131 @@ export function ReplayScreen({
               />
             ))}
           </div>
-          {active && <ArmyDetail view={active} onSave={() => save(active)} onOpen={() => openInBuilder(active)} />}
+          {active && <ArmyDetail view={active} onSave={() => setSavingView(active)} onOpen={() => openInBuilder(active)} />}
         </div>
+      )}
+
+      {savingView && (
+        <NamePromptModal
+          title="Save to my builds"
+          initial={replayBuildName(savingView.army)}
+          submitLabel="Save"
+          onSubmit={(name) => save(savingView, name)}
+          onClose={() => setSavingView(null)}
+        />
+      )}
+      {sending && battle && (
+        <SendToPlannerModal
+          views={views}
+          planIsEmpty={planIsEmpty}
+          onClose={() => setSending(false)}
+          onConfirm={(picked) => {
+            setSending(false);
+            onSendToPlanner(planFromReplayArmies(battle, picked, fileName));
+          }}
+        />
       )}
 
       {message && <div className="toast">{message}</div>}
     </div>
   );
+}
+
+function SendToPlannerModal({
+  views,
+  planIsEmpty,
+  onClose,
+  onConfirm,
+}: {
+  views: ArmyView[];
+  planIsEmpty: boolean;
+  onClose: () => void;
+  onConfirm: (picked: number[]) => void;
+}) {
+  const [ticked, setTicked] = useState<Set<number>>(() => new Set(defaultTickedArmies(views.length)));
+  const full = ticked.size >= MAX_PLAN_ARMIES;
+  const coarse = useCoarsePointer();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Take focus on open so Escape works straight away (the dialog itself is the target).
+  useEffect(() => {
+    dialogRef.current?.focus();
+  }, []);
+  const toggle = (i: number) =>
+    setTicked((t) => {
+      const next = new Set(t);
+      if (!next.delete(i) && next.size < MAX_PLAN_ARMIES) next.add(i);
+      return next;
+    });
+
+  const modal = (
+    <div className="modal-backdrop" onMouseDown={onClose}>
+      <div
+        ref={dialogRef}
+        className="modal"
+        style={{ maxWidth: 460 }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Send to Ordre de Bataille"
+        tabIndex={-1}
+        onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            onClose();
+          }
+        }}
+      >
+        <div className="modal-head">
+          <strong>Send to Ordre de Bataille</strong>
+        </div>
+        <div className="modal-body">
+          <p className="replay-send-note">
+            Replays don't record teams. Tick the armies you want. (Up to {MAX_PLAN_ARMIES}.)
+          </p>
+          <div className="replay-send-list">
+            {views.map((v, i) => {
+              const cost = costOf(v);
+              const disabled = full && !ticked.has(i);
+              return (
+                <label className={`replay-send-row${disabled ? " disabled" : ""}`} key={`${v.army.factionKey}-${i}`}>
+                  <input
+                    type="checkbox"
+                    checked={ticked.has(i)}
+                    disabled={disabled}
+                    onChange={() => toggle(i)}
+                  />
+                  <span className="replay-send-who">{v.army.player || "AI / unassigned"}</span>
+                  <span className="replay-send-corps">{v.entry?.name || v.army.corpsName || v.army.factionKey}</span>
+                  {cost !== null && (
+                    <span className={cost > MAX_BUILD_COST ? "over" : undefined}>{cost.toLocaleString()} MP</span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+          {!planIsEmpty && (
+            <p className="replay-send-note">
+              Your current plan will be replaced. Plans you saved by name are not touched.
+            </p>
+          )}
+          <div className="modal-actions" style={{ marginTop: 12, marginBottom: 0, justifyContent: "flex-end" }}>
+            <button className="btn small" onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              className="btn small primary"
+              disabled={ticked.size === 0}
+              onClick={() => onConfirm([...ticked])}
+            >
+              {planIsEmpty ? "Send" : "Replace plan"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+  // Same iOS fixed-position clipping workaround as NamePromptModal.
+  return coarse || isTabletTouch() ? createPortal(modal, document.body) : modal;
 }
 
 function costOf(view: ArmyView): number | null {

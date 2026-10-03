@@ -96,6 +96,11 @@ export interface UnitCard {
   baseUnitKey: string;
   /** Combat generals report their base unit's class for filters + ordering. */
   underlyingUnitClass: string;
+  /** Guns in the battery (artillery cards and the combat generals leading them);
+   *  null for everything else. Taken from the game's stats table, not recomputed. */
+  guns: number | null;
+  /** Game weapon key of those guns (e.g. `cannon_6_pounder_France`); null when `guns` is. */
+  gunType: string | null;
   /** 0-based position in the source roster (CSV) order, before the display sort.
    *  The in-game combat-general rotation shuffles the general pool in this order,
    *  so the rotation predictor must sort the pool by this to reproduce the game. */

@@ -294,6 +294,7 @@ def normalize_unit(row: dict, assets: AssetCopier, errors: list[str]) -> dict | 
     star_strip = assets.copy_asset(_s(row, "command_star_strip_path"))
     badge = assets.copy_asset(_s(row, "guerrilla_badge_path")) if _bool(_s(row, "has_guerrilla_deployment")) else None
 
+    guns = _int_or_none(_s(row, "guns"))
     return {
         "unitKey": unit_key,
         "factionKey": faction_key,
@@ -320,6 +321,10 @@ def normalize_unit(row: dict, assets: AssetCopier, errors: list[str]) -> dict | 
         # whole faction (and each base unit) is known.
         "groupCap": cap,
         "underlyingUnitClass": unit_class,
+        # Set only for batteries (and the combat generals leading them); the CSV
+        # leaves guns blank for everything else.
+        "guns": guns,
+        "gunType": (_s(row, "weapon_key") or None) if guns is not None else None,
         "placementSource": _s(row, "placement_source") or None,
         "icon": icon,
         "commandStarStrip": star_strip,

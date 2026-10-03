@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { FactionRoster } from "../domain/types";
+import { NamePromptModal } from "./NamePromptModal";
 import { isTabletTouch, useCoarsePointer } from "./useCoarsePointer";
 import {
   BuildRepository,
@@ -68,32 +69,16 @@ export function SaveLoadBar({
     };
   }, [open]);
 
-  // In-app name prompt. Electron does not support window.prompt(), so naming a
-  // build (Save As / Rename) must go through this modal instead.
+  // In-app name prompt (Save As / Rename); see NamePromptModal for why not window.prompt.
   const [namePrompt, setNamePrompt] = useState<{
     title: string;
+    initial: string;
     submitLabel: string;
     onSubmit: (value: string) => void;
   } | null>(null);
-  const [nameValue, setNameValue] = useState("");
-  const nameInputRef = useRef<HTMLInputElement>(null);
 
-  const askName = (opts: { title: string; initial: string; submitLabel: string; onSubmit: (value: string) => void }) => {
-    setNameValue(opts.initial);
-    setNamePrompt({ title: opts.title, submitLabel: opts.submitLabel, onSubmit: opts.onSubmit });
-  };
-  const closeNamePrompt = () => setNamePrompt(null);
-  const submitNamePrompt = () => {
-    const value = nameValue.trim();
-    if (!value) return;
-    const handler = namePrompt?.onSubmit;
-    setNamePrompt(null);
-    handler?.(value);
-  };
-
-  useEffect(() => {
-    if (namePrompt) nameInputRef.current?.focus();
-  }, [namePrompt]);
+  const askName = (opts: { title: string; initial: string; submitLabel: string; onSubmit: (value: string) => void }) =>
+    setNamePrompt(opts);
 
   const refresh = () => setSaves(repo.list());
   useEffect(refresh, [repo]);
@@ -284,50 +269,7 @@ export function SaveLoadBar({
           )}
         </div>,
         )}
-      {namePrompt &&
-        renderOverlay(
-        <div className="modal-backdrop" onMouseDown={closeNamePrompt}>
-          <div
-            className="modal"
-            style={{ maxWidth: 420 }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="modal-head">
-              <strong>{namePrompt.title}</strong>
-            </div>
-            <div className="modal-body">
-              <input
-                ref={nameInputRef}
-                type="text"
-                value={nameValue}
-                onChange={(e) => setNameValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") submitNamePrompt();
-                  else if (e.key === "Escape") closeNamePrompt();
-                }}
-                style={{
-                  width: "100%",
-                  boxSizing: "border-box",
-                  padding: "8px 10px",
-                  fontSize: 14,
-                  background: "var(--bg-2)",
-                  color: "var(--text)",
-                  border: "1px solid var(--line-2)",
-                  borderRadius: 6,
-                }}
-              />
-              <div className="modal-actions" style={{ marginTop: 12, justifyContent: "flex-end" }}>
-                <button className="btn small" onClick={closeNamePrompt}>
-                  Cancel
-                </button>
-                <button className="btn small primary" onClick={submitNamePrompt} disabled={!nameValue.trim()}>
-                  {namePrompt.submitLabel}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>,
-        )}
+      {namePrompt && <NamePromptModal {...namePrompt} onClose={() => setNamePrompt(null)} />}
     </div>
   );
 }

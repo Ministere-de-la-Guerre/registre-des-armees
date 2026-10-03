@@ -33,7 +33,7 @@ import {
 } from "../state/build";
 import { type FilterState, defaultFilters, isFilterActive, isHiddenByGeneralSwitch, matchesCard } from "../state/filters";
 import { combinedTowLayout, orderBrigadeCards } from "../state/ordering";
-import { type BuildConfig, type LoadResult, type SavedBuild, isDirty, resolveSavedBuild } from "../state/saves";
+import { type BuildConfig, type CurrentBuild, type LoadResult, type SavedBuild, isDirty, resolveSavedBuild } from "../state/saves";
 import { BottomTray } from "./BottomTray";
 import { BuilderGrid, type DivisionGroup, type GroupMeta, type MedallionHandlers } from "./BuilderGrid";
 import { DetailsPanel } from "./DetailsPanel";
@@ -83,6 +83,8 @@ export function Builder({
   postFlag,
   onBack,
   initialSaved = null,
+  onBuildChange,
+  context,
 }: {
   roster: FactionRoster;
   postFlag: string | null;
@@ -91,6 +93,13 @@ export function Builder({
    *  replay) instead of starting empty. Must be a stable reference — it is an
    *  effect dependency. Left unsaved, so the tray reads as having changes. */
   initialSaved?: SavedBuild | null;
+  /** Report every edit of the build, so a host that owns the army (the Ordre de
+   *  Bataille planner) can mirror it. Fired only for edits made after the seed is in
+   *  place — never with the empty pre-seed build — and not for the seed itself. */
+  onBuildChange?: (current: CurrentBuild) => void;
+  /** Where this builder was opened from. Replaces the "← Corps" back label and the
+   *  imported-from-replay wording with the host's own (e.g. "Army 2 of Plan"). */
+  context?: { backLabel: string; label: string };
 }) {
   const index = useMemo(() => indexRoster(roster), [roster]);
   const [build, setBuild] = useState<BuildState>(emptyBuild);
@@ -152,19 +161,33 @@ export function Builder({
   // armies, and for TOW when the "Combine corps" toggle is on (unless locating).
   const combinedView = isCustom || (isTow && combinedTow && !locating);
 
+  // Latest host props, read by effects that must not re-run when a host re-renders
+  // with fresh closures (the seed effect below resets the whole builder).
+  const hostRef = useRef({ onBuildChange, context, config: { density, showCombatGenerals: filters.showCombatGenerals } });
+  useEffect(() => {
+    hostRef.current = { onBuildChange, context, config: { density, showCombatGenerals: filters.showCombatGenerals } };
+  });
+  // The build the seed effect installed and the notify effect has not yet seen: until
+  // the state catches up to it, `build` is still the pre-seed empty one.
+  const pendingSeed = useRef<BuildState | null>(null);
+
   useEffect(() => {
     // A seeded army (imported from a replay) resolves through the same path as a
     // loaded save, so unknown keys drop out and get reported the same way.
     const seed = initialSaved?.factionKey === roster.factionKey ? initialSaved : null;
     const seeded = seed ? resolveSavedBuild(seed, roster) : null;
-    setBuild(seeded ? seeded.build : emptyBuild());
+    const initialBuild = seeded ? seeded.build : emptyBuild();
+    pendingSeed.current = initialBuild;
+    setBuild(initialBuild);
     setFilters(defaultFiltersFor(roster.factionKey));
     setLoadedSaved(null);
+    const skipped = seeded?.missingKeys.length ? ` — ${seeded.missingKeys.length} unknown unit(s) skipped` : "";
+    const host = hostRef.current.context;
     setMessage(
       seed && seeded
-        ? `Imported “${seed.name}”${
-            seeded.missingKeys.length ? ` — ${seeded.missingKeys.length} unknown unit(s) skipped` : ""
-          }. Not saved yet.`
+        ? host
+          ? `Opened “${seed.name}” from ${host.label}${skipped}.`
+          : `Imported “${seed.name}”${skipped}. Not saved yet.`
         : null,
     );
     setHovered(null);
@@ -749,6 +772,26 @@ export function Builder({
   const current = { build, config, factionKey: roster.factionKey, armyCorpsName: roster.armyCorpsName };
   const dirty = isDirty(current, loadedSaved);
 
+  // Tell the host about edits (see onBuildChange). `current` is rebuilt every render,
+  // so key the effect on the pieces it is made of; the callback itself is read from
+  // hostRef so a host re-render can neither re-fire this nor re-seed the builder.
+  // Only the build (units + commander) triggers it: density and the combat-generals
+  // toggle are view settings, so flipping them must not look like an edit to the host
+  // (it would bump the slot's updatedAt and autosave for nothing).
+  useEffect(() => {
+    if (pendingSeed.current) {
+      if (build !== pendingSeed.current) return; // still the pre-seed build
+      pendingSeed.current = null; // the seed itself is not an edit
+      return;
+    }
+    hostRef.current.onBuildChange?.({
+      build,
+      config: hostRef.current.config,
+      factionKey: roster.factionKey,
+      armyCorpsName: roster.armyCorpsName,
+    });
+  }, [build, roster.factionKey, roster.armyCorpsName]);
+
   const applyLoaded = (result: LoadResult, saved: SavedBuild) => {
     setBuild(result.build);
     setDensity(result.config.density);
@@ -809,13 +852,19 @@ export function Builder({
     <div className="builder">
       <div className="corps-header">
         <button className="btn small" onClick={onBack}>
-          ← Corps
+          {context?.backLabel ?? "← Corps"}
         </button>
         {postFlag && <img className="post-flag" src={assetUrl(postFlag) ?? undefined} alt="" />}
         <div className="titles">
           <h2>{roster.armyCorpsName || roster.factionKey}</h2>
           <div className="sub">
-            {loadedSaved ? `${loadedSaved.name}${dirty ? " • unsaved changes" : ""}` : dirty ? "Unsaved build" : "New build"}
+            {loadedSaved
+              ? `${context ? `${context.label} · ` : ""}${loadedSaved.name}${dirty ? " • unsaved changes" : ""}`
+              : context
+                ? context.label
+                : dirty
+                  ? "Unsaved build"
+                  : "New build"}
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, marginLeft: 16 }}>

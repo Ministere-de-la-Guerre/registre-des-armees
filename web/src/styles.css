@@ -1092,3 +1092,170 @@ input::placeholder { color: #6f7888; }
 /* Outside the selected span the ramp recedes; the chosen span stays saturated. */
 .dual-pickrate .dual-fill { background: none; box-shadow: inset 0 0 0 1px var(--gold); border-radius: 3px; }
 .dual-hint { font-size: 10.5px; color: #6d7787; margin-top: 4px; line-height: 1.35; }
+
+/* --- Ordre de Bataille (team planner) --- */
+.plan-top {
+  position: sticky; top: 0; z-index: 5; margin-bottom: 14px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.plan-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 10px 14px; }
+.plan-titles { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.plan-titles strong { color: var(--gold-bright); font-family: var(--serif); font-size: 17px; }
+.plan-name { background: none; border: none; padding: 0; color: var(--text-soft); font-size: 12px; text-align: left; }
+.plan-name:hover { color: var(--text); }
+.plan-dirty { color: var(--gold); }
+.plan-points { background: var(--panel-2, var(--panel)); border: 1px solid var(--line); border-radius: 7px; padding: 2px 10px; line-height: 1.2; text-align: center; cursor: help; }
+.plan-points .lbl { display: block; font-size: 9.5px; text-transform: uppercase; color: var(--text-soft); letter-spacing: 0.04em; }
+.plan-points .val { font-family: var(--serif); font-size: 16px; font-weight: 700; color: var(--gold-bright); }
+.plan-export-note { padding: 2px 14px 8px; font-size: 11px; color: var(--text-soft); }
+.plan-points-note { color: var(--text-soft); font-size: 12px; margin-left: 2px; }
+.plan-saves { display: flex; gap: 6px; align-items: center; position: relative; }
+
+.plan-strip {
+  display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+  padding: 8px 14px; border-top: 1px solid var(--line); background: var(--bg-2);
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+.plan-stats { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.plan-of { font-size: 11px; font-weight: 400; color: var(--text-soft); }
+.plan-share { flex: 1 1 220px; min-width: 180px; }
+.plan-share-bar { display: flex; height: 8px; border-radius: 4px; background: var(--panel-3); overflow: hidden; gap: 1px; }
+.plan-share-bar .seg { min-width: 2px; }
+.plan-share .seg.infantry, .plan-share .sw.infantry { background: var(--azure); }
+.plan-share .seg.cavalry, .plan-share .sw.cavalry { background: var(--gold); }
+.plan-share .seg.artillery, .plan-share .sw.artillery { background: var(--bad); }
+.plan-share-legend { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 4px; font-size: 11px; color: var(--text-soft); }
+.plan-share-legend .sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
+.plan-strip-end { display: flex; gap: 10px; align-items: center; flex: 1 1 240px; justify-content: flex-end; min-width: 0; }
+.plan-warn { font-size: 12px; color: var(--bad); font-weight: 600; min-width: 0; overflow-wrap: anywhere; text-align: right; }
+
+.plan-armies { display: flex; flex-direction: column; gap: 12px; }
+.plan-army { min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.plan-army-head {
+  display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 8px 14px;
+  background: var(--bg-2); border-bottom: 1px solid var(--line);
+}
+.plan-num {
+  flex: none; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-family: var(--serif); font-weight: 700; color: #20160a; background: linear-gradient(var(--gold-bright), var(--gold));
+}
+.plan-flag { height: 30px; border: 1px solid var(--line-2); border-radius: 4px; flex: none; }
+.plan-army-head .titles { min-width: 0; }
+.plan-army-head .titles h2 { font-size: 16px; color: var(--gold-bright); }
+.plan-army-head .titles .sub { font-size: 12px; color: var(--text-soft); }
+.plan-player {
+  width: 130px; padding: 4px 8px; font-size: 13px; background: var(--bg-2); color: var(--text);
+  border: 1px solid var(--line-2); border-radius: 6px;
+}
+.plan-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.plan-notice { margin: 10px 14px 0; }
+/* The row gap clears the two-line name label, so it never runs under the badges of
+   the next wrapped row of medallions. */
+.plan-units { display: flex; flex-wrap: wrap; gap: 16px 6px; padding: 12px 14px; }
+.plan-unit { flex: none; }
+.plan-empty-note { padding: 12px 14px; font-size: 13px; color: var(--text-soft); }
+.corps-picker { max-width: 560px; display: flex; flex-direction: column; height: min(680px, 86vh); overflow: hidden; }
+.corps-picker .modal-head { position: static; flex: none; }
+.corps-pick-search { flex: none; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.corps-pick-search input { width: 100%; box-sizing: border-box; }
+.corps-pick-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 4px 8px 12px; overscroll-behavior: contain; }
+.corps-pick-side { color: var(--gold-bright); font-size: 16px; border-bottom: 1px solid var(--line); margin: 12px 4px 4px; padding-bottom: 3px; }
+.corps-pick-theatre { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-soft); margin: 8px 4px 2px; }
+.corps-pick-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; text-align: left; min-height: 34px;
+  background: transparent; color: var(--text); border: 1px solid transparent; border-left: 3px solid transparent;
+  border-radius: var(--radius); padding: 5px 8px;
+}
+.corps-pick-row.active, .corps-pick-row:hover { background: var(--panel-2); border-left-color: var(--gold-bright); }
+.corps-pick-row .flag { width: 40px; height: 20px; object-fit: contain; flex: none; }
+.corps-pick-row .name { flex: 1; min-width: 0; font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
+.corps-pick-row .meta { flex: none; font-size: 11px; color: var(--text-soft); }
+@media (max-width: 700px) {
+  .corps-picker { height: 100dvh; max-height: 100dvh; border-radius: 0; }
+  .corps-pick-row { min-height: 44px; }
+}
+
+.plan-details { max-width: 720px; }
+.plan-section { margin-bottom: 16px; }
+.plan-section h3 { font-size: 14px; color: var(--gold-bright); margin-bottom: 6px; border-bottom: 1px solid var(--line); padding-bottom: 3px; }
+.plan-section .error-box.notice { margin-bottom: 6px; }
+.plan-row {
+  display: grid; grid-template-columns: minmax(110px, 1fr) minmax(0, 1.5fr) minmax(0, 1.2fr); gap: 4px 12px;
+  border-bottom: 1px dotted var(--line-2); padding: 3px 0; font-size: 13px;
+}
+.plan-row .k { color: var(--text-soft); }
+.plan-row.sub .k { padding-left: 16px; }
+.plan-row .by { color: var(--text-soft); font-size: 12px; text-align: right; overflow-wrap: anywhere; }
+.plan-row.total { font-weight: 700; }
+.plan-row.total .k { color: var(--text); }
+.plan-picker { max-width: 520px; }
+
+/* Phones and tablets: the toolbar scrolls away (and swipes sideways) while the
+   combined strip stays pinned, and the strip's stats become one swipeable row so it
+   stays short. `display: contents` lets the strip stick to the screen rather than to
+   its (short) wrapper. */
+@media (max-width: 700px), (hover: none) and (pointer: coarse) {
+  .plan-top { display: contents; }
+  .plan-toolbar { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 8px; }
+  .plan-strip {
+    position: sticky; top: 0; z-index: 5; margin-bottom: 12px; border: 1px solid var(--gold-deep); border-radius: var(--radius);
+    flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 4px; padding: 4px 8px;
+  }
+  .plan-strip .plan-stats { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+  .plan-strip .plan-stats::-webkit-scrollbar { display: none; }
+  .plan-strip .hstat { flex: none; padding: 2px 9px; min-width: 0; }
+  .plan-strip .hstat .lbl { font-size: 9.5px; }
+  /* Bar and a small scrolling legend share one line; warning and Details share
+     another, the warning cut off with an ellipsis (its full text is the tooltip and
+     the Details modal). Together with the stats row this keeps the pinned strip ~100px. */
+  .plan-strip .plan-share { flex: none; min-width: 0; display: flex; align-items: center; gap: 8px; }
+  .plan-strip .plan-share-bar { flex: 0 0 72px; }
+  .plan-strip .plan-share-legend {
+    flex: 1 1 auto; min-width: 0; margin-top: 0; flex-wrap: nowrap; gap: 0 8px; font-size: 10px;
+    overflow-x: auto; white-space: nowrap; scrollbar-width: none;
+  }
+  .plan-strip .plan-share-legend::-webkit-scrollbar { display: none; }
+  .plan-strip-end { flex: none; flex-wrap: nowrap; gap: 8px; }
+  .plan-warn { flex: 1 1 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; font-size: 11px; }
+  .plan-strip .btn { flex: none; margin-left: auto; }
+  .plan-army-head { padding: 8px 10px; }
+  .plan-actions { margin-left: 0; width: 100%; }
+  .plan-player { flex: 1 1 120px; width: auto; }
+  .plan-units { padding: 10px; }
+  .plan-notice { margin: 8px 10px 0; }
+  .plan-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .plan-row .by { grid-column: 1 / -1; text-align: left; }
+  .plan-details { height: 94dvh; max-height: 94dvh; }
+}
+@media (hover: none) and (pointer: coarse) {
+  .plan-toolbar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .plan-toolbar::-webkit-scrollbar { display: none; }
+  .plan-toolbar > *, .plan-saves { flex-shrink: 0; }
+  .plan-toolbar .spacer { display: none; }
+  .plan-toolbar .btn, .plan-actions .btn { min-height: 44px; }
+  /* The pinned strip stays compact: Details is a 36px target, not 44. */
+  .plan-strip .btn { min-height: 36px; }
+  .plan-player { font-size: 16px; min-height: 44px; }
+}
+/* iPadOS reports a fine pointer, so the coarse block above misses it; mirror it. */
+.app.tablet-touch .plan-toolbar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.app.tablet-touch .plan-toolbar::-webkit-scrollbar { display: none; }
+.app.tablet-touch .plan-toolbar > *, .app.tablet-touch .plan-saves { flex-shrink: 0; }
+.app.tablet-touch .plan-toolbar .spacer { display: none; }
+.app.tablet-touch .plan-toolbar .btn, .app.tablet-touch .plan-actions .btn { min-height: 44px; }
+
+/* --- replay: send armies to the planner --- */
+.replay-send-note { font-size: 12px; line-height: 1.45; color: var(--text-soft); margin: 0 0 10px; }
+.replay-send-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 6px; max-height: 50vh; overflow: auto; }
+.replay-send-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; font-size: 13px; cursor: pointer; border-bottom: 1px solid var(--line); }
+.replay-send-row:last-child { border-bottom: 0; }
+.replay-send-row:hover { background: var(--bg-2); }
+.replay-send-row.disabled { opacity: 0.5; cursor: default; }
+.modal:focus { outline: none; }
+.replay-send-who { font-weight: 600; flex-shrink: 0; }
+.replay-send-corps { flex: 1; min-width: 0; color: var(--text-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Export view (the planner's "Copy image" picture, rendered offscreen). */
+.plan-export { flex: none; overflow: visible; width: 100%; padding-bottom: 18px; }
+.plan-export .plan-top { position: static; }
+.plan-player-text { font-size: 13px; color: var(--text); }

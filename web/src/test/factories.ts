@@ -27,6 +27,8 @@ export function makeUnit(partial: Partial<UnitCard> = {}): UnitCard {
     capGroupKey: unitKey,
     baseUnitKey: unitKey,
     underlyingUnitClass: "infantry_line",
+    guns: null,
+    gunType: null,
     rosterIndex: 0,
     placementSource: "localisation_tag",
     icon: null,

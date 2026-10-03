@@ -48,6 +48,36 @@ describe("generated data", () => {
     expect(version.towRows).toBeGreaterThan(0);
   });
 
+  it("every battery and artillery-leading combat general carries guns and a gun type", () => {
+    const files = readdirSync(resolve(DATA_DIR, "factions"));
+    let batteries = 0;
+    let artilleryGenerals = 0;
+    for (const file of files) {
+      const roster = readJson(`factions/${file}`) as {
+        cards: {
+          unitKey: string;
+          unitClass: string;
+          underlyingUnitClass: string;
+          guns: number | null;
+          gunType: string | null;
+        }[];
+      };
+      for (const card of roster.cards) {
+        if (card.underlyingUnitClass.startsWith("artillery")) {
+          if (card.unitClass === "general") artilleryGenerals += 1;
+          else batteries += 1;
+          expect(card.guns, card.unitKey).toBeGreaterThan(0);
+          expect(card.gunType, card.unitKey).toBeTruthy();
+        } else {
+          expect(card.guns, card.unitKey).toBeNull();
+          expect(card.gunType, card.unitKey).toBeNull();
+        }
+      }
+    }
+    expect(batteries).toBeGreaterThan(0);
+    expect(artilleryGenerals).toBeGreaterThan(0);
+  });
+
   it("corps index splits Theatres of War sides (not as AC)", () => {
     const index = readJson("corps-index.json") as {
       sides: { side: string; theatres: { corps: { factionKey: string; isArmyCorps: boolean }[] }[] }[];

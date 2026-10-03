@@ -1,15 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Builder } from "./components/Builder";
 import { CorpsSelect, type CorpsUiState } from "./components/CorpsSelect";
 import { FactionOfflineButton } from "./components/FactionOfflineButton";
 import { OfflinePanel } from "./components/OfflinePanel";
+import { PlannerScreen } from "./components/PlannerScreen";
 import { ReplayScreen } from "./components/ReplayScreen";
 import { UpdateToast } from "./components/UpdateToast";
+import { usePlanRosters } from "./components/usePlanRosters";
 import { loadCorpsIndex, loadFaction } from "./data/load";
 import { applyUpdate, isWebTarget, registerPwa } from "./pwa";
 import { isCoarsePointer, isTabletTouch, useCoarsePointer } from "./components/useCoarsePointer";
 import type { CorpsEntry, CorpsIndex, FactionRoster } from "./domain/types";
-import type { SavedBuild } from "./state/saves";
+import { type CurrentPlan, emptyPlan, isPlanEmpty, loadCurrentPlan, saveCurrentPlan, setSlotBuild } from "./state/plan";
+import { slotBuildFromCurrent } from "./state/planSync";
+import type { CurrentBuild, SavedBuild } from "./state/saves";
 import { type ReplaySession, emptyReplaySession } from "./state/replayBuild";
 
 export default function App() {
@@ -21,15 +25,23 @@ export default function App() {
   // Corps-selection state persists across builder visits (scroll + filters).
   const [corpsUi, setCorpsUi] = useState<CorpsUiState>({ search: "", side: "all", acOnly: false, towOnly: false });
   const corpsScroll = useRef(0);
-  // Which of the two entry screens is showing behind the builder: the corps
-  // picker or the replay build checker. `pendingSaved` seeds the builder when an
-  // army is opened from a replay; `returnToReplay` sends Back there afterwards.
-  const [screen, setScreen] = useState<"corps" | "replay">("corps");
+  // Which entry screen is showing behind the builder: the corps picker, the replay
+  // build checker or the Ordre de Bataille planner. `pendingSaved` seeds the builder
+  // when an army is opened from a replay or a plan slot; `returnTo` sends Back to the
+  // screen that opened it.
+  const [screen, setScreen] = useState<"corps" | "replay" | "planner">("corps");
   const [pendingSaved, setPendingSaved] = useState<SavedBuild | null>(null);
-  const [returnToReplay, setReturnToReplay] = useState(false);
+  const [returnTo, setReturnTo] = useState<"corps" | "replay" | "planner">("corps");
+  // The plan slot the open builder is bound to; null for a builder opened the ordinary way.
+  const [builderSlotId, setBuilderSlotId] = useState<string | null>(null);
   // The loaded replay lives here, not in ReplayScreen, so visiting the builder
   // (which unmounts that screen) does not discard the parsed file.
   const [replaySession, setReplaySession] = useState<ReplaySession>(emptyReplaySession);
+  // Likewise the working plan, restored from the last session. Autosaved below.
+  const [currentPlan, setCurrentPlan] = useState<CurrentPlan>(
+    () => loadCurrentPlan() ?? { plan: emptyPlan(), loadedPlanId: null },
+  );
+  const restoredPlan = useRef(currentPlan);
 
   // PWA plumbing (web target only; a no-op inside the Electron desktop app).
   // "waiting": a new version is ready to apply. "elsewhere": another tab applied
@@ -81,6 +93,22 @@ export default function App() {
     return [...keys];
   }, [index]);
 
+  // Autosave the working plan on every edit (including those flowing back from the
+  // builder). Skipped until something changed, so merely visiting the app never
+  // writes a plan for someone who doesn't use the planner.
+  useEffect(() => {
+    if (currentPlan !== restoredPlan.current) saveCurrentPlan(currentPlan);
+  }, [currentPlan]);
+
+  // Rosters for the corps in the plan, cached here so they survive visits to the
+  // builder. Loaded only while the planner is showing.
+  const planFactionKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const slot of currentPlan.plan.slots) if (slot.build) keys.add(slot.build.factionKey);
+    return [...keys];
+  }, [currentPlan.plan.slots]);
+  const planRosters = usePlanRosters(planFactionKeys, screen === "planner" && !selected);
+
   // Bumped per openCorps/back so a slow load that finishes after the user has
   // moved on (Back, or Retry) can't install a roster for the wrong corps.
   const rosterRequest = useRef(0);
@@ -100,9 +128,29 @@ export default function App() {
 
   /** Open one army out of a replay in the full builder, then come back here. */
   const openFromReplay = (entry: CorpsEntry, saved: SavedBuild) => {
-    setReturnToReplay(true);
+    setReturnTo("replay");
     openCorps(entry, saved);
   };
+
+  /** Open a plan slot's army in the builder; its edits flow back into the slot and
+   *  Back returns to the planner. */
+  const openFromPlanner = (slotId: string, entry: CorpsEntry, saved: SavedBuild | null) => {
+    setReturnTo("planner");
+    setBuilderSlotId(slotId);
+    openCorps(entry, saved);
+  };
+
+  const onSlotBuildChange = useCallback(
+    (build: CurrentBuild) => {
+      if (!builderSlotId) return;
+      setCurrentPlan((cp) => {
+        const slot = cp.plan.slots.find((s) => s.id === builderSlotId);
+        return slot ? { ...cp, plan: setSlotBuild(cp.plan, slot.id, slotBuildFromCurrent(slot.build, build)) } : cp;
+      });
+    },
+    [builderSlotId],
+  );
+  const builderSlotNumber = currentPlan.plan.slots.findIndex((s) => s.id === builderSlotId) + 1;
 
   const back = () => {
     rosterRequest.current++;
@@ -111,8 +159,9 @@ export default function App() {
     setError(null);
     setLoadingRoster(false);
     setPendingSaved(null);
-    setScreen(returnToReplay ? "replay" : "corps");
-    setReturnToReplay(false);
+    setScreen(returnTo);
+    setReturnTo("corps");
+    setBuilderSlotId(null);
   };
 
   const builderActive = !!(selected && roster);
@@ -137,13 +186,22 @@ export default function App() {
         <span className="spacer" />
         {selected && <span style={{ fontSize: 12, opacity: 0.85 }}>{selected.name}</span>}
         {!selected && screen === "corps" && (
-          <button
-            className="btn ghost small"
-            onClick={() => setScreen("replay")}
-            title="Read army builds from a replay"
-          >
-            ⛊ Replay builds
-          </button>
+          <>
+            <button
+              className="btn ghost small"
+              onClick={() => setScreen("planner")}
+              title="Plan up to four armies as a team"
+            >
+              ⚑ Ordre de Bataille <span className="tag beta">Beta</span>
+            </button>
+            <button
+              className="btn ghost small"
+              onClick={() => setScreen("replay")}
+              title="Read army builds from a replay"
+            >
+              ⛊ Replay builds
+            </button>
+          </>
         )}
         {web && roster && <FactionOfflineButton roster={roster} />}
         {web && (
@@ -178,6 +236,23 @@ export default function App() {
           onSessionChange={setReplaySession}
           onBack={() => setScreen("corps")}
           onOpenInBuilder={openFromReplay}
+          planIsEmpty={isPlanEmpty(currentPlan.plan)}
+          onSendToPlanner={(next) => {
+            setCurrentPlan(next);
+            setScreen("planner");
+          }}
+        />
+      )}
+
+      {!selected && screen === "planner" && (
+        <PlannerScreen
+          corpsIndex={index}
+          current={currentPlan}
+          onChange={setCurrentPlan}
+          loads={planRosters.loads}
+          onRetryRoster={planRosters.retry}
+          onBack={() => setScreen("corps")}
+          onOpenInBuilder={openFromPlanner}
         />
       )}
 
@@ -205,6 +280,12 @@ export default function App() {
           postFlag={selected.postSelectionFlag ?? selected.flag}
           onBack={back}
           initialSaved={pendingSaved}
+          onBuildChange={builderSlotId ? onSlotBuildChange : undefined}
+          context={
+            builderSlotId
+              ? { backLabel: "← Ordre de Bataille", label: `Army ${builderSlotNumber} of ${currentPlan.plan.name}` }
+              : undefined
+          }
         />
       )}
 

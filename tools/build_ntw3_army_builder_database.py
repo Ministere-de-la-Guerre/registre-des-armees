@@ -46,7 +46,7 @@ OUTPUT_COLUMNS = [
     "can_inspire", "has_guerrilla_deployment", "guerrilla_badge_path",
     "guerrilla_badge_layout", "can_place_stakes",
     "can_place_mines", "scares_enemies", "can_build_barricades",
-    "placement_source",
+    "placement_source", "guns",
 ]
 
 # These two source keys have conflicting duplicate localisation rows. The original
@@ -1147,6 +1147,21 @@ def main() -> None:
                 "guerrilla_badge_layout": (
                     "lower_right"
                     if displayed_abilities["has_guerrilla_deployment"] == "true"
+                    else ""
+                ),
+                # Guns per battery, for anything that crews a gun (artillery, and the
+                # combat generals who lead it). In-game this is one gun per 10 displayed
+                # men for foot batteries and per 6 for horse; the table is the authority
+                # where a battery's crew doesn't divide evenly.
+                "guns": (
+                    text_value(stats.get("guns"))
+                    if stats is not None and (
+                        not blank(stats.get("articulated_entity"))
+                        # Fixed pieces (rockets, marine and coastal guns) have no
+                        # articulated entity; commander variants keep the base key prefix.
+                        or unit_key.startswith("ntw3_art_")
+                        or unit_class.casefold().startswith("artillery")
+                    )
                     else ""
                 ),
                 "__gun_type": text_value(stats.get("gun_type")) if stats is not None else "",
