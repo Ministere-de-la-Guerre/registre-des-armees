@@ -52,6 +52,7 @@
   --glow: #341b1a; --stage-a: #271514; --stage-b: #1a0e0e;
   --azure-rgb: 217, 119, 107;
   --future-rgb: 217, 119, 107; --future-line: #9a3b33; --future-text: #f3cfc9;
+  --share-art: #8fa3b8; /* steel: --bad is too close to the red --azure in the branch-mix bar */
 }
 
 * { box-sizing: border-box; }
@@ -1149,7 +1150,7 @@ input::placeholder { color: var(--muted); }
 .plan-share-bar .seg { min-width: 2px; }
 .plan-share .seg.infantry, .plan-share .sw.infantry { background: var(--azure); }
 .plan-share .seg.cavalry, .plan-share .sw.cavalry { background: var(--gold); }
-.plan-share .seg.artillery, .plan-share .sw.artillery { background: var(--bad); }
+.plan-share .seg.artillery, .plan-share .sw.artillery { background: var(--share-art, var(--bad)); }
 .plan-share-legend { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 4px; font-size: 11px; color: var(--text-soft); }
 .plan-share-legend .sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
 .plan-strip-end { display: flex; gap: 10px; align-items: center; flex: 1 1 240px; justify-content: flex-end; min-width: 0; }
