@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import { assetUrl } from "../data/assets";
 import { loadFaction } from "../data/load";
 import { type ReplayArmy, parseReplay } from "../domain/replay";
+import { type TeamKey, type TeamSide, pickSideArmies, teamKeysByFaction } from "../domain/teamRule";
 import type { CorpsEntry, CorpsIndex, FactionRoster, UnitCard } from "../domain/types";
 import { type BuildState, type RosterIndex, indexRoster, summarize } from "../state/build";
 import { type CurrentPlan, MAX_PLAN_ARMIES } from "../state/plan";
@@ -23,7 +24,7 @@ import {
   resolveReplayArmy,
   savedBuildFromReplayArmy,
 } from "../state/replayBuild";
-import { defaultTickedArmies, planFromReplayArmies } from "../state/replayPlan";
+import { planFromReplayArmies } from "../state/replayPlan";
 import { MAX_BUILD_COST } from "../rules/rules";
 import { useConfirm } from "./useConfirm";
 import { Medallion } from "./Medallion";
@@ -153,6 +154,7 @@ export function ReplayScreen({
     }
   };
 
+  const teamKeys = useMemo(() => teamKeysByFaction(corpsIndex), [corpsIndex]);
   const views: ArmyView[] = useMemo(() => {
     return (battle?.armies ?? []).map((army) => {
       const roster = rosters.get(army.factionKey) ?? null;
@@ -308,6 +310,7 @@ export function ReplayScreen({
       {sending && battle && (
         <SendToPlannerModal
           views={views}
+          teamKeys={teamKeys}
           planIsEmpty={planIsEmpty}
           onClose={() => setSending(false)}
           onConfirm={(picked) => {
@@ -324,29 +327,37 @@ export function ReplayScreen({
 
 function SendToPlannerModal({
   views,
+  teamKeys,
   planIsEmpty,
   onClose,
   onConfirm,
 }: {
   views: ArmyView[];
+  teamKeys: Map<string, TeamKey>;
   planIsEmpty: boolean;
   onClose: () => void;
   onConfirm: (picked: number[]) => void;
 }) {
-  const [ticked, setTicked] = useState<Set<number>>(() => new Set(defaultTickedArmies(views.length)));
-  const full = ticked.size >= MAX_PLAN_ARMIES;
+  // Replays don't record teams, but a plan is one side: pick Imperial or Coalition and
+  // that side's armies come along (the first one fixes the theatre; see teamRule.ts).
+  const keys = useMemo(() => views.map((v) => teamKeys.get(v.army.factionKey) ?? null), [views, teamKeys]);
+  const bySide = useMemo(
+    () => ({
+      imperial: pickSideArmies(keys, "imperial", MAX_PLAN_ARMIES),
+      coalition: pickSideArmies(keys, "coalition", MAX_PLAN_ARMIES),
+    }),
+    [keys],
+  );
+  // A replay lists one side's players first, so start on the side of the first army that has one.
+  const [side, setSide] = useState<TeamSide>(() => keys.find((k) => k?.side)?.side ?? "imperial");
+  const picked = bySide[side];
+  const pickedSet = new Set(picked);
   const coarse = useCoarsePointer();
   const dialogRef = useRef<HTMLDivElement>(null);
   // Take focus on open so Escape works straight away (the dialog itself is the target).
   useEffect(() => {
     dialogRef.current?.focus();
   }, []);
-  const toggle = (i: number) =>
-    setTicked((t) => {
-      const next = new Set(t);
-      if (!next.delete(i) && next.size < MAX_PLAN_ARMIES) next.add(i);
-      return next;
-    });
 
   const modal = (
     <div className="modal-backdrop" onMouseDown={onClose}>
@@ -371,26 +382,41 @@ function SendToPlannerModal({
         </div>
         <div className="modal-body">
           <p className="replay-send-note">
-            Replays don't record teams. Tick the armies you want. (Up to {MAX_PLAN_ARMIES}.)
+            Replays don't record teams. Pick a side and its armies go to the plan (up to {MAX_PLAN_ARMIES}, all from the
+            same theatre).
           </p>
+          <div className="replay-side-pick" role="radiogroup" aria-label="Side">
+            {(["imperial", "coalition"] as const).map((s) => (
+              <button
+                key={s}
+                role="radio"
+                aria-checked={side === s}
+                className={`replay-side${side === s ? " active" : ""}`}
+                disabled={bySide[s].length === 0}
+                onClick={() => setSide(s)}
+              >
+                <strong>{s === "imperial" ? "Imperial" : "Coalition"}</strong>
+                <span>
+                  {bySide[s].length} {bySide[s].length === 1 ? "army" : "armies"}
+                </span>
+              </button>
+            ))}
+          </div>
           <div className="replay-send-list">
             {views.map((v, i) => {
               const cost = costOf(v);
-              const disabled = full && !ticked.has(i);
+              const included = pickedSet.has(i);
               return (
-                <label className={`replay-send-row${disabled ? " disabled" : ""}`} key={`${v.army.factionKey}-${i}`}>
-                  <input
-                    type="checkbox"
-                    checked={ticked.has(i)}
-                    disabled={disabled}
-                    onChange={() => toggle(i)}
-                  />
+                <div className={`replay-send-row${included ? "" : " disabled"}`} key={`${v.army.factionKey}-${i}`}>
+                  <span className="replay-send-mark" aria-hidden="true">
+                    {included ? "✓" : ""}
+                  </span>
                   <span className="replay-send-who">{v.army.player || "AI / unassigned"}</span>
                   <span className="replay-send-corps">{v.entry?.name || v.army.corpsName || v.army.factionKey}</span>
                   {cost !== null && (
                     <span className={cost > MAX_BUILD_COST ? "over" : undefined}>{cost.toLocaleString()} MP</span>
                   )}
-                </label>
+                </div>
               );
             })}
           </div>
@@ -403,11 +429,7 @@ function SendToPlannerModal({
             <button className="btn small" onClick={onClose}>
               Cancel
             </button>
-            <button
-              className="btn small primary"
-              disabled={ticked.size === 0}
-              onClick={() => onConfirm([...ticked])}
-            >
+            <button className="btn small primary" disabled={picked.length === 0} onClick={() => onConfirm(picked)}>
               {planIsEmpty ? "Send" : "Replace plan"}
             </button>
           </div>

@@ -7,13 +7,6 @@ import type { ReplayBattle } from "../domain/replay";
 import { type CurrentPlan, MAX_PLAN_ARMIES, PLAN_FORMAT_VERSION, emptySlot, makePlanId, makeSlotId } from "./plan";
 import { replayBuildName, savedBuildFromReplayArmy } from "./replayBuild";
 
-/** Indices pre-ticked in the send-to-planner dialog: the first half of the armies
- *  (a replay lists one side's players first), at least one, capped at the plan size. */
-export function defaultTickedArmies(armyCount: number): number[] {
-  const count = Math.min(MAX_PLAN_ARMIES, Math.max(1, Math.floor(armyCount / 2)), armyCount);
-  return Array.from({ length: count }, (_, i) => i);
-}
-
 /** "Map — file name": underscores become spaces and `.replay` is stripped, e.g.
  *  ("Austerlitz", "my_game.replay") → "Austerlitz — my game". Falls back to "Replay team". */
 export function replayPlanName(battle: ReplayBattle, fileName: string): string {

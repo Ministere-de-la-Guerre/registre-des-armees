@@ -46,6 +46,7 @@ import { type ArmyStats, planStats } from "../state/planStats";
 import { planPoints, plural, pointsTooltip } from "../state/planSummary";
 import { BuildRepository, type SavedBuild, buildToSaved, makeId, resolveSavedBuild } from "../state/saves";
 import type { StorageResult } from "../state/storage";
+import { fitsTeam, teamAnchor, teamKeysByFaction } from "../domain/teamRule";
 import { CorpsPickerModal } from "./CorpsPickerModal";
 import { useConfirm } from "./useConfirm";
 import { DetailsPanel } from "./DetailsPanel";
@@ -209,6 +210,22 @@ export function PlannerScreen({
     return map;
   }, [corpsIndex]);
   const points = useMemo(() => planPoints(plan.slots, entryByKey), [plan.slots, entryByKey]);
+  // Team rule: the first army fixes side + theatre, the rest must match (domain/teamRule.ts).
+  const teamKeys = useMemo(() => teamKeysByFaction(corpsIndex), [corpsIndex]);
+  const teamWithout = useCallback(
+    (slotId: string | null) =>
+      teamAnchor(plan.slots.filter((s) => s.id !== slotId).map((s) => (s.build ? teamKeys.get(s.build.factionKey) ?? null : null))),
+    [plan.slots, teamKeys],
+  );
+  const fitsSlot = useCallback(
+    (slotId: string, factionKey: string) => {
+      const anchor = teamWithout(slotId);
+      if (!anchor) return true;
+      const key = teamKeys.get(factionKey);
+      return Boolean(key && fitsTeam(anchor, key));
+    },
+    [teamWithout, teamKeys],
+  );
   const corpsNameOf = useCallback(
     (b: SavedBuild) => entryByKey.get(b.factionKey)?.name || b.armyCorpsName || b.factionKey,
     [entryByKey],
@@ -364,6 +381,10 @@ export function PlannerScreen({
     });
 
   const pickSaved = (slotId: string, saved: SavedBuild) => {
+    if (!fitsSlot(slotId, saved.factionKey)) {
+      setPickerSlot(null);
+      return setMessage(`“${saved.name}” doesn't match your team (${teamWithout(slotId)?.label}).`);
+    }
     edit((p) => setSlotBuild(p, slotId, copySavedBuildIntoSlot(saved)));
     setPickerSlot(null);
     setMessage(`Loaded “${saved.name}” into army ${plan.slots.findIndex((s) => s.id === slotId) + 1}.`);
@@ -375,6 +396,7 @@ export function PlannerScreen({
     setCorpsSlot(null);
     const slot = plan.slots.find((s) => s.id === slotId);
     if (!slot || slot.build?.factionKey === entry.factionKey) return;
+    if (!fitsSlot(slotId, entry.factionKey)) return setMessage(`${entry.name} doesn't match your team (${teamWithout(slotId)?.label}).`);
     const empty = buildToSaved(
       {
         build: { instances: [], staffSlotUnitKey: null },
@@ -640,11 +662,19 @@ export function PlannerScreen({
       </div>
 
       {pickerSlot && (
-        <SavedBuildPicker corpsName={corpsNameOf} onPick={(b) => pickSaved(pickerSlot, b)} onClose={() => setPickerSlot(null)} />
+        <SavedBuildPicker
+          corpsName={corpsNameOf}
+          fits={teamWithout(pickerSlot) ? (b) => fitsSlot(pickerSlot, b.factionKey) : undefined}
+          teamLabel={teamWithout(pickerSlot)?.label}
+          onPick={(b) => pickSaved(pickerSlot, b)}
+          onClose={() => setPickerSlot(null)}
+        />
       )}
       {corpsSlot && corpsIndex && (
         <CorpsPickerModal
           index={corpsIndex}
+          team={teamWithout(corpsSlot)}
+          teamKeys={teamKeys}
           title={`Choose a corps for army ${plan.slots.findIndex((s) => s.id === corpsSlot) + 1}`}
           onPick={(entry) => chooseCorps(corpsSlot, entry)}
           onClose={() => setCorpsSlot(null)}

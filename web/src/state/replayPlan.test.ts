@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ReplayArmy, ReplayBattle } from "../domain/replay";
-import { defaultTickedArmies, planFromReplayArmies, replayPlanName } from "./replayPlan";
+import { planFromReplayArmies, replayPlanName } from "./replayPlan";
 
 const army = (player: string, n: number): ReplayArmy => ({
   factionKey: `ntw3_ac_${n}`,
@@ -21,18 +21,6 @@ const battle = (count: number): ReplayBattle => ({
   wind: "",
   armies: Array.from({ length: count }, (_, i) => army(`P${i}`, i)),
   warnings: [],
-});
-
-describe("defaultTickedArmies", () => {
-  it("ticks the first half", () => {
-    expect(defaultTickedArmies(6)).toEqual([0, 1, 2]);
-    expect(defaultTickedArmies(2)).toEqual([0]);
-  });
-  it("caps at four and keeps at least one", () => {
-    expect(defaultTickedArmies(16)).toEqual([0, 1, 2, 3]);
-    expect(defaultTickedArmies(1)).toEqual([0]);
-    expect(defaultTickedArmies(0)).toEqual([]);
-  });
 });
 
 describe("replayPlanName", () => {

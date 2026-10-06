@@ -6,9 +6,15 @@ import { BuildRepository, type SavedBuild } from "../state/saves";
  *  decides what picking means — the planner copies it into a slot. */
 export function SavedBuildPicker({
   corpsName,
+  fits,
+  teamLabel,
   onPick,
   onClose,
 }: {
+  /** Whether a saved build may join the plan's team; non-matching ones are hidden. */
+  fits?: (build: SavedBuild) => boolean;
+  /** Shown when `fits` is hiding builds, naming the team they have to match. */
+  teamLabel?: string;
   /** Display name for a faction key (the corps index's name, else the saved one). */
   corpsName: (build: SavedBuild) => string;
   onPick: (build: SavedBuild) => void;
@@ -25,9 +31,11 @@ export function SavedBuildPicker({
   }, [onClose]);
 
   const q = search.trim();
+  const eligible = useMemo(() => (fits ? builds.filter(fits) : builds), [builds, fits]);
+  const hidden = builds.length - eligible.length;
   const shown = useMemo(
-    () => (q ? builds.filter((b) => matchesSearch(`${b.name} ${corpsName(b)}`, q)) : builds),
-    [builds, q, corpsName],
+    () => (q ? eligible.filter((b) => matchesSearch(`${b.name} ${corpsName(b)}`, q)) : eligible),
+    [eligible, q, corpsName],
   );
 
   return (
@@ -51,9 +59,18 @@ export function SavedBuildPicker({
           {!repo.persistent && (
             <div className="saves-warning">Storage unavailable — no saved builds can be listed this session.</div>
           )}
+          {hidden > 0 && teamLabel && (
+            <div className="corps-pick-team" style={{ margin: "0 0 8px" }}>
+              Showing only builds that match your first army (<strong>{teamLabel}</strong>); {hidden} hidden.
+            </div>
+          )}
           {shown.length === 0 ? (
             <div className="plan-empty-note">
-              {builds.length === 0 ? "You have no saved builds yet. Save one from the builder." : "No saved build matches."}
+              {builds.length === 0
+                ? "You have no saved builds yet. Save one from the builder."
+                : eligible.length === 0
+                  ? "None of your saved builds match this team."
+                  : "No saved build matches."}
             </div>
           ) : (
             shown.map((b) => (

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { assetUrl } from "../data/assets";
 import { matchesSearch } from "../domain/searchText";
+import { type TeamKey, fitsTeam } from "../domain/teamRule";
 import { type CorpsEntry, type CorpsIndex, SIDE_LABELS } from "../domain/types";
 import { isTabletTouch, useCoarsePointer } from "./useCoarsePointer";
 
@@ -18,11 +19,17 @@ interface Group {
 export function CorpsPickerModal({
   index,
   title,
+  team,
+  teamKeys,
   onPick,
   onClose,
 }: {
   index: CorpsIndex;
   title: string;
+  /** The team the other armies in the plan form, or null when this is the first army.
+   *  Only corps that fit it are listed (see domain/teamRule.ts). */
+  team: TeamKey | null;
+  teamKeys: Map<string, TeamKey>;
   onPick: (entry: CorpsEntry) => void;
   onClose: () => void;
 }) {
@@ -41,6 +48,10 @@ export function CorpsPickerModal({
       for (const t of s.theatres) {
         const corps: Group["corps"] = [];
         for (const c of t.corps) {
+          if (team) {
+            const key = teamKeys.get(c.factionKey);
+            if (!key || !fitsTeam(team, key)) continue;
+          }
           if (q && !matchesSearch(`${c.name} ${c.factionKey} ${t.theatre} ${c.displayYear} ${sideLabel}`, q)) continue;
           corps.push({ entry: c, flat: flatList.length });
           flatList.push(c);
@@ -49,7 +60,7 @@ export function CorpsPickerModal({
       }
     }
     return { groups, flatList };
-  }, [index, search]);
+  }, [index, search, team, teamKeys]);
 
   // Keep the highlighted row in range and in view as the list or the keys change.
   const activeIdx = Math.min(active, Math.max(0, flatList.length - 1));
@@ -118,6 +129,11 @@ export function CorpsPickerModal({
             aria-label="Search corps"
           />
         </div>
+        {team && (
+          <div className="corps-pick-team">
+            Showing only armies that match your first army: <strong>{team.label}</strong>
+          </div>
+        )}
         <div className="corps-pick-list" ref={listRef}>
           {groups.length === 0 && <div className="plan-empty-note">No corps matches.</div>}
           {groups.map((g) => {
