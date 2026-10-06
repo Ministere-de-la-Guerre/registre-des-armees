@@ -1,4 +1,4 @@
-"""Build the app icon: the Napoleonic eagle on the app's navy tile.
+"""Build the app icon: the Napoleonic eagle on the app's dark-red tile.
 
 Eagle artwork: "Napoleonic Eagle" by Sodacan (Wikimedia Commons),
 licensed CC BY-SA 3.0 — https://commons.wikimedia.org/wiki/File:Napoleonic_Eagle.svg
@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw
 
 OUT = Path(__file__).resolve().parent
 SRC = OUT / "eagle_source.png"
-NAVY, BORDER = (21, 34, 63, 255), (95, 90, 68, 255)
+TILE, BORDER = (34, 19, 19, 255), (95, 90, 68, 255)
 N = 1024
 UA = "RegistreDesArmeesIconTool/1.0 (napoleonic army builder)"
 THUMB = ("https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/"
@@ -23,7 +23,7 @@ if not SRC.exists():
 
 base = Image.new("RGBA", (N, N), (0, 0, 0, 0))
 d = ImageDraw.Draw(base)
-d.rounded_rectangle([0, 0, N - 1, N - 1], 180, fill=NAVY)
+d.rounded_rectangle([0, 0, N - 1, N - 1], 180, fill=TILE)
 d.rounded_rectangle([34, 34, N - 35, N - 35], 150, outline=BORDER, width=6)
 
 eagle = Image.open(SRC).convert("RGBA")
