@@ -4,6 +4,7 @@ import { ConfirmProvider } from "./components/ConfirmProvider";
 import { CorpsSelect, type CorpsUiState } from "./components/CorpsSelect";
 import { FactionOfflineButton } from "./components/FactionOfflineButton";
 import { OfflinePanel } from "./components/OfflinePanel";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { PlannerScreen } from "./components/PlannerScreen";
 import { ReplayScreen } from "./components/ReplayScreen";
 import { UpdateToast } from "./components/UpdateToast";
@@ -57,6 +58,7 @@ function AppBody() {
   // it, so this tab is still on the old code and should reload when convenient.
   const [pendingUpdate, setPendingUpdate] = useState<"waiting" | "elsewhere" | null>(null);
   const [showOffline, setShowOffline] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const web = isWebTarget();
 
   // Touch-only collapsible chrome: a chevron tab hides the top bars (brand +
@@ -213,6 +215,9 @@ function AppBody() {
           </>
         )}
         {web && roster && <FactionOfflineButton roster={roster} />}
+        <button className="btn ghost small" onClick={() => setShowSettings(true)} title="Settings">
+          ⚙ Settings
+        </button>
         {web && (
           <button className="btn ghost small" onClick={() => setShowOffline(true)} title="Offline & storage">
             ⤓ Offline
@@ -298,6 +303,7 @@ function AppBody() {
         />
       )}
 
+      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
       {showOffline && (
         <OfflinePanel
           onClose={() => setShowOffline(false)}

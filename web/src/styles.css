@@ -21,11 +21,37 @@
   --good-deep: #2f7a48;
   --bad: #e8765f;
   --bad-deep: #8a3528;
+  --muted: #6f7888;
+  --text-dim: #aeb7c4;
+  --line-3: #46515f;
+  --surf-a: #2a313c;
+  --surf-b: #232a34;
+  --surf-c: #1c222b;
+  --glow: #1a2230;
+  --stage-a: #161b24;
+  --stage-b: #0f1318;
+  --azure-rgb: 90, 162, 230;
+  --future-rgb: 120, 160, 220;
+  --future-line: #4f73a8;
+  --future-text: #cfe0f6;
   --radius: 9px;
   --shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
   --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
   --sans: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
   --tray-h: 128px;
+}
+
+/* Palette: red (maroon + gold). Chosen in Settings; applied via data-theme on <html>.
+   The :root above is the slate-blue palette; red is the app default (see state/theme.ts). */
+:root[data-theme="red"] {
+  --bg: #1a0e0e; --bg-2: #221313; --panel: #2c1918; --panel-2: #381f1e; --panel-3: #492927;
+  --line: #4a2b29; --line-2: #6a3d39; --text: #f2e8e5; --text-soft: #a99a98;
+  --azure: #d9776b; --azure-deep: #9a3b33;
+  --muted: #8a7673; --text-dim: #c4b0ac; --line-3: #5e3a37;
+  --surf-a: #3a2220; --surf-b: #321c1b; --surf-c: #271615;
+  --glow: #341b1a; --stage-a: #271514; --stage-b: #1a0e0e;
+  --azure-rgb: 217, 119, 107;
+  --future-rgb: 217, 119, 107; --future-line: #9a3b33; --future-text: #f3cfc9;
 }
 
 * { box-sizing: border-box; }
@@ -84,7 +110,7 @@ input[type="text"], input[type="number"], input[type="search"], select {
   border: 1px solid var(--line-2); border-radius: 7px;
   background: var(--bg-2); color: var(--text);
 }
-input::placeholder { color: #6f7888; }
+input::placeholder { color: var(--muted); }
 
 .tag {
   display: inline-flex; align-items: center; gap: 4px;
@@ -106,7 +132,7 @@ input::placeholder { color: #6f7888; }
 /* --- corps selection --- */
 .corps-screen {
   flex: 1; overflow: auto; padding: 18px 22px 60px;
-  background: radial-gradient(circle at 50% -10%, #1a2230, var(--bg) 70%);
+  background: radial-gradient(circle at 50% -10%, var(--glow), var(--bg) 70%);
 }
 .corps-toolbar {
   display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 18px;
@@ -209,8 +235,8 @@ input::placeholder { color: #6f7888; }
 .map {
   flex: 1; min-height: 0; overflow: auto; padding: 12px 18px 24px;
   background:
-    radial-gradient(circle at 80% 0%, rgba(90, 162, 230, 0.06), transparent 45%),
-    linear-gradient(160deg, #161b24, #0f1318 70%);
+    radial-gradient(circle at 80% 0%, rgba(var(--azure-rgb), 0.06), transparent 45%),
+    linear-gradient(160deg, var(--stage-a), var(--stage-b) 70%);
 }
 
 /* --- formation rows (no text labels: rows + gaps) --- */
@@ -237,16 +263,16 @@ input::placeholder { color: #6f7888; }
 .density-compact .medallion { width: 62px; }
 .medallion .oval {
   position: relative; width: 100%; aspect-ratio: 0.84 / 1; border-radius: 50%;
-  overflow: hidden; background: #232a34;
-  border: 3px solid #46515f; box-shadow: var(--shadow);
+  overflow: hidden; background: var(--surf-b);
+  border: 3px solid var(--line-3); box-shadow: var(--shadow);
   transition: transform 0.07s ease, box-shadow 0.1s ease, border-color 0.1s ease;
 }
 .medallion:hover .oval { transform: translateY(-2px) scale(1.04); border-color: var(--gold); }
 .medallion .oval img.icon { width: 100%; height: 100%; object-fit: cover; }
 .medallion .oval .fallback {
   width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
-  text-align: center; font-family: var(--serif); font-size: 10px; color: #aeb7c4; padding: 4px;
-  background: linear-gradient(#2a313c, #1c222b);
+  text-align: center; font-family: var(--serif); font-size: 10px; color: var(--text-dim); padding: 4px;
+  background: linear-gradient(var(--surf-a), var(--surf-c));
 }
 /* Selection is shown by the count badge, not a heavy ring. A unit you can no longer
    add (cap reached, unaffordable, limit hit) is simply dimmed/unavailable. */
@@ -324,7 +350,7 @@ input::placeholder { color: #6f7888; }
   background: rgba(20, 26, 34, 0.58); border-color: var(--line-2);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
 }
-.medallion.selected .qty.cap { background: rgba(90, 162, 230, 0.72); border-color: #fff; }
+.medallion.selected .qty.cap { background: rgba(var(--azure-rgb), 0.72); border-color: #fff; }
 .medallion .qty.cap.full { background: rgba(138, 53, 40, 0.72); border-color: var(--bad); color: #fff; }
 .medallion .stars {
   position: absolute; left: 50%; top: 1px; transform: translateX(-50%);
@@ -537,18 +563,18 @@ input::placeholder { color: #6f7888; }
 .swap-row:hover:not(:disabled) { border-color: var(--gold); background: var(--panel-3); }
 .swap-row:disabled { cursor: default; }
 /* The option already in the slot: shown, marked, not re-pickable. */
-.swap-row.current { border-color: var(--azure); background: rgba(90, 162, 230, 0.1); }
+.swap-row.current { border-color: var(--azure); background: rgba(var(--azure-rgb), 0.1); }
 /* Rules-blocked (the corps' combat-general cap, or another copy already led). */
 .swap-row.blocked { opacity: 0.55; }
 .swap-portrait {
   flex: none; position: relative; width: 46px; aspect-ratio: 0.84 / 1; border-radius: 50%;
-  overflow: hidden; background: #232a34; border: 2px solid #46515f;
+  overflow: hidden; background: var(--surf-b); border: 2px solid var(--line-3);
 }
 .swap-portrait img { width: 100%; height: 100%; object-fit: cover; }
 .swap-portrait-fallback {
   width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
-  text-align: center; font-family: var(--serif); font-size: 9px; color: #aeb7c4; padding: 3px;
-  background: linear-gradient(#2a313c, #1c222b);
+  text-align: center; font-family: var(--serif); font-size: 9px; color: var(--text-dim); padding: 3px;
+  background: linear-gradient(var(--surf-a), var(--surf-c));
 }
 .swap-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .swap-name { font-size: 13px; font-weight: 600; line-height: 1.25; }
@@ -591,7 +617,7 @@ input::placeholder { color: #6f7888; }
 .rot-kind.combat { color: var(--azure); border-color: var(--azure-deep); }
 .rot-badge { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line-2); font-weight: 700; }
 .rot-badge.now { background: rgba(120, 200, 120, 0.18); border-color: #5a8d5a; color: #bfe6bf; }
-.rot-badge.future { background: rgba(120, 160, 220, 0.18); border-color: #4f73a8; color: #cfe0f6; }
+.rot-badge.future { background: rgba(var(--future-rgb), 0.18); border-color: var(--future-line); color: var(--future-text); }
 .rot-badge.past { background: rgba(200, 170, 110, 0.16); border-color: var(--gold-deep); color: var(--gold-bright); }
 .rot-when { margin-top: 5px; font-size: 13px; }
 .rot-closest { color: var(--text); }
@@ -1023,7 +1049,7 @@ input::placeholder { color: #6f7888; }
   white-space: nowrap;
 }
 .pickrate .pr-text.never { color: var(--bad); }
-.pickrate .pr-text.nodata { color: #6d7787; font-style: italic; }
+.pickrate .pr-text.nodata { color: var(--muted); font-style: italic; }
 
 /* Provenance + sample size. Deliberately adjacent to the numbers rather than tucked
    in a corner: a percentage read without its sample size is the failure mode. */
@@ -1091,7 +1117,7 @@ input::placeholder { color: #6f7888; }
 }
 /* Outside the selected span the ramp recedes; the chosen span stays saturated. */
 .dual-pickrate .dual-fill { background: none; box-shadow: inset 0 0 0 1px var(--gold); border-radius: 3px; }
-.dual-hint { font-size: 10.5px; color: #6d7787; margin-top: 4px; line-height: 1.35; }
+.dual-hint { font-size: 10.5px; color: var(--muted); margin-top: 4px; line-height: 1.35; }
 
 /* --- Ordre de Bataille (team planner) --- */
 .plan-top {
@@ -1259,3 +1285,15 @@ input::placeholder { color: #6f7888; }
 .plan-export { flex: none; overflow: visible; width: 100%; padding-bottom: 18px; }
 .plan-export .plan-top { position: static; }
 .plan-player-text { font-size: 13px; color: var(--text); }
+
+/* --- Settings: palette picker --- */
+.theme-grid { display: flex; gap: 10px; flex-wrap: wrap; margin: 6px 0 12px; }
+.theme-card {
+  display: flex; flex-direction: column; gap: 8px; align-items: stretch; width: 150px; padding: 8px;
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line-2); border-radius: var(--radius);
+}
+.theme-card:hover { border-color: var(--gold-deep); }
+.theme-card.active { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+.theme-swatch { display: flex; gap: 4px; height: 44px; padding: 5px; border-radius: 6px; border: 1px solid var(--line); }
+.theme-swatch span { flex: 1; border-radius: 4px; }
+.theme-name { font-size: 13px; font-weight: 600; text-align: center; }

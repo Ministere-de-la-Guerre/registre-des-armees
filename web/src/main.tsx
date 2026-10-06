@@ -2,7 +2,10 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { applyTheme, loadTheme } from "./state/theme";
 import "./styles.css";
+
+applyTheme(loadTheme());
 
 // A file dropped anywhere that doesn't handle drops (everywhere but the replay
 // screen) would otherwise make the browser open it — in Electron that navigates

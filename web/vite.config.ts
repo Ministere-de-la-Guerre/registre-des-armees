@@ -71,12 +71,12 @@ export default defineConfig(({ mode }) => {
         // still works for anyone who has rotation unlocked).
         start_url: ".",
         scope: "./",
-        theme_color: "#15223f",
-        background_color: "#0f1318",
+        theme_color: "#221313",
+        background_color: "#1a0e0e",
         icons: [
-          { src: "pwa-192x192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-          { src: "pwa-512x512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-          { src: "pwa-maskable-512x512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+          { src: "pwa-192x192-red.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "pwa-512x512-red.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "pwa-maskable-512x512-red.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
       injectManifest: {
@@ -87,6 +87,7 @@ export default defineConfig(({ mode }) => {
           "**/*.{js,css,html}",
           "pwa-*.png",
           "apple-touch-icon.png",
+          "apple-touch-icon-red.png",
           "assets/ui/**",
           "assets/army_corps_by_theatre/**",
           "data/corps-index.json",
