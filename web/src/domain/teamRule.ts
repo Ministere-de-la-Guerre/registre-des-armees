@@ -6,16 +6,17 @@
 //   Theatres of War + Custom Armies     → one shared pool: TOW factions and custom
 //                                          armies mix freely, and nothing else joins them.
 //                                          TOW factions still belong to a side
-//                                          (Imperial / Coalition); custom armies have none
-//                                          of their own, so they fit either until a TOW
-//                                          army fixes the side.
+//                                          (Imperial / Coalition); custom armies take the
+//                                          side of their nation where known, and only
+//                                          unknown ones fit either until a sided army
+//                                          fixes the side.
 
 import type { CorpsIndex } from "./types";
 
 export type TeamSide = "imperial" | "coalition";
 
 export interface TeamKey {
-  /** Null only for custom armies, which don't carry a side of their own. */
+  /** Null only for custom armies of no known side (they fit either). */
   side: TeamSide | null;
   /** "tow" (Theatres of War + custom) or "campaign:<theatre>". */
   pool: string;
@@ -27,7 +28,19 @@ const SIDE_NAME: Record<TeamSide, string> = { imperial: "Imperial", coalition: "
 
 export const TOW_POOL = "tow";
 
-function keyFor(indexSide: string, theatre: string): TeamKey | null {
+// Side of a custom army, by its nation key (the army's factionKey).
+export const CUSTOM_ARMY_SIDE: Record<string, TeamSide> = {
+  france: "imperial",
+  saxony: "imperial",
+  denmark: "imperial",
+  britain: "coalition",
+  ntw3_hre: "coalition",
+  piedmont_savoy: "coalition",
+  austria: "coalition",
+  hannover: "coalition",
+};
+
+function keyFor(indexSide: string, theatre: string, factionKey: string): TeamKey | null {
   switch (indexSide) {
     case "empire":
       return { side: "imperial", pool: `campaign:${theatre}`, label: `Imperial · ${theatre}` };
@@ -38,7 +51,11 @@ function keyFor(indexSide: string, theatre: string): TeamKey | null {
     case "tow_coalition":
       return { side: "coalition", pool: TOW_POOL, label: "Coalition · Theatres of War + Custom" };
     case "custom":
-      return { side: null, pool: TOW_POOL, label: "Theatres of War + Custom" };
+    {
+      const side = CUSTOM_ARMY_SIDE[factionKey];
+      if (!side) return { side: null, pool: TOW_POOL, label: "Theatres of War + Custom" };
+      return { side, pool: TOW_POOL, label: `${SIDE_NAME[side]} · Theatres of War + Custom` };
+    }
     default:
       return null;
   }
@@ -49,8 +66,10 @@ export function teamKeysByFaction(index: CorpsIndex | null): Map<string, TeamKey
   const map = new Map<string, TeamKey>();
   for (const s of index?.sides ?? [])
     for (const t of s.theatres) {
-      const key = keyFor(s.side, t.theatre);
-      if (key) for (const c of t.corps) map.set(c.factionKey, key);
+      for (const c of t.corps) {
+        const key = keyFor(s.side, t.theatre, c.factionKey);
+        if (key) map.set(c.factionKey, key);
+      }
     }
   return map;
 }
@@ -83,8 +102,8 @@ export function teamAnchor(keys: (TeamKey | null)[]): TeamKey | null {
 }
 
 /** Armies of a replay for one side, in replay order, capped at `max`: the first army
- *  with a side anchors the team and every other must fit it. Custom armies (no side of
- *  their own) are added last, only where they fit the anchor. Returns indices. */
+ *  with a side anchors the team and every other must fit it. Custom armies of no known
+ *  side are added last, only where they fit the anchor. Returns indices. */
 export function pickSideArmies(keys: (TeamKey | null)[], side: TeamSide, max: number): number[] {
   let anchor: TeamKey | null = null;
   const picked: number[] = [];

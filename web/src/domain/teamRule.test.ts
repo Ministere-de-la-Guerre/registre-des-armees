@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitsTeam, joinTeam, pickSideArmies, teamAnchor, teamKeysByFaction, type TeamKey } from "./teamRule";
+import { fitsTeam, joinTeam, pickSideArmies, teamAnchor, teamKeysByFaction, TOW_POOL, type TeamKey } from "./teamRule";
 import type { CorpsEntry, CorpsIndex } from "./types";
 
 const corps = (factionKey: string): CorpsEntry => ({
@@ -21,7 +21,7 @@ const index: CorpsIndex = {
     { side: "coalition", theatres: [{ theatre: "Patriotic War (1812)", corps: [corps("c1"), corps("c2")] }] },
     { side: "tow_french_imperial", theatres: [{ theatre: "Theatres of War", corps: [corps("ti1"), corps("ti2")] }] },
     { side: "tow_coalition", theatres: [{ theatre: "Theatres of War", corps: [corps("tc1")] }] },
-    { side: "custom", theatres: [{ theatre: "Custom Armies", corps: [corps("x1"), corps("x2")] }] },
+    { side: "custom", theatres: [{ theatre: "Custom Armies", corps: [corps("x1"), corps("x2"), corps("britain"), corps("france")] }] },
   ],
 };
 const keys = teamKeysByFaction(index);
@@ -81,5 +81,25 @@ describe("pickSideArmies", () => {
   });
   it("ignores unknown corps", () => {
     expect(pickSideArmies(list(null, "c1"), "coalition", 4)).toEqual([1]);
+  });
+});
+
+describe("custom armies with a known nation", () => {
+  const list = (...fs: string[]): TeamKey[] => fs.map(k);
+  it("take the side of their nation, in the TOW pool", () => {
+    expect(k("britain").side).toBe("coalition");
+    expect(k("france").side).toBe("imperial");
+    expect(k("x1").side).toBeNull();
+    for (const f of ["britain", "france", "x1"]) expect(k(f).pool).toBe(TOW_POOL);
+  });
+  it("go only to their own side in a replay", () => {
+    const ks = list("ti1", "ti2", "britain", "tc1");
+    expect(pickSideArmies(ks, "imperial", 4)).toEqual([0, 1]);
+    expect(pickSideArmies(ks, "coalition", 4)).toEqual([2, 3]);
+  });
+  it("anchor a plan on their side", () => {
+    expect(fitsTeam(k("britain"), k("ti1"))).toBe(false);
+    expect(fitsTeam(k("britain"), k("tc1"))).toBe(true);
+    expect(fitsTeam(k("britain"), k("x1"))).toBe(true);
   });
 });
