@@ -241,7 +241,7 @@ export function ReplayScreen({
           disabled={!battle || views.length === 0}
           title="Plan a team from this replay's armies"
         >
-          ⚑ Send to Ordre de Bataille <span className="tag beta">Beta</span>
+          ⚑ Send to Ordre de Bataille
         </button>
         {fileName && <span className="match-count">{fileName}</span>}
         <span className="spacer" style={{ flex: 1 }} />

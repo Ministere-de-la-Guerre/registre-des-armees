@@ -491,7 +491,7 @@ export function PlannerScreen({
           </button>
           <div className="plan-titles">
             <strong>
-              ⚑ Ordre de Bataille <span className="tag beta">Beta</span>
+              ⚑ Ordre de Bataille
             </strong>
             <button className="plan-name" onClick={renameWorkingPlan} title="Rename this plan">
               {plan.name}
