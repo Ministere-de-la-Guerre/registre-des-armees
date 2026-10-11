@@ -119,3 +119,69 @@ export function pickSideArmies(keys: (TeamKey | null)[], side: TeamSide, max: nu
   keys.forEach((k, i) => k && k.side === null && take(i));
   return picked.sort((a, b) => a - b);
 }
+
+// --- clashes in a plan (the planner's warning and its "Suggest team" gate) ----------
+
+/** One army of a plan, for the clash check: its 0-based slot, display name and team key. */
+export interface TeamArmy {
+  slotIndex: number;
+  name: string;
+  key: TeamKey | null;
+}
+
+/** Why two armies of a plan cannot share a team (ntw3.lua Factions_Errors; the app's rule above):
+ *  - pool: an Army Corps with a Theatre-of-War / Custom army;
+ *  - theatre: Army Corps from different theatres;
+ *  - side: two armies of one pool on opposite sides. */
+export interface TeamConflict {
+  kind: "pool" | "theatre" | "side";
+  /** The earlier army the clash is with. */
+  first: TeamArmy;
+  /** The first army (in slot order) that does not fit the ones before it. */
+  second: TeamArmy;
+}
+
+/** The first clash among a plan's armies, in slot order, or null when they form one legal team.
+ *  Walks them with joinTeam, as teamAnchor does — but where teamAnchor skips a clashing army, this
+ *  reports it with the earliest army it clashes with. */
+export function planTeamConflict(armies: readonly TeamArmy[]): TeamConflict | null {
+  let anchor: TeamKey | null = null;
+  const joined: TeamArmy[] = [];
+  for (const army of armies) {
+    const key = army.key;
+    if (!key) continue;
+    const next = joinTeam(anchor, key);
+    if (next) {
+      anchor = next;
+      joined.push(army);
+      continue;
+    }
+    const poolClash = joined.find((a) => a.key!.pool !== key.pool);
+    if (poolClash) {
+      // Two campaign corps: opposite sides (Russia 1812 against Patriotic War 1812) is the clearer
+      // reason when it applies; otherwise they are from different theatres of one side.
+      const bothCampaign = poolClash.key!.pool !== TOW_POOL && key.pool !== TOW_POOL;
+      const kind = !bothCampaign ? "pool" : poolClash.key!.side !== key.side ? "side" : "theatre";
+      return { kind, first: poolClash, second: army };
+    }
+    const sideClash = joined.find((a) => a.key!.side !== null && a.key!.side !== key.side)!;
+    return { kind: "side", first: sideClash, second: army };
+  }
+  return null;
+}
+
+/** The clash as one sentence, e.g. "Army 3 (5. Davout / III.C, Imperial · Germany (1805)) and
+ *  Army 1 ([1806] 10. Preußen, Coalition · Theatres of War + Custom) can't share a team: Army
+ *  Corps never mix with Theatres of War or Custom armies." */
+export function teamConflictText(conflict: TeamConflict): string {
+  const army = (a: TeamArmy) => `Army ${a.slotIndex + 1} (${a.name}, ${a.key?.label ?? "no team"})`;
+  const pair = `${army(conflict.second)} and ${army(conflict.first)}`;
+  switch (conflict.kind) {
+    case "pool":
+      return `${pair} can't share a team: Army Corps never mix with Theatres of War or Custom armies.`;
+    case "theatre":
+      return `${pair} can't share a team: Army Corps on one team all come from the same theatre.`;
+    case "side":
+      return `${pair} can't share a team: they fight on opposite sides.`;
+  }
+}

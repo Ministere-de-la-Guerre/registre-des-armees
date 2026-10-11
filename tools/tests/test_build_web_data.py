@@ -1,5 +1,5 @@
 """Tests for tools/build_web_data.py: TOW placement nulling, the data-version
-content hash, stale-output pruning and fatal exit codes."""
+content hash, the optional optimiser data, stale-output pruning and fatal exit codes."""
 
 from __future__ import annotations
 
@@ -60,6 +60,61 @@ class ContentHashTests(unittest.TestCase):
         self.assertNotEqual(web.content_hash(a), web.content_hash(changed))
         renamed = {"data/factions/b.json": b"{}", "data/corps-index.json": b"[1]"}
         self.assertNotEqual(web.content_hash(a), web.content_hash(renamed))
+
+
+class OptimiserDataTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_absent_inputs_mean_no_optimiser_data(self) -> None:
+        self.assertEqual(web.load_optimiser_inputs(self.dir / "v.csv", self.dir / "p.json"), (None, None))
+        (self.dir / "v.csv").write_text("faction_key,unit_key,value_quality,value_quantity\n", encoding="utf-8")
+        self.assertEqual(web.load_optimiser_inputs(self.dir / "v.csv", self.dir / "p.json"), (None, None))
+
+    def test_values_attach_to_their_cards_only(self) -> None:
+        (self.dir / "v.csv").write_text(
+            "faction_key,unit_key,value_quality,value_quantity\n"
+            "ntw3_tow_a,u1,100.1234567,110.5\n"
+            "ntw3_tow_a,ghost,1,1\n", encoding="utf-8")
+        (self.dir / "p.json").write_text('{"m_ref": 10.0}', encoding="utf-8")
+        values, params = web.load_optimiser_inputs(self.dir / "v.csv", self.dir / "p.json")
+        self.assertEqual(params, {"m_ref": 10.0})
+        by_faction = {"ntw3_tow_a": [{"unitKey": "u1"}, {"unitKey": "staff"}],
+                      "ntw3_ac_b": [{"unitKey": "u1"}]}
+        errors: list[str] = []
+        valued = web.attach_optimiser_values(by_faction, values, errors)
+        self.assertEqual(valued, {"ntw3_tow_a"})
+        self.assertEqual(by_faction["ntw3_tow_a"][0]["optimiserValue"], {"quality": 100.123457, "quantity": 110.5})
+        self.assertNotIn("optimiserValue", by_faction["ntw3_tow_a"][1])   # staff: valued in the app
+        self.assertNotIn("optimiserValue", by_faction["ntw3_ac_b"][0])    # same key, other faction
+        self.assertEqual(errors, ["optimiser value for unknown card ntw3_tow_a/ghost"])
+
+    def test_each_pool_keeps_only_its_modes(self) -> None:
+        (self.dir / "v.csv").write_text(
+            "faction_key,unit_key,value_quality,value_quantity,value_size_bands\n"
+            "ntw3_tow_a,u1,100,110,\n"
+            "ntw3_ac_a11_x5_117,u2,,90.5,95.25\n", encoding="utf-8")
+        (self.dir / "p.json").write_text('{"pools": {"tow": {}, "ac": {}}}', encoding="utf-8")
+        values, _ = web.load_optimiser_inputs(self.dir / "v.csv", self.dir / "p.json")
+        self.assertEqual(values[("ntw3_tow_a", "u1")], {"quality": 100.0, "quantity": 110.0})
+        self.assertEqual(values[("ntw3_ac_a11_x5_117", "u2")], {"quantity": 90.5, "sizeBands": 95.25})
+        self.assertEqual(web.optimiser_pool("ntw3_ac_a11_x5_117"), "ac")
+        self.assertEqual(web.optimiser_pool("ntw3_tow_a"), "tow")
+        self.assertEqual(web.optimiser_pool("ntw3_hre"), "tow")             # Custom armies share the ToW pool
+
+    def test_army_values(self) -> None:
+        self.assertEqual(web.load_army_values(self.dir / "missing.csv"), {})
+        (self.dir / "a.csv").write_text(
+            "faction_key,value_quality,value_quantity,value_size_bands\n"
+            "ntw3_tow_a,50000,51000,\n"
+            "ntw3_ac_a11_x5_117,,20000.5,20415\n", encoding="utf-8")
+        self.assertEqual(web.load_army_values(self.dir / "a.csv"),
+                         {"ntw3_tow_a": {"quality": 50000.0, "quantity": 51000.0},
+                          "ntw3_ac_a11_x5_117": {"quantity": 20000.5, "sizeBands": 20415.0}})
 
 
 class OutputTests(unittest.TestCase):

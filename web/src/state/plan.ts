@@ -3,7 +3,7 @@
 // the player's build library. Persistence mirrors saves.ts: named plans behind a
 // StorageAdapter, plus one autosaved working plan.
 
-import { type SavedBuild, makeId, migrateSavedBuild } from "./saves";
+import { type SavedBuild, buildToSaved, makeId, migrateSavedBuild } from "./saves";
 import { type StorageAdapter, type StorageResult, STORAGE_NAMESPACE, defaultStorageAdapter } from "./storage";
 
 export const PLAN_FORMAT_VERSION = 1;
@@ -119,6 +119,59 @@ export function copySavedBuildIntoSlot(saved: SavedBuild): SavedBuild {
     instances: [...saved.instances],
     config: { ...saved.config },
   };
+}
+
+/** An empty build for a corps: what a slot holds once its corps is chosen and before any unit
+ *  is added (the row shows the corps with zeroed stats). */
+export function emptyBuildFor(entry: { factionKey: string; name: string }): SavedBuild {
+  return buildToSaved(
+    {
+      build: { instances: [], staffSlotUnitKey: null },
+      config: { density: "comfortable", showCombatGenerals: true },
+      factionKey: entry.factionKey,
+      armyCorpsName: entry.name,
+    },
+    { name: entry.name },
+  );
+}
+
+/** A slot the team suggestion filled with an empty build, to be replaced by its optimised
+ *  build only while the slot still holds that placeholder (the player may edit meanwhile). */
+export interface TeamPlaceholder {
+  slotId: string;
+  buildId: string;
+  factionKey: string;
+}
+
+/** Put a suggested team into the plan (state/teamSuggest.ts).
+ *  - `keepSlotIds` (optimise remainder): those slots stay as they are; the new armies go into
+ *    the empty slots, then into new slots up to MAX_PLAN_ARMIES.
+ *  - Without kept slots (full overwrite): the plan holds exactly the team; the slots keep their
+ *    ids and player names in order, and extra slots are removed.
+ *  Returns the new plan and the placeholders of the new armies. */
+export function applySuggestedTeam(plan: Plan, armies: readonly { factionKey: string; name: string }[],
+                                   keepSlotIds: ReadonlySet<string> = new Set()): { plan: Plan; placeholders: TeamPlaceholder[] } {
+  const placeholders: TeamPlaceholder[] = [];
+  const place = (slot: PlanSlot, army: { factionKey: string; name: string }): PlanSlot => {
+    const build = emptyBuildFor(army);
+    placeholders.push({ slotId: slot.id, buildId: build.id, factionKey: army.factionKey });
+    return { ...slot, build };
+  };
+  if (keepSlotIds.size === 0) {
+    const slots = armies.slice(0, MAX_PLAN_ARMIES).map((army, i) => place(plan.slots[i] ?? emptySlot(), army));
+    return { plan: withSlots(plan, slots), placeholders };
+  }
+  const queue = [...armies];
+  const slots = plan.slots.map((s) => (keepSlotIds.has(s.id) || s.build !== null || !queue.length ? s : place(s, queue.shift()!)));
+  while (queue.length && slots.length < MAX_PLAN_ARMIES) slots.push(place(emptySlot(), queue.shift()!));
+  return { plan: withSlots(plan, slots), placeholders };
+}
+
+/** Put an army's optimised build into its slot if the slot still holds the placeholder. */
+export function fillPlaceholder(plan: Plan, placeholder: TeamPlaceholder, build: SavedBuild): Plan {
+  const slot = plan.slots.find((s) => s.id === placeholder.slotId);
+  if (!slot || slot.build?.id !== placeholder.buildId) return plan;
+  return setSlotBuild(plan, slot.id, { ...build, id: placeholder.buildId });
 }
 
 // --- migration ---------------------------------------------------------------

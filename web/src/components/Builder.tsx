@@ -52,6 +52,15 @@ import { GeneralSwapModal } from "./GeneralSwapModal";
 import { RotationModal } from "./RotationModal";
 import { TowRollModal } from "./TowRollModal";
 import { TowGenerateModal } from "./TowGenerateModal";
+import { OptimiseModal } from "./OptimiseModal";
+import { isWorkInProgressCorps } from "../state/acOptimiser";
+import {
+  DEFAULT_OPTIMISE_SETTINGS,
+  type OptimiseSettings,
+  type OptimiseSummary,
+  optimiseBuild,
+} from "../state/optimiser";
+import { workerSolver } from "../state/solveLp";
 import { SaveLoadBar } from "./SaveLoadBar";
 import { Tooltip } from "./Tooltip";
 import { type DeliverResult, deliverImage, renderBuildImage, shareImageFile } from "./exportBuildImage";
@@ -135,6 +144,18 @@ export function Builder({
   const pickRates = usePickRates(roster.factionKey, !filters.showCombatGenerals);
   const [towRollOpen, setTowRollOpen] = useState(false);
   const [towGenerateOpen, setTowGenerateOpen] = useState(false);
+  // Build optimiser (every army with optimiser data): its popup, settings (kept for the session), the
+  // last result or error, and the build it replaced — "Undo optimise" restores that
+  // until the build is edited (`optimisedBuild` is the build the optimiser applied).
+  const [optimiseOpen, setOptimiseOpen] = useState(false);
+  const [optimiseSettings, setOptimiseSettings] = useState<OptimiseSettings>(DEFAULT_OPTIMISE_SETTINGS);
+  const [optimising, setOptimising] = useState(false);
+  const [optimiseError, setOptimiseError] = useState<string | null>(null);
+  const [optimiseResult, setOptimiseResult] = useState<OptimiseSummary | null>(null);
+  // The Army Corps safety net fell back to a build without formation rebates (state/optimiser.ts).
+  const [optimiseFallback, setOptimiseFallback] = useState(false);
+  const [undoBuild, setUndoBuild] = useState<BuildState | null>(null);
+  const optimisedBuild = useRef<BuildState | null>(null);
   // Source-corps ids the player has enabled for a Theatres-of-War roster (≤4).
   // Only these corps' divisions render in the grid; null for non-TOW rosters, so
   // nothing is hidden. Defaults to the corps the game rolls right now.
@@ -198,6 +219,11 @@ export function Builder({
     setSwapInstanceId(null);
     setTowRollOpen(false);
     setTowGenerateOpen(false);
+    setOptimiseOpen(false);
+    setOptimiseError(null);
+    setOptimiseResult(null);
+    setUndoBuild(null);
+    optimisedBuild.current = null;
     setLocating(false);
     setLocateFlash(null);
     // Enable every source corps by default (the combined view pools them all;
@@ -769,6 +795,66 @@ export function Builder({
     [roster.cards, filters, hiddenByRotation, hiddenByCorpsRoll, pickRatePct],
   );
 
+  // The optimiser's "Only filtered units" search space: the same filters, Offered now
+  // and corps-roll hiding as the grid — but not the "Combat generals" display switch,
+  // which only hides medallions (off by default for ToW) and would silently forbid them.
+  const filteredCards = useMemo(
+    () =>
+      roster.cards.filter((c) => matchesCard(c, filters, pickRatePct) && !hiddenByRotation(c) && !hiddenByCorpsRoll(c)),
+    [roster.cards, filters, hiddenByRotation, hiddenByCorpsRoll, pickRatePct],
+  );
+  const optimiserFiltersActive = isFilterActive(filters) || filteredCards.length < roster.cards.length;
+
+  const runOptimise = async () => {
+    const before = build;
+    setOptimising(true);
+    setOptimiseError(null);
+    try {
+      const candidates = optimiseSettings.useFilters ? filteredCards : roster.cards;
+      const outcome = await optimiseBuild(roster, index, before, candidates, optimiseSettings, workerSolver);
+      if (!outcome.ok) {
+        setOptimiseError(outcome.error);
+        setOptimiseResult(null);
+        setMessage(outcome.error);
+        return;
+      }
+      optimisedBuild.current = outcome.build;
+      setUndoBuild(before);
+      setBuild(outcome.build);
+      setOptimiseResult(outcome.summary);
+      setOptimiseFallback(outcome.fallback === "noRebates");
+      const s = outcome.summary;
+      const discounts = s.rebate > 0 ? ` (list ${s.listCost.toLocaleString()} − discounts ${s.rebate.toLocaleString()})` : "";
+      setMessage(`Optimised: ${s.cards} cards, ${s.cost.toLocaleString()} gold${discounts}, value ${Math.round(s.value).toLocaleString()} `
+        + `(efficiency ${s.efficiency.toFixed(2)})${outcome.status === "Optimal" ? "" : " — best found within the time limit"}`
+        + `${outcome.fallback === "noRebates" ? " — built without formation discounts" : ""}.`);
+    } catch (e) {
+      const text = e instanceof Error ? e.message : String(e);
+      setOptimiseError(text);
+      setMessage(text);
+    } finally {
+      setOptimising(false);
+    }
+  };
+
+  const undoOptimise = () => {
+    if (!undoBuild) return;
+    setBuild(undoBuild);
+    setUndoBuild(null);
+    setOptimiseResult(null);
+    optimisedBuild.current = null;
+    setMessage("Restored the build from before the optimiser.");
+  };
+
+  // Any other edit makes the remembered pre-optimiser build stale: drop the undo.
+  useEffect(() => {
+    if (undoBuild && build !== optimisedBuild.current) {
+      setUndoBuild(null);
+      setOptimiseResult(null);
+      optimisedBuild.current = null;
+    }
+  }, [build, undoBuild]);
+
   const current = { build, config, factionKey: roster.factionKey, armyCorpsName: roster.armyCorpsName };
   const dirty = isDirty(current, loadedSaved);
 
@@ -838,7 +924,7 @@ export function Builder({
   // Any open modal takes over from the stat cards: the touch peek (which sits above
   // the modal layer) is dismissed with its prime, and the hover card is dropped.
   const modalOpen =
-    !!detail || !!buggedWarning || !!swapInstanceId || rotationOpen || towRollOpen || towGenerateOpen;
+    !!detail || !!buggedWarning || !!swapInstanceId || rotationOpen || towRollOpen || towGenerateOpen || optimiseOpen;
   useEffect(() => {
     if (!modalOpen) return;
     dismissPeek();
@@ -956,6 +1042,20 @@ export function Builder({
           }
         >
           Generate times
+        </button>
+        <button
+          className="btn small"
+          onClick={() => setOptimiseOpen(true)}
+          disabled={!roster.optimiser}
+          title={
+            roster.optimiser
+              ? "Build the most valuable legal army for 10 000 funds (settings: card cap, value mode, filters, …)"
+              : isWorkInProgressCorps(roster.factionKey)
+                ? "German Campaign (1813) is still a work in progress in the mod: no optimiser data for its corps"
+                : "No optimiser data for this army in the loaded dataset — refresh the app data"
+          }
+        >
+          Optimise
         </button>
         {isTow && (
           <button
@@ -1220,6 +1320,23 @@ export function Builder({
           enabled={enabledCorps}
           onToggle={toggleCorps}
           onClose={() => setTowRollOpen(false)}
+        />
+      )}
+      {optimiseOpen && (
+        <OptimiseModal
+          factionKey={roster.factionKey}
+          settings={optimiseSettings}
+          onSettings={setOptimiseSettings}
+          filteredCount={filteredCards.length}
+          filtersActive={optimiserFiltersActive}
+          busy={optimising}
+          error={optimiseError}
+          result={optimiseResult}
+          fallback={optimiseFallback}
+          canUndo={!!undoBuild}
+          onOptimise={() => void runOptimise()}
+          onUndo={undoOptimise}
+          onClose={() => setOptimiseOpen(false)}
         />
       )}
       {towGenerateOpen && (

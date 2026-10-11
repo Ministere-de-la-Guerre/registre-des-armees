@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { fitsTeam, joinTeam, pickSideArmies, teamAnchor, teamKeysByFaction, TOW_POOL, type TeamKey } from "./teamRule";
+import {
+  fitsTeam,
+  joinTeam,
+  pickSideArmies,
+  planTeamConflict,
+  teamAnchor,
+  teamConflictText,
+  teamKeysByFaction,
+  TOW_POOL,
+  type TeamKey,
+} from "./teamRule";
 import type { CorpsEntry, CorpsIndex } from "./types";
 
 const corps = (factionKey: string): CorpsEntry => ({
@@ -101,5 +111,35 @@ describe("custom armies with a known nation", () => {
     expect(fitsTeam(k("britain"), k("ti1"))).toBe(false);
     expect(fitsTeam(k("britain"), k("tc1"))).toBe(true);
     expect(fitsTeam(k("britain"), k("x1"))).toBe(true);
+  });
+});
+
+describe("planTeamConflict", () => {
+  const army = (slotIndex: number, f: string) => ({ slotIndex, name: f, key: keys.get(f) ?? null });
+
+  it("finds no clash in a legal team, and skips empty slots", () => {
+    expect(planTeamConflict([army(0, "e1"), { slotIndex: 1, name: "", key: null }, army(2, "e2")])).toBeNull();
+    expect(planTeamConflict([army(0, "x1"), army(1, "ti1"), army(2, "france")])).toBeNull(); // side-less custom fits
+  });
+
+  it("names an Army Corps mixed with a Theatre-of-War army", () => {
+    const c = planTeamConflict([army(0, "e1"), army(1, "e2"), army(2, "ti1")])!;
+    expect(c).toMatchObject({ kind: "pool", first: { slotIndex: 0 }, second: { slotIndex: 2 } });
+    expect(teamConflictText(c)).toBe(
+      "Army 3 (ti1, Imperial · Theatres of War + Custom) and Army 1 (e1, Imperial · Russia (1812)) can't share a team: "
+      + "Army Corps never mix with Theatres of War or Custom armies.");
+  });
+
+  it("names Army Corps from two theatres of one side", () => {
+    const c = planTeamConflict([army(0, "e1"), army(1, "e3")])!;
+    expect(c.kind).toBe("theatre");
+    expect(teamConflictText(c)).toContain("all come from the same theatre");
+  });
+
+  it("names opposite sides, for campaign corps and for ToW armies", () => {
+    expect(planTeamConflict([army(0, "e1"), army(1, "c1")])!.kind).toBe("side");
+    const c = planTeamConflict([army(0, "x1"), army(1, "ti1"), army(2, "tc1")])!;
+    expect(c).toMatchObject({ kind: "side", first: { slotIndex: 1 }, second: { slotIndex: 2 } });
+    expect(teamConflictText(c)).toContain("opposite sides");
   });
 });

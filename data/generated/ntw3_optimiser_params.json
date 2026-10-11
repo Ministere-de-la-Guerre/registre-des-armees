@@ -1,0 +1,30 @@
+{
+  "pools": {
+    "tow": {
+      "t3_b": 76.55039271,
+      "t3_q": 1.39,
+      "m_ref": 10.0,
+      "lambda": {
+        "quality": 0.0045,
+        "quantity": 0.0035
+      },
+      "speed_bonus": 0.02,
+      "melee_bonus": 143.86875290946946,
+      "standard_general_melee": 3.0
+    },
+    "ac": {
+      "t3_b": 82.99109040508185,
+      "t3_q": 1.34,
+      "m_ref": 10.0,
+      "lambda": {
+        "quantity": 0.0035,
+        "sizeBands": 0.0045
+      },
+      "speed_bonus": 0.02,
+      "melee_bonus": 143.86875290946946,
+      "standard_general_melee": 3.0
+    }
+  },
+  "generated": "2026-10-10",
+  "source": "analysis/export_optimiser_values.py (cost_effective_builds.py and ac_builds.py valuations)"
+}
