@@ -13,7 +13,7 @@ export const MODE_NAME_NOTE = "Quantity and Quality are just names for how unit 
 const MODES: Record<OptimiserMode, { label: string; hint: string }> = {
   quantity: {
     label: "Quantity",
-    hint: "Keeps the price discount of very small and very large units (ladder games link it to winning), so mass units are favoured.",
+    hint: "Keeps the price discount of very small and very large units, treating it as possible real value rather than model error, so mass units are favoured.",
   },
   quality: {
     label: "Quality",

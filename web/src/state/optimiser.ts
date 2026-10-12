@@ -14,7 +14,7 @@
 // tools/build_web_data.py, one number per value mode of its army's pool —
 //   - "quantity" (all armies): noise-only size harmonisation. Only the model's excess
 //                 noise at extreme sizes is removed and each size's systematic discount
-//                 is kept, because the replays link that discount to winning;
+//                 is kept, treating it as possible real value rather than model error;
 //   - "quality" (ToW / Custom): full size harmonisation. The pricing model overprices
 //                 small and very large units; that size bias is removed, so size alone
 //                 never looks like a bargain;
