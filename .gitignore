@@ -24,3 +24,8 @@ __pycache__/
 /assets/army_corps_by_theatre.staging/
 /assets/army_corps_by_theatre.old/
 
+# Analysis pipeline (analysis/run_pipeline.py): cached fits and intermediate outputs, all regenerated
+/analysis/.cache/
+/analysis/output/
+/analysis/commander_blind/
+/analysis/build_blind/

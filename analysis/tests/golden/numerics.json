@@ -1,0 +1,128 @@
+{
+ "infantry": {
+  "sse": "657.5339698944819",
+  "weights_sha": "672e32c64d105d3be36113cdcdee94d13a6d16a8da885f1a9cf66cc9d9f3af94",
+  "weight_table": [
+   {
+    "band": "0-40",
+    "units": 83,
+    "weight": 3.216867469879518,
+    "weight_share": 0.14285714285714285
+   },
+   {
+    "band": "40-60",
+    "units": 209,
+    "weight": 1.277511961722488,
+    "weight_share": 0.14285714285714285
+   },
+   {
+    "band": "60-80",
+    "units": 210,
+    "weight": 1.2714285714285714,
+    "weight_share": 0.14285714285714285
+   },
+   {
+    "band": "80-100",
+    "units": 656,
+    "weight": 0.4070121951219512,
+    "weight_share": 0.14285714285714285
+   },
+   {
+    "band": "100-140",
+    "units": 1906,
+    "weight": 0.14008394543546696,
+    "weight_share": 0.14285714285714285
+   },
+   {
+    "band": "140-180",
+    "units": 1039,
+    "weight": 0.2569778633301251,
+    "weight_share": 0.14285714285714285
+   },
+   {
+    "band": "180-240+240+",
+    "units": 267,
+    "weight": 1.0,
+    "weight_share": 0.14285714285714285
+   }
+  ]
+ },
+ "cavalry": {
+  "sse": "899.1701215630857",
+  "weights_sha": "01abe8e7a844a050fde2a30b1d6576d944a1d0a5dfb27f039fe23f33e2bd2c03",
+  "weight_table": [
+   {
+    "band": "0-40",
+    "units": 21,
+    "weight": 10.0,
+    "weight_share": 0.13725490196078433
+   },
+   {
+    "band": "40-60",
+    "units": 597,
+    "weight": 0.44221105527638194,
+    "weight_share": 0.17254901960784313
+   },
+   {
+    "band": "60-80",
+    "units": 550,
+    "weight": 0.48,
+    "weight_share": 0.17254901960784313
+   },
+   {
+    "band": "80-100",
+    "units": 332,
+    "weight": 0.7951807228915663,
+    "weight_share": 0.17254901960784313
+   },
+   {
+    "band": "100-140",
+    "units": 196,
+    "weight": 1.346938775510204,
+    "weight_share": 0.17254901960784313
+   },
+   {
+    "band": "140-180+180-240",
+    "units": 28,
+    "weight": 9.428571428571429,
+    "weight_share": 0.17254901960784313
+   }
+  ]
+ },
+ "artillery": {
+  "sse": "239594.9869369702",
+  "weights_sha": "8036a5c9adf773087e8a7d6a3e730fd838e7f14b27f53d0766c93e1648b6c1b3",
+  "weight_table": [
+   {
+    "band": "0-2",
+    "units": 38,
+    "weight": 2.8684210526315788,
+    "weight_share": 0.2
+   },
+   {
+    "band": "2-3",
+    "units": 335,
+    "weight": 0.3253731343283582,
+    "weight_share": 0.19999999999999998
+   },
+   {
+    "band": "3-4",
+    "units": 384,
+    "weight": 0.2838541666666667,
+    "weight_share": 0.2
+   },
+   {
+    "band": "4-5",
+    "units": 109,
+    "weight": 1.0,
+    "weight_share": 0.2
+   },
+   {
+    "band": "5+",
+    "units": 28,
+    "weight": 3.892857142857143,
+    "weight_share": 0.2
+   }
+  ]
+ }
+}

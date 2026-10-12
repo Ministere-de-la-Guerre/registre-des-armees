@@ -1,0 +1,6 @@
+# The analysis pipeline (analysis/run_pipeline.py). Python 3.13. Exact versions: the ones the shipped data was
+# computed with (the cached fits are pickles, which are version-sensitive). No pandas.
+#   py -3.13 -m pip install -r analysis/requirements.txt
+numpy==2.4.2
+scipy==1.17.0      # milp (the AC and ToW build optimisers), linprog, sparse, stats
+scikit-learn==1.8.0
