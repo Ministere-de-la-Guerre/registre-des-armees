@@ -23,7 +23,7 @@ py -3.13 -m pip install -r analysis/requirements.txt
 ## Run
 
 ```bash
-py -3.13 analysis/run_pipeline.py            # everything, in order (a few hours on a 16-thread PC)
+py -3.13 analysis/run_pipeline.py            # everything, in order (~3 h 10 min on a 16-thread PC)
 py -3.13 analysis/run_pipeline.py --from team   # resume from a stage
 ```
 
@@ -34,11 +34,11 @@ Every step caches its fits in `analysis/.cache/` and writes intermediate outputs
 | Stage | Steps | Produces | Time |
 |---|---|---|---|
 | `dataset` | `tools/build_analysis_dataset.py` | `data/generated/ntw3_units_analysis.csv` (from the builder CSV and `source/tables/`) | seconds |
-| `base` | `unit_pricing.py` · `class_structure.py` · `build_commander_pairs.py` · `ac_discounts.py` | the ToW + Custom price model (coefficients, out-of-fold predictions), its per-class form V4, regular/commander pairs, AC formation rebates | ~40 min |
+| `base` | `unit_pricing.py` · `class_structure.py` · `build_commander_pairs.py` · `ac_discounts.py` | the ToW + Custom price model (coefficients, out-of-fold predictions), its per-class form V4, regular/commander pairs, AC formation rebates | ~65 min |
 | `commanders` | `commander_model.py` | the commander model and the price database | ~1 min |
-| `ac` | `ac_pricing.py --phase model` per arm | the Army Corps price models (incl. V4 and the size-band model's folds) | up to ~90 min |
+| `ac` | `ac_pricing.py --phase model` per arm | the Army Corps price models (incl. V4 and the size-band model's folds) | ~100 min |
 | `ac-staff` | `ac_pricing.py --phase staff` · `--phase commanders` | AC staff-general rule, AC commander model | minutes |
-| `team` | `team_values.py` | card values per version (`analysis/output/teams/values_*.csv`) | ~5 min |
+| `team` | `team_values.py` | card values per version (`analysis/output/teams/values_*.csv`) | < 1 min |
 | `builds` | `ac_builds.py` (and `--no-rebates`) | every AC corps' best build per version, with formation rebates and the recruit-order rule | ~6 min |
 | `search` | `team_search.py` | every army's best-build value; the best 4-corps teams | ~2 min |
 | `export` | `export_optimiser_values.py` | the three files above | seconds |
@@ -67,8 +67,10 @@ and builds equal the written outputs.
 
 ## Notes
 
-- **Deterministic:** fold plans come from fixed seeds and every fit is a deterministic optimisation, so a
-  run reproduces the shipped files (checked from an empty cache).
+- **Deterministic:** fold plans come from fixed seeds and every fit is a deterministic optimisation. A run
+  from an empty cache (no outputs, `--workers 5`, about 3 h 10 min) reproduced the three shipped files byte
+  for byte (the params file's date aside); the regenerated fits matched the reference fingerprints up to
+  floating-point rounding (≤ 1e-14 relative in a few fold metrics).
 - **Optional checks:** `cost_effective_builds.py` and `team_values.py` contain two report-only checks against
   ladder replay data (`analysis/build_blind/data/`). That data is not in this repository; without it the checks
   are skipped and say so. No shipped value depends on them.

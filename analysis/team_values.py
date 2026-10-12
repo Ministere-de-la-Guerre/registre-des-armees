@@ -67,7 +67,12 @@ def reference(units: list[up.Unit]) -> list[up.Unit]:
 
 
 def slice_of(dataset: str, arm: str) -> up.Slice:
-    """The cached units and fold plan of an arm (ac_pricing's slices, AC or ToW)."""
+    """The cached units and fold plan of an arm (ac_pricing's slices, AC or ToW). The AC ones come from
+    `ac_pricing.py --phase model`; the ToW one is otherwise only written by its `--phase size --dataset tow`,
+    so it is built here when missing, with the same call and seeds (and cached under the same name)."""
+    if dataset == "tow":
+        return common.cached(ckpt.slice_path("tow", arm), lambda: up.make_slice(
+            arm, "merged", up.slice_units(ap.tow_units(), arm, "merged"), SEEDS))
     return common.load_pickle(ckpt.slice_path(dataset, arm))
 
 
