@@ -15,12 +15,17 @@
 // armies' units constrain the builds (state/teamBuild.ts; the user's choice, 2026-10-10).
 // Teams are ranked by total value or by their weakest army, ties broken by the other.
 // Values are corps-8 normative gold, comparable within a pool — never across pools,
-// which can't meet on one team anyway. The study found an AC corps' value almost
+// which can't meet on one team anyway. Army Corps teams can also be ranked in
+// "Formation discount only" (the user's score, 2026-10-12): an army scores the list value
+// of its best formation-discount build per 10 000 funds times its corps number N. List
+// prices carry the 8/N rating factor, so × N makes armies compare; an army fielding
+// exactly 10 000 scores N, so a team scoring above its points total T gains list value
+// from its brigade and division discounts. The study found an AC corps' value almost
 // proportional to N, so at a fixed T the choice of corps matters far more than the split.
 
-import type { CorpsIndex, CorpsEntry, OptimiserMode, ValueMode } from "../domain/types";
+import type { CorpsIndex, CorpsEntry, OptimiserMode } from "../domain/types";
 import { type TeamKey, type TeamSide, TOW_POOL } from "../domain/teamRule";
-import { DEFAULT_OPTIMISE_SETTINGS, type OptimiseSettings } from "./optimiser";
+import { DEFAULT_OPTIMISE_SETTINGS, type OptimiseSettings, type OptimiseSummary } from "./optimiser";
 import { corpsPoints } from "./planSummary";
 import { isWorkInProgressCorps } from "./acOptimiser";
 
@@ -55,10 +60,24 @@ export interface SuggestedTeam {
   weakest: number;
 }
 
-/** The value modes a pool's teams can be ranked in: its optimiser value modes ("Formation
- *  discount only" values a build at list price, which isn't comparable across corps). */
-export function teamModes(kind: TeamPool["kind"]): ValueMode[] {
-  return kind === "ac" ? ["quantity", "sizeBands"] : ["quantity", "quality"];
+/** The modes a pool's teams can be ranked in: its optimiser value modes, and for Army Corps
+ *  "Formation discount only" with its face / 10 000 × N score (see above). */
+export function teamModes(kind: TeamPool["kind"]): OptimiserMode[] {
+  return kind === "ac" ? ["quantity", "sizeBands", "formationDiscount"] : ["quantity", "quality"];
+}
+
+/** The "Formation discount only" team score of a build: its list value per 10 000 funds times
+ *  the corps number N (analysis/team_search.py `price`). */
+export const FORMATION_SCORE_FUNDS = 10_000;
+export function formationDiscountScore(listCost: number, points: number): number {
+  return (listCost / FORMATION_SCORE_FUNDS) * points;
+}
+
+/** An army's value in `mode` from a live optimiser run: the build's value, or in "Formation
+ *  discount only" its score (the optimiser maximised list value; the score rates it). */
+export function liveArmyValue(summary: Pick<OptimiseSummary, "value" | "listCost">, mode: OptimiserMode,
+                              points: number): number {
+  return mode === "formationDiscount" ? formationDiscountScore(summary.listCost, points) : summary.value;
 }
 
 /** Every pool with at least `k` armies that have a precomputed value and a numeric rating
@@ -97,7 +116,7 @@ export function poolsFor(pools: readonly TeamPool[], anchor: TeamKey | null): Te
 }
 
 /** An army's precomputed value in `mode`, or null. */
-export function precomputedValue(entry: CorpsEntry, mode: ValueMode): number | null {
+export function precomputedValue(entry: CorpsEntry, mode: OptimiserMode): number | null {
   return entry.bestBuildValue?.[mode] ?? null;
 }
 

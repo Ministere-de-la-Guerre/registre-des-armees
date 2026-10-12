@@ -7,6 +7,7 @@
 
 import { dataUrl } from "./assets";
 import {
+  type ArmyValue,
   type CorpsEntry,
   type CorpsIndex,
   type CorpsSide,
@@ -83,6 +84,16 @@ export function normalizeOptimiserValue(raw: unknown): OptimiserValue | null {
   const sizeBands = num(r.sizeBands);
   if (quality !== null) value.quality = quality;
   if (sizeBands !== null) value.sizeBands = sizeBands;
+  return value;
+}
+
+/** A corps-index entry's `bestBuildValue`: the card value modes plus, for Army Corps, the
+ *  "Formation discount only" team score (schema 4). */
+export function normalizeArmyValue(raw: unknown): ArmyValue | null {
+  const value: ArmyValue | null = normalizeOptimiserValue(raw);
+  if (!value) return null;
+  const formationDiscount = num((raw as Record<string, unknown>).formationDiscount);
+  if (formationDiscount !== null) value.formationDiscount = formationDiscount;
   return value;
 }
 
@@ -184,7 +195,7 @@ function normalizeCorpsEntry(raw: unknown): CorpsEntry | null {
     postSelectionFlag: strOrNull(r.postSelectionFlag),
     isArmyCorps: bool(r.isArmyCorps),
     cardCount: num(r.cardCount) ?? 0,
-    bestBuildValue: normalizeOptimiserValue(r.bestBuildValue),
+    bestBuildValue: normalizeArmyValue(r.bestBuildValue),
   };
 }
 

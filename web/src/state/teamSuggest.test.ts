@@ -5,6 +5,8 @@ import { applySuggestedTeam, emptyPlan, fillPlaceholder, setSlotBuild, emptyBuil
 import {
   type TeamCandidate,
   candidatesOf,
+  formationDiscountScore,
+  liveArmyValue,
   needsLiveValues,
   poolsFor,
   precomputedValue,
@@ -15,12 +17,14 @@ import {
 } from "./teamSuggest";
 import { DEFAULT_OPTIMISE_SETTINGS } from "./optimiser";
 
-const corps = (factionKey: string, rating: number | string, value?: { quantity: number; sizeBands?: number; quality?: number }): CorpsEntry => ({
+const corps = (factionKey: string, rating: number | string,
+               value?: { quantity: number; sizeBands?: number; quality?: number; formationDiscount?: number }): CorpsEntry => ({
   factionKey, name: `${rating}. ${factionKey}`, displayYear: "", displayRating: rating, order: 0, flag: null,
   postSelectionFlag: null, isArmyCorps: factionKey.includes("_ac_"), cardCount: 1, bestBuildValue: value ?? null,
 });
 
-const ac = (id: string, rating: number, value: number) => corps(`ntw3_ac_a11_x5_${id}`, rating, { quantity: value, sizeBands: value + 1 });
+const ac = (id: string, rating: number, value: number) =>
+  corps(`ntw3_ac_a11_x5_${id}`, rating, { quantity: value, sizeBands: value + 1, formationDiscount: rating * 1.1 });
 const index: CorpsIndex = {
   schemaVersion: 3,
   sides: [
@@ -52,11 +56,33 @@ describe("teamPools", () => {
   });
 
   it("offers each pool its own value modes, and picks the pools a kept army allows", () => {
-    expect(teamModes("ac")).toEqual(["quantity", "sizeBands"]);
+    expect(teamModes("ac")).toEqual(["quantity", "sizeBands", "formationDiscount"]);
     expect(teamModes("tow")).toEqual(["quantity", "quality"]);
     expect(poolsFor(pools, keys.get("ntw3_tow_t1")!).map((p) => p.kind)).toEqual(["tow"]);
     expect(poolsFor(pools, null)).toHaveLength(2);
     expect(precomputedValue(pools[0].members[0], "sizeBands")).toBe(9001);
+    expect(precomputedValue(pools[0].members[0], "formationDiscount")).toBeCloseTo(6.6);
+    expect(precomputedValue(pools[1].members[0], "formationDiscount")).toBeNull();   // ToW: no such score
+  });
+});
+
+describe("Formation discount only score", () => {
+  it("is list value per 10 000 funds times the corps number, live as precomputed", () => {
+    // Bonaparte / Italie.C (N 12): 11 325 of list value for 10 000 funds (analysis/team_search.py).
+    expect(formationDiscountScore(11_325, 12)).toBeCloseTo(13.59, 10);
+    expect(liveArmyValue({ value: 18_491.7, listCost: 11_325 }, "formationDiscount", 12)).toBeCloseTo(13.59, 10);
+    expect(liveArmyValue({ value: 18_491.7, listCost: 11_325 }, "sizeBands", 12)).toBe(18_491.7);
+  });
+
+  it("at a points total, prefers the corps whose discounts field more list value per fund", () => {
+    // Two teams reach 30 points: a+c+d+e and a+b+d+e. b and c are both corps 8; c fields 11 200 per
+    // 10 000 funds against b's 10 500, so the team with c wins.
+    const armies = [cand("a", 6, formationDiscountScore(11_000, 6)), cand("b", 8, formationDiscountScore(10_500, 8)),
+                    cand("c", 8, formationDiscountScore(11_200, 8)), cand("d", 10, formationDiscountScore(10_100, 10)),
+                    cand("e", 6, formationDiscountScore(10_000, 6))];
+    const best = suggestTeams(armies, { total: 30, criterion: "total" }).teams[0];
+    expect(best.armies.map((a) => a.candidate.name).sort()).toEqual(["a", "c", "d", "e"]);
+    expect(best.total).toBeCloseTo(6.6 + 8.96 + 10.1 + 6, 10);
   });
 });
 

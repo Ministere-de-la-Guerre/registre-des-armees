@@ -109,12 +109,13 @@ class OptimiserDataTests(unittest.TestCase):
     def test_army_values(self) -> None:
         self.assertEqual(web.load_army_values(self.dir / "missing.csv"), {})
         (self.dir / "a.csv").write_text(
-            "faction_key,value_quality,value_quantity,value_size_bands\n"
-            "ntw3_tow_a,50000,51000,\n"
-            "ntw3_ac_a11_x5_117,,20000.5,20415\n", encoding="utf-8")
+            "faction_key,value_quality,value_quantity,value_size_bands,value_formation_discount\n"
+            "ntw3_tow_a,50000,51000,,\n"
+            "ntw3_ac_a11_x5_117,,20000.5,20415,5.521\n", encoding="utf-8")
         self.assertEqual(web.load_army_values(self.dir / "a.csv"),
                          {"ntw3_tow_a": {"quality": 50000.0, "quantity": 51000.0},
-                          "ntw3_ac_a11_x5_117": {"quantity": 20000.5, "sizeBands": 20415.0}})
+                          "ntw3_ac_a11_x5_117": {"quantity": 20000.5, "sizeBands": 20415.0,
+                                                 "formationDiscount": 5.521}})
 
 
 class OutputTests(unittest.TestCase):

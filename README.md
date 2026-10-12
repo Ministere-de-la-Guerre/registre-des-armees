@@ -67,7 +67,9 @@ one back.
 In the Ordre de Bataille planner, **Suggest team** finds the four armies with the
 most value at the team points total you agree on (the sum of the corps numbers):
 Army Corps of one theatre, or Theatres of War and Custom Armies of one side. Rank
-by total value or by the strongest weakest army, keep the armies you already
+by total value or by the strongest weakest army (for Army Corps also by
+**Formation discount only**: how much list value each army's brigade and division
+discounts let it field, weighted by its corps number), keep the armies you already
 picked and fill the rest, and build the whole team with the optimiser in one
 click (**Undo suggestion** brings the old plan back). A plan that mixes Army Corps
 with Theatres of War, two theatres or two sides gets a warning instead.

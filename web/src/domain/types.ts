@@ -139,6 +139,14 @@ export type ValueMode = keyof OptimiserValue;
  *  the brigade and division discounts are taken off (analysis/ac_builds.py `price`). */
 export type OptimiserMode = ValueMode | "formationDiscount";
 
+/** An army's best-build value per optimiser mode, for ranking teams. Army Corps also carry
+ *  `formationDiscount`: the team score of "Formation discount only", face / 10 000 × corps number
+ *  (the build's list value per 10 000 funds, times N to cancel the 8/N rating factor in list
+ *  prices, so armies compare; analysis/team_search.py). */
+export interface ArmyValue extends OptimiserValue {
+  formationDiscount?: number;
+}
+
 /** Parameters the optimiser needs to value staff generals (data/generated/ntw3_optimiser_params.json,
  *  the faction's pool block): the staff-general price rule T3 = b·stars^q (1 gold without stars;
  *  Army Corps use their own refit), and the hand-set command correction — λ·stars·D per value
@@ -177,8 +185,9 @@ export interface CorpsEntry {
   cardCount: number;
   /** The army's best-build value per value mode at the default optimiser settings (31 cards, a
    *  staff general, one roll for ToW) — what the planner's team suggestion ranks with when
-   *  nothing constrains the builds (analysis/team_search.py army_values.csv, schema ≥ 3). */
-  bestBuildValue?: OptimiserValue | null;
+   *  nothing constrains the builds (analysis/team_search.py army_values.csv, schema ≥ 3;
+   *  `formationDiscount` from schema 4). */
+  bestBuildValue?: ArmyValue | null;
 }
 
 export interface CorpsTheatre {

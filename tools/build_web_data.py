@@ -57,7 +57,9 @@ except ImportError:  # pragma: no cover - environment guard
 #    (ToW / Custom: quality + quantity; AC: quantity + sizeBands), `optimiser` is the
 #    pool's params block, and corps-index entries carry `bestBuildValue` (each army's
 #    best-build value per mode, for the planner's team suggestion).
-SCHEMA_VERSION = 3
+# 4: Army Corps `bestBuildValue` may also carry `formationDiscount`, the team score of
+#    "Formation discount only" (face / 10 000 × corps number; analysis/team_search.py).
+SCHEMA_VERSION = 4
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 GENERATED_DATA = PROJECT_ROOT / "data" / "generated"
@@ -72,6 +74,9 @@ OPTIMISER_PARAMS_JSON = GENERATED_DATA / "ntw3_optimiser_params.json"
 OPTIMISER_ARMY_VALUES_CSV = GENERATED_DATA / "ntw3_optimiser_army_values.csv"
 # App mode → CSV column. Each pool uses a subset (analysis/export_optimiser_values.py).
 OPTIMISER_MODES = {"quality": "value_quality", "quantity": "value_quantity", "sizeBands": "value_size_bands"}
+# Army values rank teams in one more mode: "Formation discount only" has no card values (a card
+# is worth its list price) but a team score per army (analysis/team_search.py `price`).
+ARMY_VALUE_MODES = {**OPTIMISER_MODES, "formationDiscount": "value_formation_discount"}
 
 COMMANDER_SUFFIX = "_com_"
 
@@ -368,9 +373,9 @@ def normalize_unit(row: dict, assets: AssetCopier, errors: list[str]) -> dict | 
     }
 
 
-def _mode_values(row: dict[str, str]) -> dict[str, float]:
+def _mode_values(row: dict[str, str], modes: dict[str, str] = OPTIMISER_MODES) -> dict[str, float]:
     """{mode: value} for the non-blank mode columns of one CSV row."""
-    return {mode: float(row[col]) for mode, col in OPTIMISER_MODES.items() if (row.get(col) or "").strip()}
+    return {mode: float(row[col]) for mode, col in modes.items() if (row.get(col) or "").strip()}
 
 
 def load_optimiser_inputs(values_csv: Path, params_json: Path):
@@ -400,7 +405,7 @@ def load_army_values(path: Path) -> dict[str, dict[str, float]]:
     if not path.is_file():
         return {}
     with path.open(newline="", encoding="utf-8-sig") as handle:
-        return {row["faction_key"]: _mode_values(row) for row in csv.DictReader(handle)}
+        return {row["faction_key"]: _mode_values(row, ARMY_VALUE_MODES) for row in csv.DictReader(handle)}
 
 
 def attach_optimiser_values(by_faction: dict[str, list[dict]], values, errors: list[str]) -> set[str]:

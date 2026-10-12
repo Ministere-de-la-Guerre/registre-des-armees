@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CorpsEntry, CorpsIndex, FactionRoster, ValueMode } from "../domain/types";
+import type { CorpsEntry, CorpsIndex, FactionRoster, OptimiserMode } from "../domain/types";
 import { type TeamKey, teamAnchor } from "../domain/teamRule";
 import { MAX_TOTAL_UNIT_CARDS } from "../rules/rules";
 import { MODE_NAME_NOTE } from "./OptimiseModal";
@@ -15,6 +15,7 @@ import {
   type TeamCriterion,
   TEAM_SIZE,
   candidatesOf,
+  liveArmyValue,
   needsLiveValues,
   poolsFor,
   precomputedValue,
@@ -26,7 +27,13 @@ import {
 } from "../state/teamSuggest";
 
 // Army Corps show their size-band mode as "Quality" (see OptimiseModal).
-const MODE_LABELS: Record<ValueMode, string> = { quantity: "Quantity", quality: "Quality", sizeBands: "Quality" };
+const MODE_LABELS: Record<OptimiserMode, string> = {
+  quantity: "Quantity", quality: "Quality", sizeBands: "Quality", formationDiscount: "Formation discount only",
+};
+/** Shown under the mode buttons when "Formation discount only" ranks the teams (teamSuggest.ts). */
+const FORMATION_SCORE_NOTE = "Formation discount only ignores unit stats: each army scores the list value its "
+  + "brigade and division discounts let it field, per 10 000 funds, times its corps number. An army fielding "
+  + "exactly 10 000 scores its corps number, so a team scoring above its points total gains from its discounts.";
 
 interface Kept {
   slotId: string;
@@ -77,8 +84,8 @@ export function SuggestTeamModal({
   const pools = poolsFor(allPools, anchor);
   const [poolId, setPoolId] = useState<string | null>(null);
   const pool = pools.find((p) => p.id === poolId) ?? pools[0] ?? null;
-  const [mode, setMode] = useState<ValueMode>("quantity");
-  const modes = pool ? teamModes(pool.kind) : ["quantity" as ValueMode];
+  const [mode, setMode] = useState<OptimiserMode>("quantity");
+  const modes = pool ? teamModes(pool.kind) : ["quantity" as OptimiserMode];
   const valueMode = modes.includes(mode) ? mode : "quantity";
   const [criterion, setCriterion] = useState<TeamCriterion>("total");
   const [maxCards, setMaxCards] = useState(DEFAULT_OPTIMISE_SETTINGS.maxCards);
@@ -143,7 +150,7 @@ export function SuggestTeamModal({
       const values = new Map<string, number>();
       const failed: string[] = [];
       for (const [k, r] of results) {
-        if (r.ok) values.set(k, r.summary.value);
+        if (r.ok) values.set(k, liveArmyValue(r.summary, valueMode, corpsPoints(entryByKey.get(k)!) ?? 0));
         else failed.push(r.error);
       }
       setLiveState({ status: "ready", values, failed });
@@ -259,7 +266,7 @@ export function SuggestTeamModal({
                 ))}
               </span>
             </div>
-            <span className="opt-hint">{MODE_NAME_NOTE}</span>
+            <span className="opt-hint">{valueMode === "formationDiscount" ? FORMATION_SCORE_NOTE : MODE_NAME_NOTE}</span>
           </div>
 
           <details className="opt-field">
@@ -326,7 +333,9 @@ export function SuggestTeamModal({
                         ))}
                       </div>
                       <div className="opt-hint">
-                        value {Math.round(team.total).toLocaleString()} · weakest {Math.round(team.weakest).toLocaleString()}
+                        {valueMode === "formationDiscount"
+                          ? `score ${team.total.toFixed(2)} · weakest ${team.weakest.toFixed(2)}`
+                          : `value ${Math.round(team.total).toLocaleString()} · weakest ${Math.round(team.weakest).toLocaleString()}`}
                         {live ? " · computed live" : ""}
                       </div>
                       <button className="btn small" disabled={busy} onClick={() => void applyTeam(team)}>Use this team</button>

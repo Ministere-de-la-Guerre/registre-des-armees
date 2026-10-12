@@ -500,6 +500,14 @@ ntw3.lua `Faction_Points`), as `analysis/team_search.py` does offline.
   staff, single roll off, kept armies with units) every candidate is optimised
   live in the worker, with progress, Cancel and a session cache (`teamBuild.ts`).
   The user chose this split (2026-10-10).
+- **Modes:** the pool's value modes (`teamModes`), plus **Formation discount only**
+  for Army Corps. That mode ignores stats, so its army value is a score instead of
+  gold: face ÷ 10 000 × N, the list value the discounts let the best build field per
+  10 000 funds, times the corps number. List prices carry the 8/N rating factor, so
+  × N makes armies compare (the user's formula, 2026-10-12). An army fielding exactly
+  10 000 scores N, so a team above its points total gains from its discounts. The
+  same score is used for live values (`liveArmyValue`) and precomputed ones
+  (`bestBuildValue.formationDiscount`, schema 4; `analysis/team_search.py` `price`).
 - **Ranking:** by total value or by the weakest army (ties: the other);
   `suggestTeams` enumerates at most ~36k teams. Teams take `k`; the UI offers 4
   (3 is legal and a planned extension).
