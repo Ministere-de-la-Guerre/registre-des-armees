@@ -112,6 +112,54 @@ export interface UnitCard {
   guerrillaBadge: string | null;
   stats: UnitStats;
   abilities: UnitAbilities;
+  /** The in-app optimiser's normative value of this card in gold, per value mode (units and
+   *  combat generals; absent for staff generals, which it values from their stars, and for
+   *  armies without optimiser data). From analysis/export_optimiser_values.py via
+   *  tools/build_web_data.py. */
+  optimiserValue?: OptimiserValue | null;
+}
+
+/** A card's (or a whole best build's) normative value in gold at corps 8, per value mode of the
+ *  analysis valuation. Each pool carries only its own modes:
+ *  - ToW / Custom: `quantity` = noise-only size harmonisation (the size discount kept) and
+ *    `quality` = full harmonisation (size bias removed);
+ *  - Army Corps: `quantity` and `sizeBands` = the AC study's size-band model (the user replaced
+ *    Quality with it for AC). */
+export interface OptimiserValue {
+  quantity: number;
+  quality?: number;
+  sizeBands?: number;
+}
+
+/** A mode with a value per card. */
+export type ValueMode = keyof OptimiserValue;
+
+/** The optimiser's modes: a value mode, or (Army Corps only) "formationDiscount" — a card is
+ *  worth its own list price, so the optimiser fields the most list value the funds reach once
+ *  the brigade and division discounts are taken off (analysis/ac_builds.py `price`). */
+export type OptimiserMode = ValueMode | "formationDiscount";
+
+/** An army's best-build value per optimiser mode, for ranking teams. Army Corps also carry
+ *  `formationDiscount`: the team score of "Formation discount only", face / 10 000 × corps number
+ *  (the build's list value per 10 000 funds, times N to cancel the 8/N rating factor in list
+ *  prices, so armies compare; analysis/team_search.py). */
+export interface ArmyValue extends OptimiserValue {
+  formationDiscount?: number;
+}
+
+/** Parameters the optimiser needs to value staff generals (data/generated/ntw3_optimiser_params.json,
+ *  the faction's pool block): the staff-general price rule T3 = b·stars^q (1 gold without stars;
+ *  Army Corps use their own refit), and the hand-set command correction — λ·stars·D per value
+ *  mode of the pool, D = Σ models·(mRef − morale)₊, a σ nudge for C-class generals and a priced
+ *  bonus for a fighting bodyguard. */
+export interface OptimiserParams {
+  t3B: number;
+  t3Q: number;
+  mRef: number;
+  lambda: OptimiserValue;
+  speedBonus: number;
+  meleeBonus: number;
+  standardGeneralMelee: number;
 }
 
 export interface FactionRoster {
@@ -119,6 +167,9 @@ export interface FactionRoster {
   factionKey: string;
   armyCorpsName: string;
   cards: UnitCard[];
+  /** Present only for armies the optimiser covers (ToW and Custom from schema 2, Army Corps
+   *  from schema 3 — not the work-in-progress German Campaign 1813). */
+  optimiser?: OptimiserParams | null;
 }
 
 // --- Corps index (theatre-grouped selection screen) --------------------------
@@ -132,6 +183,11 @@ export interface CorpsEntry {
   postSelectionFlag: string | null;
   isArmyCorps: boolean;
   cardCount: number;
+  /** The army's best-build value per value mode at the default optimiser settings (31 cards, a
+   *  staff general, one roll for ToW) — what the planner's team suggestion ranks with when
+   *  nothing constrains the builds (analysis/team_search.py army_values.csv, schema ≥ 3;
+   *  `formationDiscount` from schema 4). */
+  bestBuildValue?: ArmyValue | null;
 }
 
 export interface CorpsTheatre {

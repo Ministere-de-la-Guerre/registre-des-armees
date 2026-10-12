@@ -7,12 +7,15 @@
 
 import { dataUrl } from "./assets";
 import {
+  type ArmyValue,
   type CorpsEntry,
   type CorpsIndex,
   type CorpsSide,
   type CorpsTheatre,
   type FactionRoster,
   type GeneralKind,
+  type OptimiserParams,
+  type OptimiserValue,
   type UnitAbilities,
   type UnitCard,
   type UnitStats,
@@ -69,7 +72,44 @@ function normalizeAbilities(raw: Record<string, unknown> | undefined): UnitAbili
   };
 }
 
-function normalizeCard(raw: Record<string, unknown>): UnitCard | null {
+/** A per-mode value record: `quantity` (every pool has it) plus whichever of `quality` (ToW /
+ *  Custom) and `sizeBands` (Army Corps) the pool carries; null when `quantity` is missing. */
+export function normalizeOptimiserValue(raw: unknown): OptimiserValue | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const quantity = num(r.quantity);
+  if (quantity === null) return null;
+  const value: OptimiserValue = { quantity };
+  const quality = num(r.quality);
+  const sizeBands = num(r.sizeBands);
+  if (quality !== null) value.quality = quality;
+  if (sizeBands !== null) value.sizeBands = sizeBands;
+  return value;
+}
+
+/** A corps-index entry's `bestBuildValue`: the card value modes plus, for Army Corps, the
+ *  "Formation discount only" team score (schema 4). */
+export function normalizeArmyValue(raw: unknown): ArmyValue | null {
+  const value: ArmyValue | null = normalizeOptimiserValue(raw);
+  if (!value) return null;
+  const formationDiscount = num((raw as Record<string, unknown>).formationDiscount);
+  if (formationDiscount !== null) value.formationDiscount = formationDiscount;
+  return value;
+}
+
+/** The faction file's `optimiser` block (snake_case, as exported), or null when absent or
+ *  malformed — the optimiser is then simply unavailable for that army. */
+export function normalizeOptimiserParams(raw: unknown): OptimiserParams | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const lambda = normalizeOptimiserValue(r.lambda);
+  const fields = [r.t3_b, r.t3_q, r.m_ref, r.speed_bonus, r.melee_bonus, r.standard_general_melee].map(num);
+  if (lambda === null || fields.some((v) => v === null)) return null;
+  const [t3B, t3Q, mRef, speedBonus, meleeBonus, standardGeneralMelee] = fields as number[];
+  return { t3B, t3Q, mRef, lambda, speedBonus, meleeBonus, standardGeneralMelee };
+}
+
+export function normalizeCard(raw: Record<string, unknown>): UnitCard | null {
   const unitKey = str(raw.unitKey);
   const factionKey = str(raw.factionKey);
   if (!unitKey || !factionKey) return null;
@@ -114,6 +154,7 @@ function normalizeCard(raw: Record<string, unknown>): UnitCard | null {
     guerrillaBadge: strOrNull(raw.guerrillaBadge),
     stats: normalizeStats(raw.stats as Record<string, unknown>),
     abilities: normalizeAbilities(raw.abilities as Record<string, unknown>),
+    optimiserValue: normalizeOptimiserValue(raw.optimiserValue),
   };
 }
 
@@ -154,6 +195,7 @@ function normalizeCorpsEntry(raw: unknown): CorpsEntry | null {
     postSelectionFlag: strOrNull(r.postSelectionFlag),
     isArmyCorps: bool(r.isArmyCorps),
     cardCount: num(r.cardCount) ?? 0,
+    bestBuildValue: normalizeArmyValue(r.bestBuildValue),
   };
 }
 
@@ -200,5 +242,6 @@ export async function loadFaction(factionKey: string): Promise<FactionRoster> {
     factionKey: faction,
     armyCorpsName: str(raw.armyCorpsName),
     cards: withTowPlacements(cards, faction),
+    optimiser: normalizeOptimiserParams(raw.optimiser),
   };
 }

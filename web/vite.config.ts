@@ -92,6 +92,8 @@ export default defineConfig(({ mode }) => {
           "assets/army_corps_by_theatre/**",
           "data/corps-index.json",
           "data/data-version.json",
+          // The build optimiser's HiGHS solver (~3.5 MB), so it works offline too.
+          "**/*.wasm",
         ],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
       },
@@ -110,6 +112,16 @@ export default defineConfig(({ mode }) => {
   build: {
     outDir: "dist",
     chunkSizeWarningLimit: 1500,
+  },
+  // The optimiser worker (src/state/optimiser.worker.ts) loads HiGHS, whose module has a
+  // Node-only dynamic import; IIFE workers cannot hold the resulting split chunk.
+  worker: {
+    format: "es" as const,
+  },
+  // Pre-bundle HiGHS at dev-server start: discovered lazily (first Optimise click), Vite
+  // re-optimises dependencies and reloads the page mid-solve.
+  optimizeDeps: {
+    include: ["highs"],
   },
   test: {
     globals: true,

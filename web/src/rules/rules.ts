@@ -150,8 +150,9 @@ export function supportDivisions(recruitable: readonly RulesUnit[], factionKey: 
 }
 
 /** Class used for the artillery/heavy-cavalry caps: combat generals occupy a slot
- *  of the unit they lead, so they count by their underlying class. */
-function cappedClassOf(card: RulesUnit): string {
+ *  of the unit they lead, so they count by their underlying class. Exported for the
+ *  build optimiser (state/optimiser.ts), which must count classes the same way. */
+export function cappedClassOf(card: RulesUnit): string {
   if (card.isGeneral && card.underlyingUnitClass && classifyGeneral(card) === "combat") {
     return card.underlyingUnitClass;
   }

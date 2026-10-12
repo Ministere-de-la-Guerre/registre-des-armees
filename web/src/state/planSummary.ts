@@ -69,8 +69,9 @@ export interface PlanPoints {
   unrated: string[];
 }
 
-/** The army's points are its corps rating; the index stores it as a string or a number. */
-function ratingOf(entry: CorpsEntry | undefined): number | null {
+/** An army's points are its corps rating (the N that opens its name; ntw3.lua Faction_Points);
+ *  the index stores it as a string or a number. Null when it has none (e.g. the Lordz army). */
+export function corpsPoints(entry: CorpsEntry | undefined): number | null {
   const r = entry?.displayRating;
   if (typeof r === "number") return Number.isFinite(r) ? r : null;
   if (typeof r === "string" && r.trim() !== "" && Number.isFinite(Number(r))) return Number(r);
@@ -91,7 +92,7 @@ export function planPoints(
       continue;
     }
     const entry = entryByKey.get(slot.build.factionKey);
-    const points = ratingOf(entry);
+    const points = corpsPoints(entry);
     byArmy.push(points);
     if (points === null) unrated.push(entry?.name || slot.build.armyCorpsName || slot.build.factionKey);
     else total += points;

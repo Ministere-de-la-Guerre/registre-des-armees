@@ -107,6 +107,17 @@ export function PlanShare({ stats }: { stats: PlanStats }) {
   );
 }
 
+/** The plan's team clash (domain/teamRule.ts planTeamConflict), shown in full: it is why
+ *  "Suggest team" is disabled, and touch users can't read the button's tooltip. */
+export function TeamConflictWarning({ text }: { text: string | null }) {
+  if (!text) return null;
+  return (
+    <span className="plan-warn" role="status">
+      ⚠ {text} Change or remove one to get team suggestions.
+    </span>
+  );
+}
+
 /** The rolled-up warnings (first two, then "+N more"); nothing when there are none. */
 export function PlanWarnings({ stats }: { stats: PlanStats }) {
   const shown = stats.warnings.slice(0, 2);

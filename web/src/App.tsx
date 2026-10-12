@@ -267,6 +267,7 @@ function AppBody() {
           onRetryRoster={planRosters.retry}
           onBack={() => setScreen("corps")}
           onOpenInBuilder={openFromPlanner}
+          ensureRoster={planRosters.ensure}
         />
       )}
 
