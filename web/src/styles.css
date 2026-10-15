@@ -103,7 +103,7 @@ button { font-family: var(--sans); cursor: pointer; }
 .btn.ghost { background: transparent; border-color: transparent; }
 .btn.ghost:hover { border-color: var(--line-2); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.btn:focus-visible, .medallion:focus-visible, .corps-card:focus-visible,
+.btn:focus-visible, .medallion:focus-visible, .corps-card:focus-visible, .view-chip:focus-visible,
 input:focus-visible, select:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
 
 input[type="text"], input[type="number"], input[type="search"], select {
@@ -222,6 +222,99 @@ input::placeholder { color: var(--muted); }
 .hstat .lbl { font-size: 10px; text-transform: uppercase; color: var(--text-soft); letter-spacing: 0.04em; }
 .hstat .val { font-family: var(--serif); font-size: 17px; font-weight: 700; }
 .hstat .val.over { color: var(--bad); }
+
+/* Builder header: row 1 = identity + stats, row 2 = toolbar. Both wrap on a narrow
+   window instead of pushing controls off the right edge (touch swipes instead; below). */
+.builder-head .corps-header { border-bottom: none; }
+/* Wrap + ellipsis are for mouse/trackpad windows only: on touch the row swipes instead
+   (coarse block below, and .tablet-touch), and these scoped selectors would otherwise
+   outrank those plain .corps-header rules. */
+@media (pointer: fine) {
+  .builder-head .corps-header { flex-wrap: wrap; row-gap: 8px; }
+  .builder-head .titles { min-width: 0; flex: 0 1 auto; }
+}
+.builder-head .titles h2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.builder-head .spacer { flex: 1; }
+.hstats {
+  display: flex; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
+}
+.hstats .hstat { background: none; border: none; border-right: 1px solid var(--line); border-radius: 0; padding: 4px 16px; min-width: 0; }
+.hstats .hstat:last-child { border-right: none; }
+.hstat .val .of { color: var(--text-soft); font-weight: 400; }
+.hstats .gold-stat { font: inherit; color: inherit; text-align: left; cursor: pointer; min-width: 220px; }
+.hstats .gold-stat:hover, .hstats .gold-stat[aria-expanded="true"] { background: var(--panel-2); }
+/* Inset: .hstats clips overflow, so an outside ring would be cut off. */
+.hstats .gold-stat:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: -2px; }
+.gold-stat .lbl { display: flex; justify-content: space-between; gap: 12px; }
+.gold-stat .over-text { color: var(--bad); }
+.gold-stat .val { display: flex; align-items: center; gap: 6px; }
+.gold-stat .val .of { font-size: 13px; }
+.gold-stat .caret { margin-left: auto; font-size: 11px; color: var(--text-soft); }
+.gold-share { display: flex; gap: 1px; height: 5px; margin-top: 3px; border-radius: 3px; overflow: hidden; background: var(--panel-3); }
+.gold-share.big { height: 10px; margin: 0; border-radius: 5px; }
+.gold-share .seg { flex-basis: 0; min-width: 2px; }
+.gold-share .seg.infantry, .head-pop .sw.infantry { background: var(--azure); }
+.gold-share .seg.cavalry, .head-pop .sw.cavalry { background: var(--gold); }
+.gold-share .seg.artillery, .head-pop .sw.artillery { background: var(--share-art, var(--bad)); }
+.head-pop .sw.staff { background: var(--muted); }
+
+.builder-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 16px;
+  background: var(--bg); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+}
+.builder-toolbar .spacer { flex: 1; }
+.toolbar-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-soft); }
+.toolbar-sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+.view-chip {
+  display: inline-flex; align-items: center; height: 26px; padding: 0 11px; border-radius: 999px;
+  border: 1px solid var(--line-2); background: transparent; color: var(--text-dim); font-size: 12px; white-space: nowrap;
+}
+.view-chip:hover { border-color: var(--gold-deep); color: var(--text); }
+.view-chip.on { background: var(--panel-2); border-color: var(--gold-deep); color: var(--gold-bright); }
+.view-chip:disabled { opacity: 0.4; cursor: not-allowed; }
+.builder-toolbar .btn.on, .pr-menu-btn.on { border-color: var(--gold-deep); color: var(--gold-bright); }
+.pr-menu-btn { display: inline-flex; align-items: center; gap: 6px; }
+.caret { font-size: 10px; opacity: 0.8; }
+
+/* Panels dropped from header buttons (HeaderPopover): fixed at the anchor on desktop,
+   bottom sheets on touch. */
+.head-pop {
+  position: fixed; top: var(--pop-top); left: var(--pop-left); width: var(--pop-w); z-index: 95;
+  background: var(--panel); color: var(--text); border: 1px solid var(--gold-deep); border-radius: 9px;
+  box-shadow: var(--shadow); padding: 12px 14px; display: flex; flex-direction: column; gap: 9px; font-size: 13px;
+  max-height: calc(100vh - var(--pop-top) - 8px); max-height: calc(100dvh - var(--pop-top) - 8px); overflow: auto;
+}
+.head-pop-note { font-size: 11.5px; color: var(--text-soft); }
+.pr-menu-toggle { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+.pr-menu-seasons {
+  border: none; border-top: 1px solid var(--line); margin: 2px 0 0; padding: 8px 0 0;
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.pr-menu-seasons legend { padding: 0 0 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-soft); }
+.pr-menu-season { display: flex; gap: 8px; align-items: center; padding: 4px 2px; border-radius: 5px; cursor: pointer; }
+.pr-menu-season:hover { background: var(--panel-2); }
+.pr-menu-season-meta { margin-left: auto; font-size: 11.5px; color: var(--text-soft); }
+.gold-pop-head { display: flex; align-items: baseline; justify-content: space-between; }
+.gold-pop-head strong { font-family: var(--serif); font-size: 15px; color: var(--gold-bright); }
+.gold-pop-rows { display: flex; flex-direction: column; gap: 9px; }
+.gold-pop-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 34px; column-gap: 10px; row-gap: 2px; align-items: center; }
+.gold-pop-row .sw { width: 9px; height: 9px; border-radius: 2px; }
+.gold-pop-row .name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 5px; min-width: 0; }
+.gold-pop-row .name > span:first-child { margin-right: 3px; }
+.gold-pop-row .gold { color: var(--gold-bright); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.gold-pop-row .pct { font-size: 12px; color: var(--text-soft); text-align: right; }
+.gold-pop-row .sub { grid-column: 2 / -1; font-size: 12px; color: var(--text-soft); }
+.spd {
+  font-size: 11px; line-height: 18px; padding: 0 6px; border: 1px solid var(--line-2); border-radius: 4px;
+  background: var(--bg-2); color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.gold-pop-totals {
+  display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center;
+  border-top: 1px solid var(--line); padding-top: 8px;
+}
+.gold-pop-totals .gold { text-align: right; font-variant-numeric: tabular-nums; }
+.gold-pop-totals .discount { color: var(--good); }
+.gold-pop-totals .cost { justify-self: end; }
 
 /* position:relative is load-bearing: under 1000px the filters drawer is absolutely
    positioned, and without a positioned ancestor here it would resolve against the
@@ -785,6 +878,7 @@ input::placeholder { color: var(--muted); }
   overflow: auto; z-index: 50; box-shadow: var(--shadow); padding: 6px;
 }
 .saves-row { display: flex; gap: 6px; align-items: center; padding: 6px; border-bottom: 1px solid var(--line); }
+
 .saves-warning {
   font-size: 11px; color: var(--bad); background: rgba(138, 53, 40, 0.2);
   border: 1px solid var(--bad-deep); border-radius: 6px; padding: 5px 7px; margin-bottom: 6px;
@@ -904,6 +998,21 @@ input::placeholder { color: var(--muted); }
   padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
   z-index: 95;
 }
+.app.tablet-touch .head-pop {
+  left: 0; right: 0; top: auto; bottom: 0;
+  width: 100%; max-height: 70dvh; overflow: auto;
+  border-radius: 14px 14px 0 0;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
+.app.tablet-touch .builder-toolbar {
+  flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.app.tablet-touch .builder-toolbar::-webkit-scrollbar { display: none; }
+.app.tablet-touch .builder-toolbar > * { flex-shrink: 0; }
+.app.tablet-touch .builder-toolbar .spacer { display: none; }
+.app.tablet-touch .builder-toolbar .btn,
+.app.tablet-touch .builder-toolbar .view-chip { min-height: 44px; }
 
 /* ============================================================================
    MOBILE UX PASS (phones/tablets only). Everything below is gated to coarse
@@ -978,6 +1087,7 @@ input::placeholder { color: var(--muted); }
   .topbar { padding-right: calc(84px + env(safe-area-inset-right, 0px)); }
   .app.chrome-collapsed .topbar,
   .app.chrome-collapsed .corps-header,
+  .app.chrome-collapsed .builder-toolbar,
   .app.chrome-collapsed .tow-warning.banner { display: none; }
 
   /* Expanded, the controls bar is a single horizontal row the player swipes
@@ -999,6 +1109,15 @@ input::placeholder { color: var(--muted); }
   .corps-header > * { flex-shrink: 0; }
   .corps-header .spacer { display: none; }
   .corps-header .btn { min-height: 44px; }
+  /* The toolbar row under it swipes the same way. */
+  .builder-toolbar {
+    flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  .builder-toolbar::-webkit-scrollbar { display: none; }
+  .builder-toolbar > * { flex-shrink: 0; }
+  .builder-toolbar .spacer { display: none; }
+  .builder-toolbar .btn, .builder-toolbar .view-chip { min-height: 44px; }
 
   /* The Load dropdown is a descendant of the header's horizontal scroller, which
      would clip it. On touch it rises as a fixed bottom sheet (matching the other
@@ -1011,6 +1130,14 @@ input::placeholder { color: var(--muted); }
     padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
     z-index: 95;
   }
+  /* Header panels (Gold breakdown, Pick rates) rise as bottom sheets for the same reason. */
+  .head-pop {
+    left: 0; right: 0; top: auto; bottom: 0;
+    width: 100%; max-height: 70dvh; overflow: auto;
+    border-radius: 14px 14px 0 0;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .pr-menu-season { min-height: 44px; }
 
   /* --- Part 1a: collapsible bottom-sheet tray -----------------------------
      The always-present slim strip (running totals) replaces the desktop 31-slot row;

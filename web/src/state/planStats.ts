@@ -89,6 +89,8 @@ export interface ArmShare {
   men: number;
   /** Listed card prices (`UnitCard.cost`), before any brigade/division discount. */
   gold: number;
+  /** Cards per speed tag, the same tally the class breakdowns keep. */
+  bySpeed: SpeedMix;
 }
 
 export interface PlanWarning {
@@ -171,11 +173,11 @@ export function planStats(armies: (PlanArmyInput | null)[]): PlanStats {
   const gunsByArm = Object.fromEntries(GUN_ARMS.map((a) => [a, { guns: 0, batteries: 0, byArmy: zeros(), bySpeed: {} }])) as Record<GunArm, GunTally>;
   const gunRows = new Map<string, GunTypeRow & { sortKey: [number, string] }>();
   const abilities = Object.fromEntries(ABILITY_STAT_KEYS.map((k) => [k, { cards: 0, byArmy: zeros() }])) as PlanStats["abilities"];
-  const share = {
-    infantry: { cards: 0, men: 0, gold: 0 },
-    cavalry: { cards: 0, men: 0, gold: 0 },
-    artillery: { cards: 0, men: 0, gold: 0 },
-    staff: { cards: 0, men: 0, gold: 0 },
+  const share: PlanStats["share"] = {
+    infantry: { cards: 0, men: 0, gold: 0, bySpeed: {} },
+    cavalry: { cards: 0, men: 0, gold: 0, bySpeed: {} },
+    artillery: { cards: 0, men: 0, gold: 0, bySpeed: {} },
+    staff: { cards: 0, men: 0, gold: 0, bySpeed: {} },
   };
   const perArmy: (ArmyStats | null)[] = [];
   const warnings: PlanWarning[] = [];
@@ -211,24 +213,14 @@ export function planStats(armies: (PlanArmyInput | null)[]): PlanStats {
       const cls = effectiveClass(c);
       const cav = cavalryKey(cls);
       const inf = infantryKey(cls);
-      if (cav) {
-        addTo(cavalry, cav, slot, c, men);
-        share.cavalry.cards += 1;
-        share.cavalry.men += men;
-        share.cavalry.gold += c.cost;
-      } else if (inf) {
-        addTo(infantry, inf, slot, c, men);
-        share.infantry.cards += 1;
-        share.infantry.men += men;
-        share.infantry.gold += c.cost;
-      } else if (cls.startsWith("artillery")) {
-        share.artillery.cards += 1;
-        share.artillery.men += men;
-        share.artillery.gold += c.cost;
-      } else if (cls === "general") {
-        share.staff.cards += 1;
-        share.staff.men += men;
-        share.staff.gold += c.cost;
+      if (cav) addTo(cavalry, cav, slot, c, men);
+      else if (inf) addTo(infantry, inf, slot, c, men);
+      const shareArm = cav ? share.cavalry : inf ? share.infantry : cls.startsWith("artillery") ? share.artillery : cls === "general" ? share.staff : null;
+      if (shareArm) {
+        shareArm.cards += 1;
+        shareArm.men += men;
+        shareArm.gold += c.cost;
+        bumpSpeed(shareArm.bySpeed, c);
       }
 
       const arm = gunArm(c);

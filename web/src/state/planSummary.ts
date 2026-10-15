@@ -5,12 +5,17 @@ import type { CorpsEntry } from "../domain/types";
 import type { PlanSlot } from "./plan";
 import type { PlanStats, PlanWarning } from "./planStats";
 
-/** "C3 ×2 · C4 ×2": a row's speed tags by letter, then number (the game's own tags, e.g. L1, F3). */
-export function speedMix(bySpeed: Readonly<Record<string, number>>): string {
+/** Speed tags with their counts, by letter then number (the game's own tags, e.g. L1, F3). */
+export function speedEntries(bySpeed: Readonly<Record<string, number>>): [string, number][] {
   const num = (tag: string) => Number(tag.replace(/\D+/g, "")) || 0;
   return Object.entries(bySpeed)
     .filter(([, n]) => n > 0)
-    .sort(([a], [b]) => a.replace(/\d+/g, "").localeCompare(b.replace(/\d+/g, "")) || num(a) - num(b) || a.localeCompare(b))
+    .sort(([a], [b]) => a.replace(/\d+/g, "").localeCompare(b.replace(/\d+/g, "")) || num(a) - num(b) || a.localeCompare(b));
+}
+
+/** "C3 ×2 · C4 ×2": a row's speed tags in speedEntries order. */
+export function speedMix(bySpeed: Readonly<Record<string, number>>): string {
+  return speedEntries(bySpeed)
     .map(([tag, n]) => `${tag} ×${n}`)
     .join(" · ");
 }
@@ -30,6 +35,7 @@ export interface ShareSegment {
   cards: number;
   men: number;
   gold: number;
+  bySpeed: Readonly<Record<string, number>>;
   /** Whole-number percent of all counted cards / men / gold (0 when nothing is counted). */
   cardsPct: number;
   menPct: number;
@@ -47,6 +53,7 @@ export function shareSegments(share: PlanStats["share"]): ShareSegment[] {
     cards: share[arm].cards,
     men: share[arm].men,
     gold: share[arm].gold,
+    bySpeed: share[arm].bySpeed,
     cardsPct: pct(share[arm].cards, cards),
     menPct: pct(share[arm].men, men),
     goldPct: pct(share[arm].gold, gold),

@@ -17,10 +17,10 @@ describe("speedMix", () => {
 describe("shareSegments", () => {
   it("gives whole percents of cards, men and gold, zero when empty", () => {
     const segs = shareSegments({
-      infantry: { cards: 3, men: 300, gold: 1000 },
-      cavalry: { cards: 1, men: 100, gold: 1000 },
-      artillery: { cards: 0, men: 0, gold: 2000 },
-      staff: { cards: 4, men: 400, gold: 9000 },
+      infantry: { cards: 3, men: 300, gold: 1000, bySpeed: {} },
+      cavalry: { cards: 1, men: 100, gold: 1000, bySpeed: {} },
+      artillery: { cards: 0, men: 0, gold: 2000, bySpeed: {} },
+      staff: { cards: 4, men: 400, gold: 9000, bySpeed: {} },
     });
     // Staff is excluded, from the segments and from the denominator.
     expect(segs.map((s) => s.arm)).toEqual(["infantry", "cavalry", "artillery"]);

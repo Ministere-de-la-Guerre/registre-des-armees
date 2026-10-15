@@ -133,7 +133,9 @@ export function usePickRates(factionKey: string, combineVariants = false): PickR
   );
 
   return {
-    available: PICK_RATES_ENABLED && (!triedIndex || index !== null),
+    // Still true while the index is in flight: going false there unmounted the header
+    // control (and its open panel) the moment the feature was switched on.
+    available: PICK_RATES_ENABLED && (!triedIndex || loading || index !== null),
     show,
     setShow,
     loading,

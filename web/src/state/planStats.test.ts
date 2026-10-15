@@ -71,7 +71,8 @@ describe("planStats", () => {
     expect(s.cavalry.totalCards).toBe(3);
     expect(s.cavalry.totalMen).toBe(181);
     expect(s.combatGens).toBe(1);
-    expect(s.share.staff).toEqual({ cards: 1, men: 16, gold: 200 });
+    expect(s.share.staff).toMatchObject({ cards: 1, men: 16, gold: 200 });
+    expect(s.share.cavalry.bySpeed).toEqual({ C2: 1, C3: 1, C4: 1 });
     // Listed prices; the combat general counts under the cavalry he leads.
     expect(s.share.cavalry.gold).toBe(1700);
     expect(s.share.cavalry.cards).toBe(3);
