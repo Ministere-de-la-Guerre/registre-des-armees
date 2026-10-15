@@ -17,7 +17,7 @@ data/clan_games_replays/<season>/*.replay          (local, not shipped)
   -> python3 tools/analyze_replays.py --replays <dir> --out reports/replay_stats/<season-id>
   -> reports/replay_stats/<season-id>/*.csv          (git-ignored)
   -> python3 tools/build_pick_rates.py --stats reports/replay_stats/<season-id> \
-        --season-id <season-id> --label "<label>" [--recorded YYYY-MM]
+        --season-id <season-id> --label "<label>" --mod-version <vX.Y> [--recorded YYYY-MM]
   -> data/pick_rates/<season-id>.json + index.json   (committed; source of truth)
   -> web/public/data/pick-rates/                     (copied; also by build_web_data.py)
 ```
@@ -38,7 +38,8 @@ python3 tools/analyze_replays.py --replays data/clan_games_replays/season_8 \
     --replays data/clan_games_replays/season_9 --replays data/clan_games_replays/season_10 \
     --out reports/replay_stats/all-seasons
 python3 tools/build_pick_rates.py --stats reports/replay_stats/all-seasons \
-    --season-id all-seasons --label "All seasons" --recorded "<first> – <last>"
+    --season-id all-seasons --label "All seasons" --recorded "<first> – <last>" \
+    --mod-version v9.6
 ```
 
 The id `all-seasons` sorts before `season-*` in `index.json`: it is first in the switcher,
@@ -87,6 +88,10 @@ Booleans are the literal strings `True`/`False`. `battle_id` is the replay file 
 ## Season file (`data/pick_rates/<id>.json`, schemaVersion 3)
 
 - `id`, `label`, `patch` (e.g. `NTW3 1.3.0 (Build 2081)`, or `mixed (n game builds)`)
+- `modVersion` (optional, e.g. `v9.6`): the NTW3 mod release the season was played on,
+  passed as `--mod-version`. Replays carry only the base game's build, which every NTW3
+  release shares, so it cannot be read from them. The index copies it, and the app
+  shows it in place of `patch` when present.
 - `corpus`: `battles`, `armies`, `players` (in-scope only), `recorded`
 - `scope`: `corpsTypes` (`["ac"]`), `note`
 - `unitDataVersion`: unit-DB stamp the corpus was computed against

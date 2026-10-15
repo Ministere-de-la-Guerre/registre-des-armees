@@ -12,7 +12,7 @@ different --season-id. Nothing else changes.
     python3 tools/analyze_replays.py --replays data/clan_games_replays/season_10 \\
         --out reports/replay_stats/season-10
     python3 tools/build_pick_rates.py --stats reports/replay_stats/season-10 \\
-        --season-id season-10 --label "Season 10"
+        --season-id season-10 --label "Season 10" --mod-version v9.6
 
 See docs/PICK_RATES.md for the schema and the absence states this file has to keep
 distinguishable.
@@ -103,7 +103,8 @@ def patch_label(battles: list[dict]) -> str:
     return f"NTW3 {m.group(1)} (Build {m.group(2)})" if m else "unknown"
 
 
-def build_season(season_id: str, label: str, recorded: str, stats: Path = STATS) -> dict:
+def build_season(season_id: str, label: str, recorded: str, stats: Path = STATS,
+                 mod_version: str | None = None) -> dict:
     battles = load("battles.csv", stats)
     armies = load("armies.csv", stats)
     players = load("players.csv", stats)
@@ -218,6 +219,9 @@ def build_season(season_id: str, label: str, recorded: str, stats: Path = STATS)
         "id": season_id,
         "label": label,
         "patch": patch_label(battles),
+        # The NTW3 mod release the season was played on. A replay records only the base
+        # game's build, which every NTW3 release shares, so this has to be supplied.
+        **({"modVersion": mod_version} if mod_version else {}),
         "corpus": {
             "battles": len({r["battle_id"] for r in in_scope_armies}),
             "armies": len(in_scope_armies),
@@ -252,6 +256,7 @@ def write_index(seasons_dir: Path) -> dict:
             "id": data["id"],
             "label": data["label"],
             "patch": data["patch"],
+            **({"modVersion": data["modVersion"]} if data.get("modVersion") else {}),
             "battles": data["corpus"]["battles"],
             "armies": data["corpus"]["armies"],
             "players": data["corpus"]["players"],
@@ -275,6 +280,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--season-id", default="season-10", help="stable id, e.g. season-10")
     ap.add_argument("--label", default="Season 10", help="display label")
+    ap.add_argument("--mod-version", default=None,
+                    help='NTW3 mod release the replays were played on, e.g. "v9.6" (shown in the app)')
     ap.add_argument("--recorded", default="2026-08", help="when the replays were collected")
     ap.add_argument("--stats", default=str(STATS),
                     help="folder of analyzer CSVs for this season (default reports/replay_stats)")
@@ -286,9 +293,16 @@ def main() -> None:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    season = build_season(args.season_id, args.label, args.recorded, Path(args.stats))
-    skipped = season.pop("_skippedOutOfScope")
     path = out_dir / f"{args.season_id}.json"
+    mod_version = args.mod_version
+    if not mod_version and path.exists():
+        # Rebuilding a season (e.g. "All seasons" when one is added) must not silently
+        # drop the release it was played on; keep the previous file's unless told otherwise.
+        mod_version = json.loads(path.read_text(encoding="utf-8")).get("modVersion")
+        if mod_version:
+            print(f"note: no --mod-version given; keeping {mod_version!r} from the existing {path.name}")
+    season = build_season(args.season_id, args.label, args.recorded, Path(args.stats), mod_version)
+    skipped = season.pop("_skippedOutOfScope")
     path.write_text(json.dumps(season, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
     with_data = sum(1 for c in season["corps"].values() if c["n"] > 0)
@@ -296,6 +310,7 @@ def main() -> None:
     reg_rows = sum(len(c.get("regiments", {})) for c in season["corps"].values())
     print(f"{path.name}  {path.stat().st_size / 1024:.0f} KB")
     print(f"  patch          {season['patch']}")
+    print(f"  mod version    {season.get('modVersion', '(not given)')}")
     print(f"  corpus         {season['corpus']['battles']} battles, {season['corpus']['armies']} armies")
     print(f"  corps in scope {len(season['corps'])}  ({with_data} with data, "
           f"{len(season['corps']) - with_data} in scope but never played)")

@@ -55,6 +55,7 @@ function normalizeSummary(raw: unknown): SeasonSummary | null {
     file,
     label: str(raw.label, id),
     patch: str(raw.patch),
+    modVersion: str(raw.modVersion),
     battles: num(raw.battles),
     armies: num(raw.armies),
     players: num(raw.players),
@@ -85,6 +86,10 @@ export async function loadPickRateIndex(): Promise<PickRateIndex | null> {
     return null;
   }
 }
+
+/** What a season was played on, as players name it: the mod release when the index
+ *  records one, else the game build the replays carry. */
+export const seasonVersion = (s: Pick<SeasonSummary, "modVersion" | "patch">): string => s.modVersion || s.patch;
 
 export async function loadPickRateSeason(summary: SeasonSummary): Promise<PickRateSeason | null> {
   try {
