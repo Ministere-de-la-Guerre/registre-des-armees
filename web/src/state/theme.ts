@@ -1,6 +1,6 @@
-// Palette choice. Slate (the original blue look) is the default; "red" is the
+// Palette choice. Red is the default; "slate" (the original blue look) is the
 // opt-in alternative. Slate is the unattributed `:root` in styles.css and red is the
-// `:root[data-theme="red"]` block. The choice lives in
+// `:root[data-theme="red"]` block, so the default has to be applied explicitly. The choice lives in
 // localStorage only: it is a per-device display preference, not part of a build.
 export type ThemeId = "slate" | "red";
 
@@ -44,7 +44,7 @@ export function loadTheme(): ThemeId {
   } catch {
     /* storage blocked: fall through to the default */
   }
-  return "slate";
+  return "red";
 }
 
 function setLink(rel: string, href: string): void {

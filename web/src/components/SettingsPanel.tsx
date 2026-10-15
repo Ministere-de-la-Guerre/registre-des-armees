@@ -40,7 +40,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             ))}
           </div>
           <p className="rot-note">
-            Saved on this device only. The installed-app (home screen) icon is blue whichever palette you pick; the
+            Saved on this device only. The installed-app (home screen) icon is red whichever palette you pick; the
             browser tab icon follows the palette.
           </p>
         </div>

@@ -2,7 +2,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeUnit } from "../../test/factories";
-import { SuggestPanel, regimentShortName } from "./SuggestPanel";
+import { SuggestPanel } from "./SuggestPanel";
+import { regimentShortName } from "./suggestText";
 import type { GeneralSuggestion, Suggestions, UnitSuggestion } from "./suggest";
 
 afterEach(cleanup);
