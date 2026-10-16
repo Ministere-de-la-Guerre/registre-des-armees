@@ -81,7 +81,7 @@ describe("Builder onBuildChange", () => {
     expect(reported.factionKey).toBe(roster.factionKey);
 
     // "Combat generals" is a view setting: it must not look like an edit.
-    fireEvent.click(screen.getByLabelText("Combat generals"));
+    fireEvent.click(screen.getByRole("button", { name: "Combat generals" }));
     expect(onBuildChange).toHaveBeenCalledTimes(1);
 
     // The latest config rides along with the next real edit.

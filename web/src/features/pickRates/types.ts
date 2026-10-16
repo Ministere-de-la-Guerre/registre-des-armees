@@ -6,6 +6,8 @@ export interface SeasonSummary {
   label: string;
   /** Game build the corpus was recorded on, e.g. "NTW3 1.3.0 (Build 2081)". */
   patch: string;
+  /** NTW3 mod release the season was played on, e.g. "v9.6"; empty in older indexes. */
+  modVersion: string;
   battles: number;
   armies: number;
   players: number;

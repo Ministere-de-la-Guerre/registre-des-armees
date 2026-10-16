@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { assetUrl } from "../data/assets";
 import type { FactionRoster, UnitCard } from "../domain/types";
 import {
-  MAX_BUILD_COST,
   MAX_TOTAL_UNIT_CARDS,
   buildRosterTotals,
   groupDiscount,
@@ -39,9 +38,11 @@ import { BuilderGrid, type DivisionGroup, type GroupMeta, type MedallionHandlers
 import { DetailsPanel } from "./DetailsPanel";
 import { PICK_RATES_ENABLED } from "../features/pickRates/flag";
 import { PickRateBar, PickRateChip, PickRateNotice } from "../features/pickRates/PickRateBar";
+import { PickRatesMenu } from "../features/pickRates/PickRatesMenu";
 import { usePickRates } from "../features/pickRates/usePickRates";
 import { chooserRatesFor, suggestedGeneralAction, suggestFor, type GeneralSuggestion, type UnitSuggestion } from "../features/pickRates/suggest";
 import { FilterPanel } from "./FilterPanel";
+import { GoldBreakdown } from "./GoldBreakdown";
 import { Medallion } from "./Medallion";
 import { combatPool, offeredCombatKeys, offeredStaffKeys, rotationApplies, staffPool } from "../state/rotation";
 import { LEGACY_TOW_MAX_SOURCE_CORPS, isCardOverCorpsCeiling, towCorpsCeiling } from "../state/towRoll";
@@ -881,167 +882,141 @@ export function Builder({
   }, [modalOpen, dismissPeek]);
 
   const over = summary.totalCards > MAX_TOTAL_UNIT_CARDS;
-  const overCost = summary.price.finalCost > MAX_BUILD_COST;
 
   return (
     <div className="builder">
-      <div className="corps-header">
-        <button className="btn small" onClick={onBack}>
-          {context?.backLabel ?? "← Corps"}
-        </button>
-        {postFlag && <img className="post-flag" src={assetUrl(postFlag) ?? undefined} alt="" />}
-        <div className="titles">
-          <h2>{roster.armyCorpsName || roster.factionKey}</h2>
-          <div className="sub">
-            {loadedSaved
-              ? `${context ? `${context.label} · ` : ""}${loadedSaved.name}${dirty ? " • unsaved changes" : ""}`
-              : context
-                ? context.label
-                : dirty
-                  ? "Unsaved build"
-                  : "New build"}
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 10, marginLeft: 16 }}>
-          <div className="hstat">
-            <div className="lbl">Cards</div>
-            <div className={`val${over ? " over" : ""}`}>
-              {summary.totalCards}/{MAX_TOTAL_UNIT_CARDS}
+      <div className="builder-head">
+        {/* Row 1: which build this is and how it stands. */}
+        <div className="corps-header">
+          <button className="btn small" onClick={onBack}>
+            {context?.backLabel ?? "← Corps"}
+          </button>
+          {postFlag && <img className="post-flag" src={assetUrl(postFlag) ?? undefined} alt="" />}
+          <div className="titles">
+            <h2 title={roster.armyCorpsName || roster.factionKey}>{roster.armyCorpsName || roster.factionKey}</h2>
+            <div className="sub">
+              {loadedSaved
+                ? `${context ? `${context.label} · ` : ""}${loadedSaved.name}${dirty ? " • unsaved changes" : ""}`
+                : context
+                  ? context.label
+                  : dirty
+                    ? "Unsaved build"
+                    : "New build"}
             </div>
           </div>
-          <div className="hstat">
-            <div className="lbl">Total men</div>
-            <div className="val">{summary.totalMen.toLocaleString()}</div>
-          </div>
-          <div className="hstat" title="Combat generals selected against the corps cap (remaining you can still take)">
-            <div className="lbl">Combat gens</div>
-            <div className={`val${combatGensUsed > combatCap ? " over" : ""}`}>
-              {combatGensUsed}/{combatCap}
-              <span style={{ fontSize: 11, opacity: 0.7 }}> · {Math.max(0, combatCap - combatGensUsed)} left</span>
-            </div>
-          </div>
-          {isTow && towBuild && (
-            <div className="hstat" title="Distinct army corps your selected units draw from. The game rolls only 4 corps together, so a build spanning more can't come from a single roll (still allowed).">
-              <div className="lbl">Corps</div>
-              <div className={`val${towBuild.over ? " over" : ""}`}>
-                {towBuild.count}/{LEGACY_TOW_MAX_SOURCE_CORPS}
+          <span className="spacer" />
+          <div className="hstats">
+            <div className="hstat">
+              <div className="lbl">Cards</div>
+              <div className={`val${over ? " over" : ""}`}>
+                {summary.totalCards}
+                <span className="of">/{MAX_TOTAL_UNIT_CARDS}</span>
               </div>
             </div>
-          )}
-          <div className="hstat" title="Selected unit cards able to form square, out of your total infantry (line, light, grenadiers, militia, irregulars; combat generals leading infantry count; skirmishers excluded)">
-            <div className="lbl">Squares</div>
-            <div className="val">
-              {summary.totalSquares}/{summary.totalInfantry}
+            <div className="hstat">
+              <div className="lbl">Men</div>
+              <div className="val">{summary.totalMen.toLocaleString()}</div>
             </div>
-          </div>
-          <div className="hstat">
-            <div className="lbl">Cost / {MAX_BUILD_COST.toLocaleString()}</div>
-            <div className={`val cost${overCost ? " over" : ""}`}>{summary.price.finalCost.toLocaleString()}</div>
-          </div>
-          <div className="hstat" title="Gold still available before the cost limit">
-            <div className="lbl">Gold left</div>
-            <div className={`val cost${overCost ? " over" : ""}`}>
-              {Math.max(0, MAX_BUILD_COST - summary.price.finalCost).toLocaleString()}
+            <div
+              className="hstat"
+              title={`Combat generals selected against the corps cap (${Math.max(0, combatCap - combatGensUsed)} more you can take)`}
+            >
+              <div className="lbl">Combat gens</div>
+              <div className={`val${combatGensUsed > combatCap ? " over" : ""}`}>
+                {combatGensUsed}
+                <span className="of">/{combatCap}</span>
+              </div>
             </div>
+            {isTow && towBuild && (
+              <div className="hstat" title="Distinct army corps your selected units draw from. The game rolls only 4 corps together, so a build spanning more can't come from a single roll (still allowed).">
+                <div className="lbl">Corps</div>
+                <div className={`val${towBuild.over ? " over" : ""}`}>
+                  {towBuild.count}
+                  <span className="of">/{LEGACY_TOW_MAX_SOURCE_CORPS}</span>
+                </div>
+              </div>
+            )}
+            <div className="hstat" title="Selected unit cards able to form square, out of your total infantry (line, light, grenadiers, militia, irregulars; combat generals leading infantry count; skirmishers excluded)">
+              <div className="lbl">Squares</div>
+              <div className="val">
+                {summary.totalSquares}
+                <span className="of">/{summary.totalInfantry}</span>
+              </div>
+            </div>
+            <GoldBreakdown index={index} build={build} summary={summary} />
           </div>
         </div>
-        <span className="spacer" style={{ flex: 1 }} />
-        <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}>
-          <input
-            type="checkbox"
-            checked={filters.showCombatGenerals}
-            onChange={(e) => setFilters((f) => ({ ...f, showCombatGenerals: e.target.checked }))}
-          />
-          Combat generals
-        </label>
-        {isTow && (
-          <label
-            style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}
-            title="Merge every enabled corps into one: staff, then each brigade type (cavalry, infantry, artillery) pooled across corps and ordered by price"
+
+        {/* Row 2: what you can do with it. Wraps rather than pushing anything off-screen. */}
+        <div className="builder-toolbar">
+          <span className="toolbar-label">Show</span>
+          <button
+            className={`view-chip${filters.showCombatGenerals ? " on" : ""}`}
+            aria-pressed={filters.showCombatGenerals}
+            onClick={() => setFilters((f) => ({ ...f, showCombatGenerals: !f.showCombatGenerals }))}
           >
-            <input
-              type="checkbox"
-              checked={combinedTow && !locating}
+            Combat generals
+          </button>
+          {supportsRotation && (
+            <button
+              className={`view-chip${filters.onlyOfferedNow ? " on" : ""}`}
+              aria-pressed={filters.onlyOfferedNow}
+              title="Show only the combat & staff generals the game offers in this corps right now (your local-time rotation window)"
+              onClick={() => setFilters((f) => ({ ...f, onlyOfferedNow: !f.onlyOfferedNow }))}
+            >
+              Offered now only
+            </button>
+          )}
+          {isTow && (
+            <button
+              className={`view-chip${combinedTow && !locating ? " on" : ""}`}
+              aria-pressed={combinedTow && !locating}
               disabled={locating}
-              onChange={(e) => setCombinedTow(e.target.checked)}
-            />
-            Combine corps
-          </label>
-        )}
-        {supportsRotation && (
-          <label
-            style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}
-            title="Show only the combat & staff generals the game offers in this corps right now (your local-time rotation window)"
-          >
-            <input
-              type="checkbox"
-              checked={filters.onlyOfferedNow}
-              onChange={(e) => setFilters((f) => ({ ...f, onlyOfferedNow: e.target.checked }))}
-            />
-            Offered now
-          </label>
-        )}
-        <button
-          className="btn small"
-          onClick={() => (isTow ? setTowGenerateOpen(true) : setRotationOpen(true))}
-          title={
-            isTow
-              ? "Find the nearest in-game time whose roll lets you recruit the corps & combat generals your build uses"
-              : "When can I recruit each selected combat general? (in-game rotation times)"
-          }
-        >
-          Generate times
-        </button>
-        {isTow && (
+              title="Merge every enabled corps into one: staff, then each brigade type (cavalry, infantry, artillery) pooled across corps and ordered by price"
+              onClick={() => setCombinedTow(!combinedTow)}
+            >
+              Combine corps
+            </button>
+          )}
+          <span className="toolbar-sep" aria-hidden />
           <button
             className="btn small"
-            onClick={() => setTowRollOpen(true)}
-            title="Choose which army corps show in the builder (the game rolls 4 at a time)"
+            onClick={() => (isTow ? setTowGenerateOpen(true) : setRotationOpen(true))}
+            title={
+              isTow
+                ? "Find the nearest in-game time whose roll lets you recruit the corps & combat generals your build uses"
+                : "When can I recruit each selected combat general? (in-game rotation times)"
+            }
           >
-            Corps roll
+            Generate times
           </button>
-        )}
-        {/* Optional feature: absent entirely unless the build set VITE_PICK_RATES=1
-            (the condition folds to a literal, so this is dropped at minify time). */}
-        {PICK_RATES_ENABLED && pickRates.available && (
-          <label
-            style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}
-            title="Show how often real players field each unit, from recorded battle replays"
-          >
-            <input
-              type="checkbox"
-              checked={pickRates.show}
-              onChange={(e) => pickRates.setShow(e.target.checked)}
-            />
-            Pick rates <span className="tag beta">Beta</span>
-          </label>
-        )}
-        {PICK_RATES_ENABLED && pickRates.show && (pickRates.index?.seasons.length ?? 0) > 1 && (
-          <select
-            className="btn small"
-            value={pickRates.seasonId ?? ""}
-            onChange={(e) => pickRates.setSeasonId(e.target.value)}
-            title="Which recorded dataset the pick rates come from"
-          >
-            {pickRates.index!.seasons.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label} — {s.patch}
-              </option>
-            ))}
-          </select>
-        )}
-        <button className="btn small" onClick={() => setFiltersOpen((o) => !o)}>
-          {filtersOpen ? "Hide filters" : "Filters"}
-        </button>
-        <SaveLoadBar
-          roster={roster}
-          current={current}
-          loaded={loadedSaved}
-          dirty={dirty}
-          onLoaded={applyLoaded}
-          onSaved={setLoadedSaved}
-          onMessage={setMessage}
-        />
+          {isTow && (
+            <button
+              className="btn small"
+              onClick={() => setTowRollOpen(true)}
+              title="Choose which army corps show in the builder (the game rolls 4 at a time)"
+            >
+              Corps roll
+            </button>
+          )}
+          {/* Optional feature: absent entirely unless the build set VITE_PICK_RATES=1
+              (the condition folds to a literal, so this is dropped at minify time). */}
+          {PICK_RATES_ENABLED && pickRates.available && <PickRatesMenu pickRates={pickRates} />}
+          <span className="spacer" />
+          <button className={`btn small${filtersOpen ? " on" : ""}`} onClick={() => setFiltersOpen((o) => !o)}>
+            {filtersOpen ? "Hide filters" : "Filters"}
+          </button>
+          <span className="toolbar-sep" aria-hidden />
+          <SaveLoadBar
+            roster={roster}
+            current={current}
+            loaded={loadedSaved}
+            dirty={dirty}
+            onLoaded={applyLoaded}
+            onSaved={setLoadedSaved}
+            onMessage={setMessage}
+          />
+        </div>
       </div>
 
       {/* Build-based warning takes priority over the enabled-set one: it names the
