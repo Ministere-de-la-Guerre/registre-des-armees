@@ -160,6 +160,25 @@ describe("Army Corps optimiser", () => {
     expect(outcome.summary.efficiency).toBeGreaterThan(1);
   });
 
+  it("fails rather than returning an empty build when a solve times out without an incumbent", async () => {
+    const cards = [unit("a", 5000, 1, 1, 2000), unit("b", 5000, 1, 1, 2000), unit("e", 4000, 2, 1, 1000), staff()];
+    const roster = { ...makeRoster(cards), optimiser: PARAMS };
+    const index = indexRoster(roster);
+    const real = await nodeSolver();
+    const zeros = async (lp: string, options?: Parameters<LpSolver>[1]) => {
+      const r = await real(lp, options);
+      return { status: "Time limit reached", columns: Object.fromEntries(Object.keys(r.columns).map((k) => [k, 0])) };
+    };
+    // First solve times out with nothing found.
+    const first = await optimiseBuild(roster, index, emptyBuild(), roster.cards, settings(), zeros);
+    expect(first).toEqual({ ok: false, error: expect.stringContaining("time limit before finding a build") });
+    // Rebate cuts run out, then the no-rebate fallback times out with nothing found.
+    const cutThenTimeOut: LpSolver = async (lp, options) =>
+      lp.includes(" g0") ? { status: "Optimal", columns: { x0: 1, x1: 1, z0: 1, g0: 1 } } : zeros(lp, options);
+    const fallback = await optimiseBuild(roster, index, emptyBuild(), roster.cards, settings(), cutThenTimeOut);
+    expect(fallback).toEqual({ ok: false, error: expect.stringContaining("time limit before finding a build") });
+  });
+
   it("cuts a build whose rebate is not earned, then falls back to one without rebates", async () => {
     const cards = [unit("a", 5000, 1, 1, 2000), unit("b", 5000, 1, 1, 2000), unit("e", 4000, 2, 1, 1000), staff()];
     const real = await nodeSolver();

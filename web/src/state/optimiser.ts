@@ -498,8 +498,29 @@ const STATUS_MESSAGES: Record<string, string> = {
   "Primal infeasible or unbounded": "No legal build fits these settings.",
 };
 
+const TIME_LIMIT_NO_BUILD = "The solver hit its time limit before finding a build — try again, "
+  + "or narrow the search with Only filtered units.";
+
+/** HiGHS reports "Time limit reached" both with an incumbent and without one; without one it still
+ *  returns every column, all at 0 (seen on ntw3_tow_b06_x8_009 at time limits of 0.001 s and 0.05 s).
+ *  So a time-limited solution is usable only if some column is nonzero. */
+function hasIncumbent(columns: Record<string, number>): boolean {
+  return Object.values(columns).some((v) => Math.abs(v) > 1e-6);
+}
+
 function usable(status: string, columns: Record<string, number>): boolean {
-  return status === "Optimal" || (status === "Time limit reached" && Object.keys(columns).length > 0);
+  return status === "Optimal" || (status === "Time limit reached" && hasIncumbent(columns));
+}
+
+function failure(status: string): string {
+  if (status === "Time limit reached") return TIME_LIMIT_NO_BUILD;
+  return STATUS_MESSAGES[status] ?? `The solver stopped: ${status}.`;
+}
+
+/** A decoded build with no cards and no staff general is never a result (10 000 funds always buy
+ *  something); it can only come from a solution without an incumbent. */
+function emptyBuild(build: BuildState): boolean {
+  return build.instances.length === 0 && !build.staffSlotUnitKey;
 }
 
 /** Build the programme, solve it with `solver`, and decode the result. For an Army Corps the
@@ -519,10 +540,9 @@ export async function optimiseBuild(
   const problem = made.problem;
   if (!problem.groups) {
     const solution = await solver(renderOptimiseLp(problem));
-    if (!usable(solution.status, solution.columns)) {
-      return { ok: false, error: STATUS_MESSAGES[solution.status] ?? `The solver stopped: ${solution.status}.` };
-    }
+    if (!usable(solution.status, solution.columns)) return { ok: false, error: failure(solution.status) };
     const { build, summary } = decodeOptimiseSolution(problem, solution.columns, index);
+    if (emptyBuild(build)) return { ok: false, error: TIME_LIMIT_NO_BUILD };
     return { ok: true, build, summary, status: solution.status, cuts: 0 };
   }
 
@@ -535,10 +555,11 @@ export async function optimiseBuild(
   for (;;) {
     const solution = await solver(renderOptimiseLp(problem, cuts), options());
     if (!usable(solution.status, solution.columns)) {
-      if (!cuts.length) return { ok: false, error: STATUS_MESSAGES[solution.status] ?? `The solver stopped: ${solution.status}.` };
+      if (!cuts.length) return { ok: false, error: failure(solution.status) };
       break;                                              // every rebate set left was cut: fall back
     }
     const { build, summary } = decodeOptimiseSolution(problem, solution.columns, index);
+    if (emptyBuild(build)) return { ok: false, error: TIME_LIMIT_NO_BUILD };
     if (acBuildEarnsItsRebates(index, build)) return { ok: true, build, summary, status: solution.status, cuts: cuts.length };
     const cut = rebateCut(problem, solution.columns, cuts.length);
     if (!cut || cuts.length >= MAX_REBATE_CUTS || (Date.now() - started) / 1000 >= OPTIMISE_TIME_BUDGET_S - 1) break;
@@ -549,9 +570,23 @@ export async function optimiseBuild(
   const plain = buildOptimiseProblem(roster, index, current, candidates, settings, { rebates: false });
   if ("error" in plain) return { ok: false, error: plain.error };
   const solution = await solver(renderOptimiseLp(plain.problem), { mipRelGap: options().mipRelGap });
-  if (!usable(solution.status, solution.columns)) {
-    return { ok: false, error: STATUS_MESSAGES[solution.status] ?? `The solver stopped: ${solution.status}.` };
-  }
+  if (!usable(solution.status, solution.columns)) return { ok: false, error: failure(solution.status) };
   const { build, summary } = decodeOptimiseSolution(plain.problem, solution.columns, index);
+  if (emptyBuild(build)) return { ok: false, error: TIME_LIMIT_NO_BUILD };
   return { ok: true, build, summary, status: solution.status, cuts: cuts.length, fallback: "noRebates" };
+}
+
+/** Where an optimiser run started, or where the builder is now. */
+export interface OptimiseRunState {
+  build: BuildState;
+  factionKey: string;
+  token: number;
+}
+
+/** A solve takes seconds; apply its result only if nothing moved meanwhile: the same run is still the
+ *  latest, the builder still shows the same army, and the build is the very one the run started from
+ *  (any edit replaces the BuildState object). Otherwise the result would overwrite the player's edits,
+ *  or land on another roster, and "Undo optimise" would restore a stale build. */
+export function optimiseResultStillApplies(start: OptimiseRunState, now: OptimiseRunState & { mounted: boolean }): boolean {
+  return now.mounted && now.token === start.token && now.factionKey === start.factionKey && now.build === start.build;
 }

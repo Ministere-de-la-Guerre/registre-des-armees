@@ -59,6 +59,7 @@ import {
   type OptimiseSettings,
   type OptimiseSummary,
   optimiseBuild,
+  optimiseResultStillApplies,
 } from "../state/optimiser";
 import { workerSolver } from "../state/solveLp";
 import { SaveLoadBar } from "./SaveLoadBar";
@@ -805,13 +806,32 @@ export function Builder({
   );
   const optimiserFiltersActive = isFilterActive(filters) || filteredCards.length < roster.cards.length;
 
+  // The latest build and army, read after an optimiser solve to tell whether its result still applies.
+  const latestRun = useRef({ build, factionKey: roster.factionKey, token: 0, mounted: true });
+  useEffect(() => {
+    latestRun.current.build = build;
+    latestRun.current.factionKey = roster.factionKey;
+  }, [build, roster.factionKey]);
+  useEffect(() => {
+    const run = latestRun.current;
+    run.mounted = true;
+    return () => {
+      run.mounted = false;
+    };
+  }, []);
+
   const runOptimise = async () => {
     const before = build;
+    const start = { build: before, factionKey: roster.factionKey, token: ++latestRun.current.token };
     setOptimising(true);
     setOptimiseError(null);
     try {
       const candidates = optimiseSettings.useFilters ? filteredCards : roster.cards;
       const outcome = await optimiseBuild(roster, index, before, candidates, optimiseSettings, workerSolver);
+      if (!optimiseResultStillApplies(start, latestRun.current)) {
+        if (latestRun.current.mounted) setMessage("The build changed while the optimiser was running; its result was discarded.");
+        return;
+      }
       if (!outcome.ok) {
         setOptimiseError(outcome.error);
         setOptimiseResult(null);
@@ -829,11 +849,12 @@ export function Builder({
         + `(efficiency ${s.efficiency.toFixed(2)})${outcome.status === "Optimal" ? "" : " — best found within the time limit"}`
         + `${outcome.fallback === "noRebates" ? " — built without formation discounts" : ""}.`);
     } catch (e) {
+      if (!latestRun.current.mounted) return;
       const text = e instanceof Error ? e.message : String(e);
       setOptimiseError(text);
       setMessage(text);
     } finally {
-      setOptimising(false);
+      if (latestRun.current.mounted && latestRun.current.token === start.token) setOptimising(false);
     }
   };
 

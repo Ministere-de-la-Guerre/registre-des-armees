@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import type { OptimiserMode } from "../domain/types";
 import { MAX_TOTAL_UNIT_CARDS } from "../rules/rules";
 import { isTowFactionKey } from "../domain/tow";
@@ -65,11 +65,16 @@ export function OptimiseModal({
   onUndo: () => void;
   onClose: () => void;
 }) {
+  // While a solve runs the modal stays open: closing it would leave the grid editable and the
+  // result would land on top of whatever the player changed meanwhile.
+  const close = useCallback(() => {
+    if (!busy) onClose();
+  }, [busy, onClose]);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [close]);
 
   const set = <K extends keyof OptimiseSettings>(key: K, value: OptimiseSettings[K]) =>
     onSettings({ ...settings, [key]: value });
@@ -79,7 +84,7 @@ export function OptimiseModal({
   const mode = normaliseMode(settings.mode, factionKey);
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={close}>
       <div
         className="modal opt-modal"
         role="dialog"
@@ -96,7 +101,7 @@ export function OptimiseModal({
             </div>
           </div>
           <div style={{ flex: 1 }} />
-          <button className="btn small" onClick={onClose} aria-label="Close optimiser">
+          <button className="btn small" onClick={close} disabled={busy} aria-label="Close optimiser">
             ✕
           </button>
         </div>

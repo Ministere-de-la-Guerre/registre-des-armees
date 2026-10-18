@@ -2,7 +2,10 @@ import type { FactionRoster, OptimiserParams, UnitCard } from "../domain/types";
 import { makeUnit } from "../test/factories";
 import { nodeSolver } from "../test/highs";
 import { type BuildState, emptyBuild, indexRoster, summarize } from "./build";
-import { DEFAULT_OPTIMISE_SETTINGS, type OptimiseSettings, buildOptimiseProblem, optimiseBuild } from "./optimiser";
+import {
+  DEFAULT_OPTIMISE_SETTINGS, type OptimiseSettings, buildOptimiseProblem, optimiseBuild, optimiseResultStillApplies,
+} from "./optimiser";
+import type { LpSolver } from "./solveLp";
 
 const TOW = "ntw3_tow_a01_x8_001";
 const PARAMS: OptimiserParams = {
@@ -128,6 +131,20 @@ describe("optimiseBuild", () => {
     expect(corpsOf(okBuild(await run(r, { singleRoll: false }))).size).toBe(6);
   });
 
+  it("treats a time limit without an incumbent as a failure, not an empty build", async () => {
+    const real = await nodeSolver();
+    const timedOut = (keep: boolean): LpSolver => async (lp, options) => {
+      const r = await real(lp, options);
+      const columns = keep ? r.columns : Object.fromEntries(Object.keys(r.columns).map((k) => [k, 0]));
+      return { status: "Time limit reached", columns };
+    };
+    const index = indexRoster(roster);
+    const none = await optimiseBuild(roster, index, emptyBuild(), roster.cards, DEFAULT_OPTIMISE_SETTINGS, timedOut(false));
+    expect(none).toEqual({ ok: false, error: expect.stringContaining("time limit before finding a build") });
+    const found = await optimiseBuild(roster, index, emptyBuild(), roster.cards, DEFAULT_OPTIMISE_SETTINGS, timedOut(true));
+    expect(found.ok && found.build.instances.length).toBeGreaterThan(0);
+  });
+
   it("explains why no build can be made", async () => {
     const r = await run(roster, {}, emptyBuild(), [line, militia]);
     expect(r.outcome).toEqual({ ok: false, error: expect.stringContaining("No staff general") });
@@ -141,5 +158,17 @@ describe("optimiseBuild", () => {
     const index = indexRoster(roster);
     expect(buildOptimiseProblem(rosterOf(roster.cards, TOW, null), index, emptyBuild(), roster.cards, DEFAULT_OPTIMISE_SETTINGS))
       .toEqual({ error: expect.stringContaining("No optimiser data") });
+  });
+});
+
+describe("optimiseResultStillApplies", () => {
+  const build = emptyBuild();
+  const start = { build, factionKey: "a", token: 3 };
+  it("applies only to the same run, army and build object, while mounted", () => {
+    expect(optimiseResultStillApplies(start, { ...start, mounted: true })).toBe(true);
+    expect(optimiseResultStillApplies(start, { ...start, build: { ...build }, mounted: true })).toBe(false);
+    expect(optimiseResultStillApplies(start, { ...start, factionKey: "b", mounted: true })).toBe(false);
+    expect(optimiseResultStillApplies(start, { ...start, token: 4, mounted: true })).toBe(false);
+    expect(optimiseResultStillApplies(start, { ...start, mounted: false })).toBe(false);
   });
 });
