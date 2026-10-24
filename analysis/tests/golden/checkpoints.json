@@ -1,0 +1,582 @@
+{
+ "ac/v1_s3_artillery_fixed8N.pkl": {
+  "fingerprint": "8385112a39154d240d064f39871ba1a603a8fa489b0e914af7a01d4cb68282c5",
+  "headline": "93.53488901481452",
+  "type": "CVRun"
+ },
+ "ac/v1_s3_artillery_holdout_v0.pkl": {
+  "fingerprint": "dea83fdbcba06578e5fec944d76dff3231558a54e980e2b16b0c529d973d86be",
+  "headline": null,
+  "type": "ndarray"
+ },
+ "ac/v1_s3_artillery_holdout_v4.pkl": {
+  "fingerprint": "ad8d42167e09dca3b82256903574983c77ec35b44b3a76f9a4c6f6e4dac70e98",
+  "headline": null,
+  "type": "ndarray"
+ },
+ "ac/v1_s3_artillery_jfc.pkl": {
+  "fingerprint": "6bae3e88917f51b1720b886518bfbfa649582cbc0df90c04a541aea4d5d55751",
+  "headline": "0.5",
+  "type": "FclassResult"
+ },
+ "ac/v1_s3_artillery_plain.pkl": {
+  "fingerprint": "6e6cec59435d112256b023a8f8f1feb12dc1f1ea1e6ef9655e81cea33fac599d",
+  "headline": "79.47502084899932",
+  "type": "CVRun"
+ },
+ "ac/v1_s3_artillery_slice.pkl": {
+  "fingerprint": "dbc1b2f1d28509d6bf64765450a18f7ef47fd9c4995091429eb0cf0102a6b0f7",
+  "headline": null,
+  "type": "Slice"
+ },
+ "ac/v1_s3_artillery_transfer.pkl": {
+  "fingerprint": "61d0197f51edef7981ca0e3f91eb1778ee09c0852e0f177fd2de21bf486fc837",
+  "headline": null,
+  "type": "ndarray"
+ },
+ "ac/v1_s3_artillery_v0.pkl": {
+  "fingerprint": "0e1a3db306cb5021016350f6bbbaa31ded1ddbc25867303d3811b4a098d7ff7a",
+  "headline": "57.90772832603894",
+  "type": "tuple"
+ },
+ "ac/v1_s3_artillery_v0p.pkl": {
+  "fingerprint": "50a999740ba0e29906c3d295e46d41c8f2c67a8061ed402dd56cbf7e889ba813",
+  "headline": "55.59526566059213",
+  "type": "tuple"
+ },
+ "ac/v1_s3_artillery_v4.pkl": {
+  "fingerprint": "13456701d6285fb5ce166560e820ba446bbb9840dd86dfe75bf35180a625e255",
+  "headline": "51.253515399751734",
+  "type": "tuple"
+ },
+ "ac/v1_s500_artillery_fixed8N.pkl": {
+  "fingerprint": "c31dc032323665d09b30a8b802d35cedcba36145fe5902fe69c68f6d2a63f05e",
+  "headline": "92.97731955263143",
+  "type": "CVRun"
+ },
+ "ac/v1_s500_artillery_holdout_v0.pkl": {
+  "fingerprint": "62ce236db4417916d8231a5520167944251bd8a39344aa7f09c3100f1888c452",
+  "headline": null,
+  "type": "ndarray"
+ },
+ "ac/v1_s500_artillery_holdout_v4.pkl": {
+  "fingerprint": "59843eb07a7ebf382d5b10962077d0723253af07463275c9261136fe2d7b772d",
+  "headline": null,
+  "type": "ndarray"
+ },
+ "ac/v1_s500_artillery_jfc.pkl": {
+  "fingerprint": "f6a682da722e9d073e392db7637f3de7978584495ec003ff0b0a20ca46747247",
+  "headline": "0.2",
+  "type": "FclassResult"
+ },
+ "ac/v1_s500_artillery_plain.pkl": {
+  "fingerprint": "7d7edb2e36d763e11040ad980cd4b2feb1438b25141f044a9595614ea5e1f561",
+  "headline": "79.49939780880754",
+  "type": "CVRun"
+ },
+ "ac/v1_s500_artillery_slice.pkl": {
+  "fingerprint": "c56d85a377225352c03cdf90799ffba322928b4dbcb684dfa53e6454d60c98af",
+  "headline": null,
+  "type": "Slice"
+ },
+ "ac/v1_s500_artillery_transfer.pkl": {
+  "fingerprint": "f55ecee37583f4be6c76582bcdff50fe754179b6106866bb2aa80ded69dcc8d8",
+  "headline": null,
+  "type": "ndarray"
+ },
+ "ac/v1_s500_artillery_v0.pkl": {
+  "fingerprint": "6f2344ff3ae626ae151d305446418d3a9c8bc7ca9a3b0c00d0ef1acd3a9a754c",
+  "headline": "57.97568049317185",
+  "type": "tuple"
+ },
+ "ac/v1_s500_artillery_v0p.pkl": {
+  "fingerprint": "5151b4976b3c31f6d346986942113fdc6073b354fe4cf3a5f4130741a5d0f9e4",
+  "headline": "55.871046861845414",
+  "type": "tuple"
+ },
+ "ac/v1_s500_artillery_v4.pkl": {
+  "fingerprint": "82548e77ae3782fef58c9372e77400910bc31897b30af28a084ca2848b2def9b",
+  "headline": "51.78040778667207",
+  "type": "tuple"
+ },
+ "ac/v1_s500_cavalry_fixed8N.pkl": {
+  "fingerprint": "652c7e128f02072f40615af3d72012444769962ee998a1be64ec21a9bac662a1",
+  "headline": "84.05389067136112",
+  "type": "CVRun"
+ },
+ "ac/v1_s500_cavalry_holdout_v0.pkl": {
+  "fingerprint": "88862f6b71ae4cc1daa3f1d9a88619a7fce443b65899bc14b935ec0f18691480",
+  "headline": null,
+  "type": "ndarray"
+ },
+ "ac/v1_s500_cavalry_holdout_v4.pkl": {
+  "fingerprint": "78761ca488c7473aee355b7c9bec38594c574f68db9d3bb4db9ed295133bda65",
+  "headline": null,
+  "type": "ndarray"
+ },
+ "ac/v1_s500_cavalry_jfc.pkl": {
+  "fingerprint": "840fc93566fe931d2643ab9cfbb944c0d1437e8a9d8d9b6e7eb6ecd48d585cdc",
+  "headline": "0.2",
+  "type": "FclassResult"
+ },
+ "ac/v1_s500_cavalry_plain.pkl": {
+  "fingerprint": "a00baca1bb20149fce32375f4b749242fe90340ac904e622bf8ef3d900589b32",
+  "headline": "81.35023099631337",
+  "type": "CVRun"
+ },
+ "ac/v1_s500_cavalry_slice.pkl": {
+  "fingerprint": "144b472afe582981bbdd460326bf64754f7a4ee5b3d23a647884dc20db1714c6",
+  "headline": null,
+  "type": "Slice"
+ },
+ "ac/v1_s500_cavalry_transfer.pkl": {
+  "fingerprint": "be1c8d2cc59ac781185a47ac9b26f36a32585cd8f0845034b00f2d6b7892d7f1",
+  "headline": null,
+  "type": "ndarray"
+ },
+ "ac/v1_s500_cavalry_v0.pkl": {
+  "fingerprint": "e9f7261af778e32f296b47340f660e60aa075cc6e4d3070647f28bbc497bbb9a",
+  "headline": "43.27060992332468",
+  "type": "tuple"
+ },
+ "ac/v1_s500_cavalry_v0p.pkl": {
+  "fingerprint": "30ecf10426351272eeea9d166c2644480f2b34b9366554091c6641c227d7d806",
+  "headline": "43.13550115237006",
+  "type": "tuple"
+ },
+ "ac/v1_s500_cavalry_v4.pkl": {
+  "fingerprint": "c16b182c69c2ea86639e5a52fce3be8f4ce80500d0dba11da02853fc004c4740",
+  "headline": "42.37022878802384",
+  "type": "tuple"
+ },
+ "ac/v1_s500_infantry_fixed8N.pkl": {
+  "fingerprint": "415eed95a36b2f434c4a989fed09d20ac0933883cb3874aa33fee3ecaca5cb1e",
+  "headline": "40.18873938034732",
+  "type": "CVRun"
+ },
+ "ac/v1_s500_infantry_holdout_v0.pkl": {
+  "fingerprint": "97d1ba847e8936194d7204c9d48b38be3cb156f1fb9584b8748ee22a80f87752",
+  "headline": null,
+  "type": "ndarray"
+ },
+ "ac/v1_s500_infantry_holdout_v4.pkl": {
+  "fingerprint": "c95e13059b585ae0a8d743c884fd7aa8f31c2ad3e11f1ba539cc2cc1cb29af8a",
+  "headline": null,
+  "type": "ndarray"
+ },
+ "ac/v1_s500_infantry_jfc.pkl": {
+  "fingerprint": "e0b4dcd3a39b35ff0b8997925e99276a23a32b80f76fc8120c5c279ec94f4063",
+  "headline": "0.5",
+  "type": "FclassResult"
+ },
+ "ac/v1_s500_infantry_plain.pkl": {
+  "fingerprint": "fd688a09eee4c8bd891742645754b8428dae38379e943ad07aef7627357e341e",
+  "headline": "38.51189997452309",
+  "type": "CVRun"
+ },
+ "ac/v1_s500_infantry_slice.pkl": {
+  "fingerprint": "838310bffe1dda77f68c0c164dae15e6a93109d5f13f39dec53cb206c6e60081",
+  "headline": null,
+  "type": "Slice"
+ },
+ "ac/v1_s500_infantry_transfer.pkl": {
+  "fingerprint": "e231f43a0599c1e0be921e8b38b8374183e2555d24d4b47d79890d4458d006f7",
+  "headline": null,
+  "type": "ndarray"
+ },
+ "ac/v1_s500_infantry_v0.pkl": {
+  "fingerprint": "73e9dbaae8982f9776b2fd6bba593568f9d0d7d78c8bcfc7dbd7c0e6bcd31f54",
+  "headline": "29.646260682530233",
+  "type": "tuple"
+ },
+ "ac/v1_s500_infantry_v0p.pkl": {
+  "fingerprint": "9473ffd12e205feb46e75988cfbe0d370f1188e66547fa9b54b4b0a17350e876",
+  "headline": "30.1269410385835",
+  "type": "tuple"
+ },
+ "ac/v1_s500_infantry_v4.pkl": {
+  "fingerprint": "8c92709b9001ee2def0409904d7f8237168c64694c8be9f8e2e73d9b540e7848",
+  "headline": "28.09916677404895",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_artillery_F0.pkl": {
+  "fingerprint": "f2988281112d92c77d610fbf2ce0213ce2fc9026d412dadc70c20f4a8f437472",
+  "headline": "57.97568049317185",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_artillery_F1.pkl": {
+  "fingerprint": "fa5a47140601a147fb46f51c111e2339b78e7a8dfbd23aae9d7fb4a93ec9146f",
+  "headline": "55.871046861845414",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_artillery_F2.pkl": {
+  "fingerprint": "c5b64bffd0eddf30c8f2819d9f0393a091eba0896da76a1bdb308d3357cb4931",
+  "headline": "48.581324465947525",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_artillery_F3.pkl": {
+  "fingerprint": "ce1189d86bfa26c121518334a58a78173343c676752b2bd598b52a96b16d26ea",
+  "headline": "57.64313916108769",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_artillery_F4.pkl": {
+  "fingerprint": "592ca68485dfd2ea6d98ad50d29febec0b6b4489c2855ee1e5fc8fbd4c80a8fe",
+  "headline": "59.23070006488515",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_artillery_F5.pkl": {
+  "fingerprint": "6cf062d64e1e53567550a91044d193964868968a63dbc9befe2afa88345079f6",
+  "headline": "48.02290754630586",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_artillery_F6.pkl": {
+  "fingerprint": "62fee0780de9aea0774a96430881946f19545c3736905a0d40cd77effb6bf7dd",
+  "headline": "44.837135405096305",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_cavalry_F0.pkl": {
+  "fingerprint": "a518b058e55b52d2d015cf96fbe5e0ae951729702adf394c14ffe7583add081e",
+  "headline": "43.27060992332468",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_cavalry_F1.pkl": {
+  "fingerprint": "a11434e7e97cc1846c32556b978c1c9298bcb5d50df6768d74a3eb589f86b40b",
+  "headline": "43.13550115237006",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_cavalry_F2.pkl": {
+  "fingerprint": "f59e03e9871af54b58c95a480adb8122ba2ab709e2ef6acb14509b6f2a32f126",
+  "headline": "41.028824772700695",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_cavalry_F3.pkl": {
+  "fingerprint": "6996ee22092ca5d4088f2fe005aaa8d1c6d2a7bc699ba584a2703e7e2d223b91",
+  "headline": "43.540246246705195",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_cavalry_F4.pkl": {
+  "fingerprint": "4d50acc9d9567c5eafa291c3e9683189033fb8e4965848ca442f9228c9217594",
+  "headline": "43.27060992332468",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_cavalry_F5.pkl": {
+  "fingerprint": "561752b56472a915cdc97212b616cb89df86287df2dea2be0419c5465c2d3326",
+  "headline": "41.056896084708605",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_cavalry_F6.pkl": {
+  "fingerprint": "7b83a1aa2896c438f0500e67bd6e58b4c7312f1f5ae59b4d133a2053b57e4c3f",
+  "headline": "41.02924774330701",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_infantry_F0.pkl": {
+  "fingerprint": "cdf57130b34966619dd69d98bcf3f21f035da1d83fa9356abc5ecbc00845f96e",
+  "headline": "29.646260682530233",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_infantry_F1.pkl": {
+  "fingerprint": "c7de3b99dfc802d6920eeab8efe0ca78f412811843246637131ddc692d683d4d",
+  "headline": "30.1269410385835",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_infantry_F2.pkl": {
+  "fingerprint": "739e367bba5384e3141ef29b0e571a5bc4f6b2f2dc749073ae212dd7519b4bcc",
+  "headline": "25.547589053642497",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_infantry_F3.pkl": {
+  "fingerprint": "c4c3810614bfdba0335dcc0349decd1cc88b1ebf6947e59c3c0acc87323440d1",
+  "headline": "27.459977070539065",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_infantry_F4.pkl": {
+  "fingerprint": "ab7c0e048f4eb7a741d01f6636093ee60ae54283344565ce626f0b5caeab12e5",
+  "headline": "30.225094659957232",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_infantry_F5.pkl": {
+  "fingerprint": "2d8cb3869a3f84bedb580d46e68e8ebf78168247183f3d29a59ce844f14364fb",
+  "headline": "25.809353807239063",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_ac_infantry_F6.pkl": {
+  "fingerprint": "a9db90a37d091094589b422e24d7133667f415077e73ffa17657b13f04bbc49a",
+  "headline": "25.20552539498197",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_artillery_F0.pkl": {
+  "fingerprint": "df0ab6c5d4d3e725d4762c9c0d1c31d14a4ddb19b1697e21afcf6f3063bcc885",
+  "headline": "32.35895634024193",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_artillery_F1.pkl": {
+  "fingerprint": "59fdbdcfd9a4f4d8a828c7999dd0648449647201c9e597bf045e32c63ed744f1",
+  "headline": "30.9012902579798",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_artillery_F2.pkl": {
+  "fingerprint": "9a3f00de71003351787c9e425c908a91afc7c7f0c7156f5bc599824c422ef170",
+  "headline": "26.657683565968377",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_artillery_F3.pkl": {
+  "fingerprint": "2190a178d549e1948d387680c73b9576b2a9656db7788f1b63e992d40c7b3d07",
+  "headline": "30.80969003768135",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_artillery_F4.pkl": {
+  "fingerprint": "f42770860ae9bb2ea592c6590d4157fdfc2bb86ca9dca05784dc04df4d695e84",
+  "headline": "32.559473095972606",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_artillery_F5.pkl": {
+  "fingerprint": "f96d929dcf4a8667da47be8ec966e7f688636cbf377b21ad184ea3a6032b2ab5",
+  "headline": "27.24517655621251",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_artillery_F6.pkl": {
+  "fingerprint": "ea228d1840a23b3289b72cac3283eefbea47737a12897e9fed8a0b4affe179d3",
+  "headline": "25.743593686177224",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_cavalry_F0.pkl": {
+  "fingerprint": "32e55213ea99f656124383cb0398b52a5cd7147a5668efcfbdda397d09131371",
+  "headline": "34.714455791854945",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_cavalry_F1.pkl": {
+  "fingerprint": "035b466d087811fa0f406c318262157d37d682e17ad7c5a739d7d8f46f39a7fe",
+  "headline": "34.5924168951386",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_cavalry_F2.pkl": {
+  "fingerprint": "7446143c740293718e131d35e0d42552f661a676b0a3722a7200063aabd26250",
+  "headline": "33.199464003766366",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_cavalry_F3.pkl": {
+  "fingerprint": "11484d66e2c9a32d0db19ee70df821e3aa03473dfa1e2341fb68bc7420c2f48a",
+  "headline": "34.62857870372299",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_cavalry_F4.pkl": {
+  "fingerprint": "d147143f43b0b902b60325faa83b27479dde6dc95ce18b6dd1bf33c290c9a2db",
+  "headline": "34.714455791854945",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_cavalry_F5.pkl": {
+  "fingerprint": "b21be59055af41c3722aef6f4b8e819f93767bcf8b368481db8450a990744535",
+  "headline": "32.530518855696016",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_cavalry_F6.pkl": {
+  "fingerprint": "1c60bf6ae4f8fe22e34e8ef4ff58f49c6dd7c73b1585cbf0a660dd450087e1be",
+  "headline": "31.380442731129637",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_infantry_F0.pkl": {
+  "fingerprint": "cb9d738088444f2e617a6d29799e196690bc12d63181ba9bc9477dd3f157fd75",
+  "headline": "27.379072125285443",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_infantry_F1.pkl": {
+  "fingerprint": "2cac7d564f4f8410cec95a7afd5754a031e1f52ac08624500cb92d5e9e4d9c1e",
+  "headline": "27.509870459895428",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_infantry_F2.pkl": {
+  "fingerprint": "61b35d371561338757c1479f4ab4fd864fa20dc6c07d8b9f861cf162cf62d35b",
+  "headline": "22.59550480639364",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_infantry_F3.pkl": {
+  "fingerprint": "fda99b5db039c801b285499257c7b08e5272aae82bb65aff301541dc8c44f713",
+  "headline": "25.679584667067065",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_infantry_F4.pkl": {
+  "fingerprint": "81539b4fdcef84d0ce27973bbed39c9036312eade0d98ce27f877a5826387fa6",
+  "headline": "27.316058412519133",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_infantry_F5.pkl": {
+  "fingerprint": "bce77137cd5bf6fc7439994f6044f68f223c12ccba963c5998deeef16aab6816",
+  "headline": "22.423203714026037",
+  "type": "tuple"
+ },
+ "ac/v1_s500_size_tow_infantry_F6.pkl": {
+  "fingerprint": "067eb0f7eeeefdeda111f00611eaf9217ce32aa35886885ce0835865f541e7b7",
+  "headline": "22.037965799002347",
+  "type": "tuple"
+ },
+ "ac/v1_s500_staff_slice.pkl": {
+  "fingerprint": "dffe023991c17eaf7a8dbf05ca3d6d79fc229192f4e42be4b3d3b82d7335b839",
+  "headline": null,
+  "type": "StaffSlice"
+ },
+ "ac/v1_s500_tow_artillery_slice.pkl": {
+  "fingerprint": "4e2d1c4276b8019d533f886e023a03c265bdd1d63453b3892bc18f6f7fbb08a7",
+  "headline": null,
+  "type": "Slice"
+ },
+ "ac/v1_s500_tow_cavalry_slice.pkl": {
+  "fingerprint": "a747c22719a338a8bbb544ec3fc97327cecf7eec9bc0c3b2589329b507611a59",
+  "headline": null,
+  "type": "Slice"
+ },
+ "ac/v1_s500_tow_infantry_slice.pkl": {
+  "fingerprint": "456300f2fadf2f492611b20b98eac015d46ed008bb55ff37293540e12de918d1",
+  "headline": null,
+  "type": "Slice"
+ },
+ "class_structure/v2_artillery_V0.pkl": {
+  "fingerprint": "1700adf273f54e063ee4bbfee7c15cb4b796a354f875b7a3da9834af1c9c7671",
+  "headline": "32.35895634024193",
+  "type": "tuple"
+ },
+ "class_structure/v2_artillery_V1.pkl": {
+  "fingerprint": "383f3b65ba348fa5d62fdab17aa0e29bbf3e6e925503ed6184646ebdca206cf1",
+  "headline": "32.256355615569014",
+  "type": "tuple"
+ },
+ "class_structure/v2_artillery_V2.pkl": {
+  "fingerprint": "be8710307ef089aee46f13ef304e6dd075649b791c94f73ab8773ba3d3c9b68a",
+  "headline": "30.95071207025456",
+  "type": "tuple"
+ },
+ "class_structure/v2_artillery_V3.pkl": {
+  "fingerprint": "62162e7355eb733e8c9fabfeda16c21c106333b46ec24753b6190c03f4c40b7b",
+  "headline": "29.667385579717426",
+  "type": "tuple"
+ },
+ "class_structure/v2_artillery_V4.pkl": {
+  "fingerprint": "f3044e77bfdda660668f15f3873b1da822b5ab32c07eefe2a6a32022b8c93b8e",
+  "headline": "27.152592835598835",
+  "type": "tuple"
+ },
+ "class_structure/v2_artillery_kappa.pkl": {
+  "fingerprint": "c5f1a41155df1b2f7c1a1960a7dd5ddee868a053fbf1b09263ad6c09da7ee713",
+  "headline": "0.5",
+  "type": "float"
+ },
+ "class_structure/v2_cavalry_V0.pkl": {
+  "fingerprint": "603ce5e54639741ce20481c1dab5a36007c04085a08c1a0c1c33eb2ee321f5d4",
+  "headline": "34.714455791854945",
+  "type": "tuple"
+ },
+ "class_structure/v2_cavalry_V1.pkl": {
+  "fingerprint": "4d7e897b8df2b634dd2fae7308ed5101ea52171a219f6c0f79d2cbc12b05938d",
+  "headline": "33.5467002282427",
+  "type": "tuple"
+ },
+ "class_structure/v2_cavalry_V2.pkl": {
+  "fingerprint": "6fbb3b18a33528401cafa7623cf9b6ac06850c7034deb48e8b0a63d7f8c7bba0",
+  "headline": "33.033948263475324",
+  "type": "tuple"
+ },
+ "class_structure/v2_cavalry_V3.pkl": {
+  "fingerprint": "694835d2aa31ad98776cc579ec9fe7905ad04e69c71977adbd1fda0097d702c1",
+  "headline": "33.25859589324298",
+  "type": "tuple"
+ },
+ "class_structure/v2_cavalry_V4.pkl": {
+  "fingerprint": "0ffe7449298d169dd36c752a4be36723b16c184ebc940e70724bce71be19a3f6",
+  "headline": "32.767219503635054",
+  "type": "tuple"
+ },
+ "class_structure/v2_cavalry_kappa.pkl": {
+  "fingerprint": "d365942b08719418a2f9543df9d8d493019705c28ad4cf0cedd5321c026a0d46",
+  "headline": "1.0",
+  "type": "float"
+ },
+ "class_structure/v2_infantry_V0.pkl": {
+  "fingerprint": "912a35b378c5ed3290e73678f092471acc3b32fb6291785bd47edc8a5fff9057",
+  "headline": "27.379072125285443",
+  "type": "tuple"
+ },
+ "class_structure/v2_infantry_V1.pkl": {
+  "fingerprint": "bee874de13eaea255ea33f34bce3c42c9225ad9cdc5154309aefd135dd663865",
+  "headline": "27.315700401675365",
+  "type": "tuple"
+ },
+ "class_structure/v2_infantry_V2.pkl": {
+  "fingerprint": "91fc557117ea9bdb20c840969d75c9a0a841af9a5495306a4e53420ae23781c0",
+  "headline": "26.8141694758739",
+  "type": "tuple"
+ },
+ "class_structure/v2_infantry_V3.pkl": {
+  "fingerprint": "8e8a74e5a5c8dfbebb50628c29188e6abba3a81c6067d49655ff61ca73e5974e",
+  "headline": "25.47192786628726",
+  "type": "tuple"
+ },
+ "class_structure/v2_infantry_V4.pkl": {
+  "fingerprint": "26c9213d1c534db4294e2e7f5bcfaba4f6811cfa34cf1ec95a5888b5f7ef1d3e",
+  "headline": "24.91568506362672",
+  "type": "tuple"
+ },
+ "class_structure/v2_infantry_kappa.pkl": {
+  "fingerprint": "d365942b08719418a2f9543df9d8d493019705c28ad4cf0cedd5321c026a0d46",
+  "headline": "1.0",
+  "type": "float"
+ },
+ "teams/sb_ac_artillery.pkl": {
+  "fingerprint": "62fee0780de9aea0774a96430881946f19545c3736905a0d40cd77effb6bf7dd",
+  "headline": "44.837135405096305",
+  "type": "tuple"
+ },
+ "teams/sb_ac_cavalry.pkl": {
+  "fingerprint": "7c89a1a942eb4fe8ca68693ef7e0442a96f1d2eeb9a0496aef6362875f2aa758",
+  "headline": "41.02924774330701",
+  "type": "tuple"
+ },
+ "teams/sb_ac_infantry.pkl": {
+  "fingerprint": "86bd025c990d9d5bb742bde5050b0333ca5c3a545566ae9d1c00fa6cfeafd2b5",
+  "headline": "25.545189783562932",
+  "type": "tuple"
+ },
+ "teams/sb_tow_artillery.pkl": {
+  "fingerprint": "ea228d1840a23b3289b72cac3283eefbea47737a12897e9fed8a0b4affe179d3",
+  "headline": "25.743593686177224",
+  "type": "tuple"
+ },
+ "teams/sb_tow_cavalry.pkl": {
+  "fingerprint": "8cad257c9a4d91f7e354f565769da47ab58f870adfa051611f40b7f4f466ce10",
+  "headline": "31.380442731129637",
+  "type": "tuple"
+ },
+ "teams/sb_tow_infantry.pkl": {
+  "fingerprint": "debebec4c2f2602598e72343be8968f2dd8a1e810d8da42273cbcb1c4b88a137",
+  "headline": "22.379843691121103",
+  "type": "tuple"
+ },
+ "teams/tow_builds_full.pkl": {
+  "fingerprint": "7bc916a844285859ddaf6ba035423c1ae554f2151d35eddf56fe2acb91e74ea6",
+  "headline": null,
+  "type": "dict"
+ },
+ "teams/tow_builds_noise.pkl": {
+  "fingerprint": "8730ea40f6684303802ea085334a795f0f79784db542da726c95bb9b976895c8",
+  "headline": null,
+  "type": "dict"
+ },
+ "teams/tow_builds_sb.pkl": {
+  "fingerprint": "12c152dac112adac63157d7172c3757264f5b20498d7aa62f58c58bd197e1f02",
+  "headline": null,
+  "type": "dict"
+ },
+ "teams/tow_builds_v2_full.pkl": {
+  "fingerprint": "a54562a3ae7dcc6d2d0ec4e139347f0713eb0bc795092c7919b5d445f1f98bec",
+  "headline": null,
+  "type": "dict"
+ },
+ "teams/tow_builds_v2_noise.pkl": {
+  "fingerprint": "bf3b2b0f56bc6ea14a05d93ca96825afeac884273812e334a9a22c7a70a7168f",
+  "headline": null,
+  "type": "dict"
+ },
+ "teams/tow_builds_v2_sb.pkl": {
+  "fingerprint": "ae6b61af2014ca49a06658a3bdad8b57a0b3d6c4ce2c37b5f0b3294456884718",
+  "headline": null,
+  "type": "dict"
+ }
+}
