@@ -12,6 +12,7 @@ import {
   shortLabel,
   tierOf,
 } from "./pickRates";
+import { seasonVersion } from "./load";
 import type { CorpsPickRates, PickRateSeason, SeasonSummary, UnitPickRate } from "./types";
 
 export function PickRateBar({
@@ -89,7 +90,7 @@ export function PickRateChip({
         : buildsLabel(corps.n);
 
   return (
-    <span className={`pr-chip ${tone}`} title={summary ? `${summary.label} · ${summary.patch} · recorded ${summary.recorded}` : undefined}>
+    <span className={`pr-chip ${tone}`} title={summary ? `${summary.label} · ${seasonVersion(summary)} · recorded ${summary.recorded}` : undefined}>
       <span className="pr-dot" aria-hidden />
       <b>{headline}</b>
       {corps.kind === "data" && <span className="pr-conf"> · {CONFIDENCE_LABEL[tone]}</span>}

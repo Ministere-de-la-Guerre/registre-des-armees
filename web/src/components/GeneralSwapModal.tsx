@@ -3,6 +3,8 @@ import { assetUrl } from "../data/assets";
 import { classLabel } from "../domain/labels";
 import type { UnitCard } from "../domain/types";
 import type { GeneralSwap, SwapOption } from "../state/build";
+import { PICK_RATES_ENABLED } from "../features/pickRates/flag";
+import type { ChooserRateRow, ChooserRates } from "../features/pickRates/suggest";
 import { Medallion } from "./Medallion";
 
 /** Choose which combat general leads one selected copy of a unit — or send it back to
@@ -16,12 +18,15 @@ export function GeneralSwapModal({
   swap,
   combatCap,
   combatGensUsed,
+  rates,
   onPick,
   onClose,
 }: {
   swap: GeneralSwap;
   combatCap: number;
   combatGensUsed: number;
+  /** Pick-rate numbers for this regiment (features/pickRates); absent = nothing extra. */
+  rates?: ChooserRates | null;
   onPick: (unitKey: string) => void;
   onClose: () => void;
 }) {
@@ -63,10 +68,30 @@ export function GeneralSwapModal({
             A combat general takes this unit’s slot rather than a new one — the same regiment, now led into
             battle by an officer. Pick one, or put the plain unit back.
           </p>
+          {PICK_RATES_ENABLED && rates && (
+            <p className="sg-legend">
+              <span className="sg-dot all" /> gold = all builds · <span className="sg-dot like" /> azure = builds
+              most like yours
+            </p>
+          )}
           <div className="swap-list">
-            {swap.plain && <SwapRow option={swap.plain} plain onPick={onPick} />}
+            {swap.plain && (
+              <SwapRow
+                option={swap.plain}
+                plain
+                onPick={onPick}
+                rates={rates ?? undefined}
+                row={rates?.plain}
+              />
+            )}
             {swap.generals.map((option) => (
-              <SwapRow key={option.card.unitKey} option={option} onPick={onPick} />
+              <SwapRow
+                key={option.card.unitKey}
+                option={option}
+                onPick={onPick}
+                rates={rates ?? undefined}
+                row={rates?.generals[option.card.unitKey]}
+              />
             ))}
           </div>
         </div>
@@ -79,10 +104,14 @@ function SwapRow({
   option,
   plain = false,
   onPick,
+  rates,
+  row,
 }: {
   option: SwapOption;
   plain?: boolean;
   onPick: (unitKey: string) => void;
+  rates?: ChooserRates;
+  row?: ChooserRateRow;
 }) {
   const { card, current, costDelta, blockedReason, overBudget } = option;
   const delta =
@@ -95,7 +124,9 @@ function SwapRow({
   return (
     <button
       type="button"
-      className={`swap-row${current ? " current" : ""}${blockedReason ? " blocked" : ""}`}
+      className={`swap-row${current ? " current" : ""}${blockedReason ? " blocked" : ""}${
+        PICK_RATES_ENABLED && rates && row ? " sg-rated" : ""
+      }`}
       disabled={current || blockedReason !== null}
       onClick={() => onPick(card.unitKey)}
     >
@@ -107,6 +138,7 @@ function SwapRow({
             ? "The regiment on its own, as you first selected it."
             : `${card.commandStars ? `★${card.commandStars} command · ` : ""}${card.finalMen ?? "—"} men`}
         </span>
+        {PICK_RATES_ENABLED && rates && row && <RateBars rates={rates} row={row} plain={plain} />}
         {blockedReason && <span className="swap-block">{blockedReason}</span>}
       </span>
       <span className="swap-cost">
@@ -116,6 +148,40 @@ function SwapRow({
         </span>
       </span>
     </button>
+  );
+}
+
+/** The two thin bars under a row's sub-line: all recorded builds (gold) and the builds
+ *  most like the player's (azure). Texts are fixed wording, see docs/PICK_RATES.md. */
+function RateBars({ rates, row, plain }: { rates: ChooserRates; row: ChooserRateRow; plain: boolean }) {
+  const { regB, M } = rates;
+  const pct = (n: number, d: number) => `${d > 0 ? Math.min(100, (100 * n) / d).toFixed(1) : 0}%`;
+  const allText = plain
+    ? `No general in ${row.all.toLocaleString()} of ${regB.toLocaleString()} builds with this regiment`
+    : `Picked in ${row.all.toLocaleString()} of ${regB.toLocaleString()} builds with this regiment`;
+  return (
+    <span className="sg-rates">
+      <span className="sg-rate-label">All builds</span>
+      <span className="sg-rate-line">
+        <span className="sg-rate-track gold">
+          <span style={{ width: pct(row.all, regB) }} />
+        </span>
+        <span className="sg-rate-text">{allText}</span>
+      </span>
+      {row.like !== null && M !== null && M > 0 && (
+        <>
+          <span className="sg-rate-label">Like yours</span>
+          <span className="sg-rate-line">
+            <span className="sg-rate-track azure">
+              <span style={{ width: pct(row.like, M) }} />
+            </span>
+            <span className="sg-rate-text">
+              {row.like} of {M} similar builds
+            </span>
+          </span>
+        </>
+      )}
+    </span>
   );
 }
 

@@ -203,7 +203,7 @@ function AppBody() {
               onClick={() => setScreen("planner")}
               title="Plan up to four armies as a team"
             >
-              ⚑ Ordre de Bataille <span className="tag beta">Beta</span>
+              ⚑ Ordre de Bataille
             </button>
             <button
               className="btn ghost small"

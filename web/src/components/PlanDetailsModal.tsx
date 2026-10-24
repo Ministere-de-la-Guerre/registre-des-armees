@@ -61,8 +61,9 @@ function ClassSection<K extends string>({
 }
 
 /** The team's breakdowns, behind the strip's Details button. Every row also shows its
- *  speed-tag mix ("C3 ×2 · C4 ×2"; batteries for guns). */
-export function PlanDetailsModal({ stats, onClose }: { stats: PlanStats; onClose: () => void }) {
+ *  speed-tag mix ("C3 ×2 · C4 ×2"; batteries for guns). The builder opens it on a
+ *  one-army PlanStats as "Build details". */
+export function PlanDetailsModal({ stats, onClose, title = "Team details" }: { stats: PlanStats; onClose: () => void; title?: string }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", onKey);
@@ -84,9 +85,9 @@ export function PlanDetailsModal({ stats, onClose }: { stats: PlanStats; onClose
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal plan-details" role="dialog" aria-modal="true" aria-label="Team details" onClick={(e) => e.stopPropagation()}>
+      <div className="modal plan-details" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <strong style={{ flex: 1, alignSelf: "center" }}>Team details</strong>
+          <strong style={{ flex: 1, alignSelf: "center" }}>{title}</strong>
           <button ref={closeRef} className="btn small" onClick={onClose} aria-label="Close">
             ✕
           </button>
@@ -97,7 +98,7 @@ export function PlanDetailsModal({ stats, onClose }: { stats: PlanStats; onClose
               <h3>Warnings</h3>
               {stats.warnings.map((w, i) => (
                 <div className="error-box notice" key={i}>
-                  ⚠ {warningText(w)}
+                  ⚠ {stats.perArmy.length === 1 ? w.message : warningText(w)}
                 </div>
               ))}
             </section>

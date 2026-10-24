@@ -1,6 +1,6 @@
 """Turn the replay-corpus CSVs into the app-facing pick-rate dataset.
 
-Reads reports/replay_stats/*.csv (written by the local replay-corpus analyzer) plus the
+Reads reports/replay_stats/*.csv (written by tools/analyze_replays.py) plus the
 app's own corps index and data-version stamp, and writes a season index + one file per
 season to data/pick_rates/ (committed), then publishes a copy into
 web/public/data/pick-rates/ for the app to fetch.
@@ -9,7 +9,10 @@ Multi-season by construction: each run produces (or replaces) one season file an
 re-writes the index, so building the next patch's dataset is another run with a
 different --season-id. Nothing else changes.
 
-    python3 tools/build_pick_rates.py --season-id season-10 --label "Season 10"
+    python3 tools/analyze_replays.py --replays data/clan_games_replays/season_10 \\
+        --out reports/replay_stats/season-10
+    python3 tools/build_pick_rates.py --stats reports/replay_stats/season-10 \\
+        --season-id season-10 --label "Season 10" --mod-version v9.6
 
 See docs/PICK_RATES.md for the schema and the absence states this file has to keep
 distinguishable.
@@ -49,10 +52,12 @@ BUILD_RE = re.compile(r"Total War\s+([\d.]+).*?Build\s+(\d+)")
 ARMY_ID_COLUMN = "army_index"
 #: armies.csv column naming who fielded the army, for the scoped player count.
 PLAYER_COLUMN = "player"
+#: army_units.csv column marking the staff general's slot; builds lists exclude it.
+STAFF_COLUMN = "is_staff_slot"
 
 
-def load(name: str) -> list[dict]:
-    path = STATS / name
+def load(name: str, stats: Path = STATS) -> list[dict]:
+    path = stats / name
     if not path.exists() or not path.stat().st_size:
         return []
     with path.open(newline="", encoding="utf-8-sig") as handle:
@@ -98,11 +103,12 @@ def patch_label(battles: list[dict]) -> str:
     return f"NTW3 {m.group(1)} (Build {m.group(2)})" if m else "unknown"
 
 
-def build_season(season_id: str, label: str, recorded: str) -> dict:
-    battles = load("battles.csv")
-    armies = load("armies.csv")
-    players = load("players.csv")
-    popularity = load("corps_popularity.csv")
+def build_season(season_id: str, label: str, recorded: str, stats: Path = STATS,
+                 mod_version: str | None = None) -> dict:
+    battles = load("battles.csv", stats)
+    armies = load("armies.csv", stats)
+    players = load("players.csv", stats)
+    popularity = load("corps_popularity.csv", stats)
     names = all_corps()
 
     # appearances per corps, from the corpus
@@ -137,18 +143,38 @@ def build_season(season_id: str, label: str, recorded: str) -> dict:
     reg_copies: dict[str, Counter[str]] = defaultdict(Counter)
     reg_officer_builds: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
 
-    army_units = load("army_units.csv")
+    army_units = load("army_units.csv", stats)
     if army_units and ARMY_ID_COLUMN not in army_units[0]:
         print(f"warning: army_units.csv has no {ARMY_ID_COLUMN!r} column; a corps fielded "
               "twice in one battle counts as one build there")
+    has_staff_col = not army_units or STAFF_COLUMN in army_units[0]
+    if not has_staff_col:
+        fallback = "drop slot 0" if "slot" in army_units[0] else "keep every row"
+        print(f"warning: army_units.csv has no {STAFF_COLUMN!r} column; builds lists {fallback}")
+    # Per corps: one list of unit keys (copies repeated) per army, in first-appearance order.
+    army_cards: dict[str, dict[str, list[str]]] = defaultdict(dict)
     for row in army_units:
         key = row["army_key"]
         if not in_scope(key) or row["resolved"] != "True":
             continue
         army = f'{row["battle_id"]}#{row.get(ARMY_ID_COLUMN, "")}'
+        cards = army_cards[key].setdefault(army, [])
+        if has_staff_col:
+            is_staff = row[STAFF_COLUMN] == "True"
+        else:
+            is_staff = row.get("slot") == "0"
+        if not is_staff:
+            cards.append(row["unit_key"])
         unit_key, base = row["unit_key"], row["base_unit_key"]
         builds_with[key][unit_key].add(army)
         copies[key][unit_key] += 1
+        if is_staff and unit_key != base:
+            # A combat general in the command slot is not fielding that regiment in the
+            # line, so it must not count toward the regiment rollup (its `b` would grow
+            # with no matching `c`, reading as "no general"). Staff generals' own rows
+            # (unit_key == base) still count: the grid reads their rate from `regiments`.
+            # The exact card still gets a rate in `units` above.
+            continue
         reg_builds[key][base].add(army)
         reg_copies[key][base] += 1
         if row["is_commander"] == "True":
@@ -171,6 +197,14 @@ def build_season(season_id: str, label: str, recorded: str) -> dict:
             }
             for base, builds in sorted(reg_builds[key].items())
         }
+        if corps[key]["n"] > 0:
+            builds = list(army_cards[key].values())
+            keys = sorted({u for b in builds for u in b})
+            index = {u: i for i, u in enumerate(keys)}
+            corps[key]["builds"] = {
+                "keys": keys,
+                "b": [sorted(index[u] for u in b) for b in builds],
+            }
 
     in_scope_armies = [r for r in armies if in_scope(r["army_key"])]
     # Players who fielded an in-scope army, like battles and armies below; players.csv
@@ -181,10 +215,13 @@ def build_season(season_id: str, label: str, recorded: str) -> dict:
         print(f"warning: armies.csv has no {PLAYER_COLUMN!r} column; players counts the whole corpus")
         player_count = len(players)
     return {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "id": season_id,
         "label": label,
         "patch": patch_label(battles),
+        # The NTW3 mod release the season was played on. A replay records only the base
+        # game's build, which every NTW3 release shares, so this has to be supplied.
+        **({"modVersion": mod_version} if mod_version else {}),
         "corpus": {
             "battles": len({r["battle_id"] for r in in_scope_armies}),
             "armies": len(in_scope_armies),
@@ -219,6 +256,7 @@ def write_index(seasons_dir: Path) -> dict:
             "id": data["id"],
             "label": data["label"],
             "patch": data["patch"],
+            **({"modVersion": data["modVersion"]} if data.get("modVersion") else {}),
             "battles": data["corpus"]["battles"],
             "armies": data["corpus"]["armies"],
             "players": data["corpus"]["players"],
@@ -242,7 +280,11 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--season-id", default="season-10", help="stable id, e.g. season-10")
     ap.add_argument("--label", default="Season 10", help="display label")
+    ap.add_argument("--mod-version", default=None,
+                    help='NTW3 mod release the replays were played on, e.g. "v9.6" (shown in the app)')
     ap.add_argument("--recorded", default="2026-08", help="when the replays were collected")
+    ap.add_argument("--stats", default=str(STATS),
+                    help="folder of analyzer CSVs for this season (default reports/replay_stats)")
     ap.add_argument("--out", default=str(OUT_DIR))
     ap.add_argument("--no-publish", dest="publish", action="store_false",
                     help="write only the committed source copy, not web/public")
@@ -251,9 +293,16 @@ def main() -> None:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    season = build_season(args.season_id, args.label, args.recorded)
-    skipped = season.pop("_skippedOutOfScope")
     path = out_dir / f"{args.season_id}.json"
+    mod_version = args.mod_version
+    if not mod_version and path.exists():
+        # Rebuilding a season (e.g. "All seasons" when one is added) must not silently
+        # drop the release it was played on; keep the previous file's unless told otherwise.
+        mod_version = json.loads(path.read_text(encoding="utf-8")).get("modVersion")
+        if mod_version:
+            print(f"note: no --mod-version given; keeping {mod_version!r} from the existing {path.name}")
+    season = build_season(args.season_id, args.label, args.recorded, Path(args.stats), mod_version)
+    skipped = season.pop("_skippedOutOfScope")
     path.write_text(json.dumps(season, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
     with_data = sum(1 for c in season["corps"].values() if c["n"] > 0)
@@ -261,6 +310,7 @@ def main() -> None:
     reg_rows = sum(len(c.get("regiments", {})) for c in season["corps"].values())
     print(f"{path.name}  {path.stat().st_size / 1024:.0f} KB")
     print(f"  patch          {season['patch']}")
+    print(f"  mod version    {season.get('modVersion', '(not given)')}")
     print(f"  corpus         {season['corpus']['battles']} battles, {season['corpus']['armies']} armies")
     print(f"  corps in scope {len(season['corps'])}  ({with_data} with data, "
           f"{len(season['corps']) - with_data} in scope but never played)")

@@ -25,6 +25,8 @@ export interface PickRatesApi {
   setSeasonId: (id: string) => void;
   /** Resolved state for the corps currently open (null when off / not loaded). */
   corps: CorpsPickRates | null;
+  /** The dataset's unit roster still matches the app's (needed by suggestions). */
+  rosterMatches: boolean;
   /** What this card's medallion should show, honouring `combineVariants`. */
   rateOf: (unitKey: string, baseUnitKey: string) => UnitPickRate | null;
   /** True when combat-general tiles are hidden, so their builds are folded into the
@@ -131,7 +133,9 @@ export function usePickRates(factionKey: string, combineVariants = false): PickR
   );
 
   return {
-    available: PICK_RATES_ENABLED && (!triedIndex || index !== null),
+    // Still true while the index is in flight: going false there unmounted the header
+    // control (and its open panel) the moment the feature was switched on.
+    available: PICK_RATES_ENABLED && (!triedIndex || loading || index !== null),
     show,
     setShow,
     loading,
@@ -140,6 +144,7 @@ export function usePickRates(factionKey: string, combineVariants = false): PickR
     seasonId,
     setSeasonId,
     corps,
+    rosterMatches: matches,
     rateOf,
     regimentOf,
     combineVariants,
