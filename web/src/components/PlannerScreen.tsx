@@ -610,6 +610,28 @@ export function PlannerScreen({
           <button className="btn small" onClick={doNew}>
             New plan
           </button>
+          <button
+            className={`btn small${suggestOpen ? " on" : ""}`}
+            aria-haspopup="dialog"
+            onClick={() => setSuggestOpen(true)}
+            disabled={!corpsIndex || !!conflict}
+            title={conflictText
+              ?? "Suggest the best armies for a team points total (Army Corps of one theatre, or Theatres of War + Custom of one side)"}
+          >
+            Suggest team
+          </button>
+          {undoPlan && (
+            <button
+              className="btn small"
+              onClick={() => {
+                edit(() => undoPlan);
+                setUndoPlan(null);
+                setMessage("Restored the plan from before the suggestion.");
+              }}
+            >
+              Undo suggestion
+            </button>
+          )}
           <button className="btn small" onClick={() => downloadJson(exportPlanJson(plan), `${fileSafe(plan.name, "plan")}.json`)}>
             Export JSON
           </button>
@@ -630,27 +652,6 @@ export function PlannerScreen({
           <button className="btn small" onClick={exportImage} disabled={stats.armies === 0} title="Copy the whole team as one image">
             Copy image
           </button>
-          <button
-            className="btn small"
-            onClick={() => setSuggestOpen(true)}
-            disabled={!corpsIndex || !!conflict}
-            title={conflictText
-              ?? "Suggest the best armies for a team points total (Army Corps of one theatre, or Theatres of War + Custom of one side)"}
-          >
-            Suggest team
-          </button>
-          {undoPlan && (
-            <button
-              className="btn small"
-              onClick={() => {
-                edit(() => undoPlan);
-                setUndoPlan(null);
-                setMessage("Restored the plan from before the suggestion.");
-              }}
-            >
-              Undo suggestion
-            </button>
-          )}
           {plan.slots.length < MAX_PLAN_ARMIES && (
             <button className="btn small primary" onClick={() => edit(addSlot)}>
               + Add army

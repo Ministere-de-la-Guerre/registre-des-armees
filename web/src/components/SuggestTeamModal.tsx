@@ -216,16 +216,23 @@ export function SuggestTeamModal({
 
         <div className="modal-body">
           {planArmies.length > 0 && (
-            <label className="opt-check">
-              <input type="checkbox" checked={remainder} disabled={busy} onChange={(e) => setRemainder(e.target.checked)} />
-              <span>
-                Optimise remainder
-                <span className="opt-hint">
-                  Keep the plan's {planArmies.length === 1 ? "army" : `${planArmies.length} armies`} (and their units) and fill the rest;
-                  off replaces the whole team.
-                </span>
+            <div className="opt-field">
+              <span className="opt-label">Options</span>
+              <div className="opt-chips">
+                <button
+                  className={`view-chip${remainder ? " on" : ""}`}
+                  aria-pressed={remainder}
+                  disabled={busy}
+                  onClick={() => setRemainder(!remainder)}
+                >
+                  Optimise remainder
+                </button>
+              </div>
+              <span className="opt-hint">
+                Keep the plan's {planArmies.length === 1 ? "army" : `${planArmies.length} armies`} (and their units) and fill the rest;
+                off replaces the whole team.
               </span>
-            </label>
+            </div>
           )}
 
           <label className="opt-field">
@@ -304,7 +311,7 @@ export function SuggestTeamModal({
 
           {live && liveState.status !== "ready" && (
             <div className="modal-actions opt-actions">
-              <button className="btn" onClick={() => void findLive()} disabled={busy || !pool}>
+              <button className="btn gold" onClick={() => void findLive()} disabled={busy || !pool}>
                 {liveState.status === "running" ? `Optimising ${liveState.done + 1} of ${liveState.total}: ${liveState.name}…` : "Find teams"}
               </button>
               {liveState.status === "running" && <button className="btn" onClick={cancel}>Cancel</button>}

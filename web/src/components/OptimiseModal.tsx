@@ -143,43 +143,62 @@ export function OptimiseModal({
             {mode !== "formationDiscount" && <span className="opt-hint">{MODE_NAME_NOTE}</span>}
           </div>
 
-          <label className="opt-check">
-            <input type="checkbox" checked={settings.remainder} onChange={(e) => set("remainder", e.target.checked)} />
-            <span>
-              Optimise remainder
-              <span className="opt-hint">Keep the current build and fill the funds and cards left; off rebuilds the whole deck.</span>
-            </span>
-          </label>
-          <label className="opt-check">
-            <input type="checkbox" checked={settings.useFilters} onChange={(e) => set("useFilters", e.target.checked)} />
-            <span>
-              Only filtered units
-              <span className="opt-hint">
+          <div className="opt-field">
+            <span className="opt-label">Options</span>
+            <div className="opt-chips" role="group" aria-label="Options">
+              <button
+                className={`view-chip${settings.remainder ? " on" : ""}`}
+                aria-pressed={settings.remainder}
+                onClick={() => set("remainder", !settings.remainder)}
+              >
+                Optimise remainder
+              </button>
+              <button
+                className={`view-chip${settings.useFilters ? " on" : ""}`}
+                aria-pressed={settings.useFilters}
+                onClick={() => set("useFilters", !settings.useFilters)}
+              >
+                Only filtered units
+              </button>
+              <button
+                className={`view-chip${settings.allowNoStaff ? " on" : ""}`}
+                aria-pressed={settings.allowNoStaff}
+                onClick={() => set("allowNoStaff", !settings.allowNoStaff)}
+              >
+                Allow no staff general
+              </button>
+              {isTow && (
+                <button
+                  className={`view-chip${settings.singleRoll ? " on" : ""}`}
+                  aria-pressed={settings.singleRoll}
+                  onClick={() => set("singleRoll", !settings.singleRoll)}
+                >
+                  Single roll (≤ 4 source corps)
+                </button>
+              )}
+            </div>
+            <dl className="opt-notes">
+              <dt>Optimise remainder</dt>
+              <dd>Keep the current build and fill the funds and cards left; off rebuilds the whole deck.</dd>
+              <dt>Only filtered units</dt>
+              <dd>
                 {filtersActive
                   ? `${filteredCount} cards pass the current filters (incl. Offered now and the corps roll).`
                   : "No filters set: every card is eligible."}
-              </span>
-            </span>
-          </label>
-          <label className="opt-check">
-            <input type="checkbox" checked={settings.allowNoStaff} onChange={(e) => set("allowNoStaff", e.target.checked)} />
-            <span>
-              Allow no staff general
-              <span className="opt-hint">Leave the staff slot empty when a unit is worth more.</span>
-            </span>
-          </label>
-          {isTow && (
-            <label className="opt-check">
-              <input type="checkbox" checked={settings.singleRoll} onChange={(e) => set("singleRoll", e.target.checked)} />
-              <span>
-                Single roll (≤ 4 source corps)
-                <span className="opt-hint">One in-game roll offers 4 corps, so the build can be fielded without changing the clock.</span>
-              </span>
-            </label>
-          )}
+              </dd>
+              <dt>Allow no staff general</dt>
+              <dd>Leave the staff slot empty when a unit is worth more.</dd>
+              {isTow && (
+                <>
+                  <dt>Single roll</dt>
+                  <dd>One in-game roll offers 4 corps, so the build can be fielded without changing the clock.</dd>
+                </>
+              )}
+            </dl>
+          </div>
 
           <div className="modal-actions opt-actions">
-            <button className="btn" onClick={onOptimise} disabled={busy}>
+            <button className="btn gold" onClick={onOptimise} disabled={busy}>
               {busy ? "Optimising…" : "Optimise"}
             </button>
             {canUndo && (
@@ -196,13 +215,36 @@ export function OptimiseModal({
           )}
           {result && !error && (
             <div className="opt-result" role="status">
-              Applied: {result.cards} cards · {result.cost.toLocaleString()} gold
-              {result.rebate > 0
-                ? ` (list ${result.listCost.toLocaleString()} − discounts ${result.rebate.toLocaleString()}, `
-                  + `${result.groupsCompleted} formation${result.groupsCompleted === 1 ? "" : "s"})`
-                : ""}
-              {" "}· value {Math.round(result.value).toLocaleString()} · efficiency {result.efficiency.toFixed(2)}
-              {result.staffName ? ` · staff general ${result.staffName}` : " · no staff general"}
+              <div className="opt-tiles">
+                <div className="opt-tile">
+                  <div className="lbl">Cards</div>
+                  <div className="val">{result.cards}</div>
+                </div>
+                <div className="opt-tile">
+                  <div className="lbl">Gold</div>
+                  <div className="val">{result.cost.toLocaleString()}</div>
+                </div>
+                {result.rebate > 0 && (
+                  <div className="opt-tile" title={`List price ${result.listCost.toLocaleString()}`}>
+                    <div className="lbl">Discounts</div>
+                    <div className="val good">−{result.rebate.toLocaleString()}</div>
+                  </div>
+                )}
+                <div className="opt-tile">
+                  <div className="lbl">Value</div>
+                  <div className="val">{Math.round(result.value).toLocaleString()}</div>
+                </div>
+                <div className="opt-tile">
+                  <div className="lbl">Efficiency</div>
+                  <div className="val">{result.efficiency.toFixed(2)}</div>
+                </div>
+              </div>
+              <div className="opt-hint">
+                {result.rebate > 0
+                  ? `${result.groupsCompleted} formation${result.groupsCompleted === 1 ? "" : "s"} completed · `
+                  : ""}
+                {result.staffName ? `staff general ${result.staffName}` : "no staff general"}
+              </div>
             </div>
           )}
           {result && !error && fallback && (
