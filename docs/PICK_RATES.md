@@ -84,7 +84,7 @@ Booleans are the literal strings `True`/`False`. `battle_id` is the replay file 
 - `excluded_battles.csv`: battle_id, reason, detail
 - `excluded_armies.csv`: battle_id, army_index, army_key, player, reason, detail
 
-## Season file (`data/pick_rates/<id>.json`, schemaVersion 2)
+## Season file (`data/pick_rates/<id>.json`, schemaVersion 3)
 
 - `id`, `label`, `patch` (e.g. `NTW3 1.3.0 (Build 2081)`, or `mixed (n game builds)`)
 - `corpus`: `battles`, `armies`, `players` (in-scope only), `recorded`
@@ -94,9 +94,33 @@ Booleans are the literal strings `True`/`False`. `battle_id` is the replay file 
 - `corps[factionKey]`: `name`, `n` (army appearances = builds), `players?`, and when `n > 0`:
   - `units[unitKey]`: `b` builds containing >= 1 copy of that exact card, `t` total copies
   - `regiments[baseUnitKey]`: `b`, `t` rolled up over the plain unit and all commander variants, `c` builds led by a commander variant
+  - `builds`: `{"keys": [unitKey, ...], "b": [[idx, ...], ...]}` (schema v3). One inner array per recorded build
+    (the same battle_id + army_index builds `n` counts, in army_units.csv appearance order, so `len(b) == n`). Each
+    lists indices into `keys` for that build's unit cards, copies repeated, staff slot excluded (`is_staff_slot`),
+    sorted ascending. `keys` is sorted, unique, and limited to keys that corps' builds use. Only corps with `n > 0`.
+    If an old `army_units.csv` lacks `is_staff_slot`, slot 0 is dropped instead (with a warning).
 
 `index.json`: `defaultSeason` plus per-season summaries (`battles`, `armies`, `players`,
 `corpsWithData`, `corpsInScope`, `recorded`, `file`).
+
+## Suggest units (`web/src/features/pickRates/suggest.ts`)
+
+A bottom-tray sheet ("Suggest units") listing what builds like the user's also took. Pure and deterministic,
+recomputed on every build change (add, remove, swap, commander change, clear) and on season switch; it is cheap
+(about 100 builds x 30 keys) so nothing is cached across changes.
+
+- Regiment set: a build's cards mapped to `capGroupKey` (staff excluded); the user's set is the same over their
+  instances. Similarity = Jaccard over these sets. Neighbours = the 15 most similar builds (`min(15, n)`, ties by
+  original order). An empty build makes every build a neighbour (corps-wide counts).
+- Needs `n >= 15` recorded builds, builds present in the season file, and a matching roster stamp; otherwise the
+  sheet shows a reason line instead of rows.
+- Units row: up to 8 regiments in at least 2 neighbours and absent from the build, ranked by neighbour count.
+  Combat generals row: up to 8 combat generals in at least 2 neighbours, each as `have`, `swap` (the build has
+  the plain regiment) or `add`, with real blocks (combat cap, regiment already led, add rules).
+- Cost change = real `priceBuild` of the build after the add/swap minus the current one, so division discounts
+  show (a negative change means the add completes a division).
+- General chooser: the swap modal shows per-option pick rates, "All builds" (regiment-level `units` data) and
+  "Like yours" (share of the neighbours containing that regiment).
 
 ## Absence states (`web/src/features/pickRates/pickRates.ts`)
 

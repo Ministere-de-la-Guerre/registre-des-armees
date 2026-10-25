@@ -52,6 +52,8 @@ BUILD_RE = re.compile(r"Total War\s+([\d.]+).*?Build\s+(\d+)")
 ARMY_ID_COLUMN = "army_index"
 #: armies.csv column naming who fielded the army, for the scoped player count.
 PLAYER_COLUMN = "player"
+#: army_units.csv column marking the staff general's slot; builds lists exclude it.
+STAFF_COLUMN = "is_staff_slot"
 
 
 def load(name: str, stats: Path = STATS) -> list[dict]:
@@ -144,11 +146,24 @@ def build_season(season_id: str, label: str, recorded: str, stats: Path = STATS)
     if army_units and ARMY_ID_COLUMN not in army_units[0]:
         print(f"warning: army_units.csv has no {ARMY_ID_COLUMN!r} column; a corps fielded "
               "twice in one battle counts as one build there")
+    has_staff_col = not army_units or STAFF_COLUMN in army_units[0]
+    if not has_staff_col:
+        fallback = "drop slot 0" if "slot" in army_units[0] else "keep every row"
+        print(f"warning: army_units.csv has no {STAFF_COLUMN!r} column; builds lists {fallback}")
+    # Per corps: one list of unit keys (copies repeated) per army, in first-appearance order.
+    army_cards: dict[str, dict[str, list[str]]] = defaultdict(dict)
     for row in army_units:
         key = row["army_key"]
         if not in_scope(key) or row["resolved"] != "True":
             continue
         army = f'{row["battle_id"]}#{row.get(ARMY_ID_COLUMN, "")}'
+        cards = army_cards[key].setdefault(army, [])
+        if has_staff_col:
+            is_staff = row[STAFF_COLUMN] == "True"
+        else:
+            is_staff = row.get("slot") == "0"
+        if not is_staff:
+            cards.append(row["unit_key"])
         unit_key, base = row["unit_key"], row["base_unit_key"]
         builds_with[key][unit_key].add(army)
         copies[key][unit_key] += 1
@@ -174,6 +189,14 @@ def build_season(season_id: str, label: str, recorded: str, stats: Path = STATS)
             }
             for base, builds in sorted(reg_builds[key].items())
         }
+        if corps[key]["n"] > 0:
+            builds = list(army_cards[key].values())
+            keys = sorted({u for b in builds for u in b})
+            index = {u: i for i, u in enumerate(keys)}
+            corps[key]["builds"] = {
+                "keys": keys,
+                "b": [sorted(index[u] for u in b) for b in builds],
+            }
 
     in_scope_armies = [r for r in armies if in_scope(r["army_key"])]
     # Players who fielded an in-scope army, like battles and armies below; players.csv
@@ -184,7 +207,7 @@ def build_season(season_id: str, label: str, recorded: str, stats: Path = STATS)
         print(f"warning: armies.csv has no {PLAYER_COLUMN!r} column; players counts the whole corpus")
         player_count = len(players)
     return {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "id": season_id,
         "label": label,
         "patch": patch_label(battles),

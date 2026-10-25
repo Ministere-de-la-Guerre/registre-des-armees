@@ -33,6 +33,7 @@ export function corpsPickRates(season: PickRateSeason | null, factionKey: string
     corpsName: entry.name,
     units: entry.units ?? {},
     regiments: entry.regiments ?? {},
+    builds: entry.builds ? { keys: entry.builds.keys, builds: entry.builds.b } : null,
   };
 }
 

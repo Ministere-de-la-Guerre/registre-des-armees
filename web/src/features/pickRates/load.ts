@@ -6,12 +6,38 @@
  *  build with the feature enabled but no season staged must still run.
  */
 import { dataUrl } from "../../data/assets";
-import type { PickRateIndex, PickRateSeason, SeasonSummary } from "./types";
+import type { CorpsRecord, PickRateIndex, PickRateSeason, SeasonSummary } from "./types";
 
 const num = (v: unknown, fallback = 0) => (typeof v === "number" && Number.isFinite(v) ? v : fallback);
 const str = (v: unknown, fallback = "") => (typeof v === "string" ? v : fallback);
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 const naturalCompare = (a: string, b: string) => a.localeCompare(b, "en", { numeric: true });
+
+/** A corps' raw `builds` field, or undefined when it is missing or unusable. Keys must
+ *  all be strings (otherwise indices cannot be trusted); an inner array is dropped
+ *  unless every entry is an integer index into `keys`. Never throws. */
+export function normalizeCorpsBuilds(raw: unknown): CorpsRecord["builds"] {
+  if (!isObj(raw) || !Array.isArray(raw.keys) || !Array.isArray(raw.b)) return undefined;
+  if (!raw.keys.every((k) => typeof k === "string")) return undefined;
+  const keys = raw.keys as string[];
+  const b: number[][] = [];
+  for (const inner of raw.b) {
+    if (!Array.isArray(inner)) continue;
+    if (inner.every((i) => Number.isInteger(i) && i >= 0 && i < keys.length)) b.push(inner as number[]);
+  }
+  return { keys, b };
+}
+
+function normalizeCorps(raw: Record<string, unknown>): PickRateSeason["corps"] {
+  const out: Record<string, CorpsRecord> = {};
+  for (const [key, entry] of Object.entries(raw)) {
+    if (!isObj(entry)) continue;
+    const { builds, ...rest } = entry;
+    const normalised = normalizeCorpsBuilds(builds);
+    out[key] = (normalised ? { ...rest, builds: normalised } : rest) as unknown as CorpsRecord;
+  }
+  return out;
+}
 
 async function getJson(path: string): Promise<unknown> {
   const res = await fetch(dataUrl(path), { cache: "no-cache" });
@@ -95,7 +121,7 @@ export async function loadPickRateSeason(summary: SeasonSummary): Promise<PickRa
         contested: num(thresholds.contested, 25),
         rare: num(thresholds.rare, 5),
       },
-      corps: raw.corps as PickRateSeason["corps"],
+      corps: normalizeCorps(raw.corps),
     };
   } catch {
     return null;

@@ -40,6 +40,7 @@ import { DetailsPanel } from "./DetailsPanel";
 import { PICK_RATES_ENABLED } from "../features/pickRates/flag";
 import { PickRateBar, PickRateChip, PickRateNotice } from "../features/pickRates/PickRateBar";
 import { usePickRates } from "../features/pickRates/usePickRates";
+import { chooserRatesFor, suggestFor, type GeneralSuggestion, type UnitSuggestion } from "../features/pickRates/suggest";
 import { FilterPanel } from "./FilterPanel";
 import { Medallion } from "./Medallion";
 import { combatPool, offeredCombatKeys, offeredStaffKeys, rotationApplies, staffPool } from "../state/rotation";
@@ -125,6 +126,8 @@ export function Builder({
   const [warnedBugged, setWarnedBugged] = useState<Set<string>>(() => new Set());
   // The selected copy whose combat-general chooser is open (★ badge in the tray).
   const [swapInstanceId, setSwapInstanceId] = useState<string | null>(null);
+  // "Suggest units" sheet (features/pickRates). Plain component state, never persisted.
+  const [suggestOpen, setSuggestOpen] = useState(false);
   const [loadedSaved, setLoadedSaved] = useState<SavedBuild | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [rotationOpen, setRotationOpen] = useState(false);
@@ -548,10 +551,10 @@ export function Builder({
     () => (swapInstanceId ? generalSwapFor(index, build, swapInstanceId, combatCap) : null),
     [swapInstanceId, index, build, combatCap],
   );
-  const applyGeneralSwap = (unitKey: string) => {
-    if (!swapInstanceId) return;
+  const applyGeneralSwap = (unitKey: string, instanceId: string | null = swapInstanceId) => {
+    if (!instanceId) return;
     const card = index.byKey.get(unitKey);
-    setBuild((b) => swapInstanceUnit(b, swapInstanceId, unitKey));
+    setBuild((b) => swapInstanceUnit(b, instanceId, unitKey));
     setSwapInstanceId(null);
     if (!card) return;
     // The general variant carries the same (bugged) uniform as the unit it leads.
@@ -562,6 +565,34 @@ export function Builder({
         : `${card.name} is back to a plain unit — its combat general was removed.`,
     );
   };
+
+  // Suggestions: recomputed on every build / season change, but only while something
+  // shows them (the sheet or the general chooser). A card's cost depends on the whole
+  // build, so nothing here can be cached across builds.
+  const suggestions = useMemo(
+    () =>
+      PICK_RATES_ENABLED && (suggestOpen || swapInstanceId !== null)
+        ? suggestFor({ corps: pickRates.corps, rosterMatches: pickRates.rosterMatches, index, build, combatCap })
+        : null,
+    [suggestOpen, swapInstanceId, pickRates.corps, pickRates.rosterMatches, index, build, combatCap],
+  );
+  const chooserRates = useMemo(() => {
+    if (!PICK_RATES_ENABLED || !suggestions || !swapInstanceId) return null;
+    const inst = build.instances.find((i) => i.id === swapInstanceId);
+    const card = inst ? index.byKey.get(inst.unitKey) : undefined;
+    if (!card) return null;
+    return chooserRatesFor({
+      corps: pickRates.corps,
+      suggestions,
+      index,
+      regimentKey: card.capGroupKey,
+      minSample: pickRates.season?.thresholds.minSampleForPercent ?? 5,
+    });
+  }, [suggestions, swapInstanceId, build, index, pickRates.corps, pickRates.season]);
+  // Same paths as the grid / the chooser: an add is a grid click, a swap is onPick.
+  const pickSuggestedUnit = (s: UnitSuggestion) => tryAdd(s.card);
+  const pickSuggestedGeneral = (g: GeneralSuggestion) =>
+    g.status === "swap" && g.swapInstanceId ? applyGeneralSwap(g.card.unitKey, g.swapInstanceId) : tryAdd(g.card);
 
   // Export the build as a stretched-out single-line image (like the desktop unit
   // bar): copied to the clipboard on desktop, saved/shared to the device on touch.
@@ -1114,6 +1145,18 @@ export function Builder({
       </div>
 
       <BottomTray
+        suggest={
+          PICK_RATES_ENABLED
+            ? {
+                open: suggestOpen,
+                onToggle: () => setSuggestOpen((o) => !o),
+                result: suggestions ?? { kind: "off" },
+                seasonLabel: pickRates.season?.label ?? "",
+                onPickUnit: pickSuggestedUnit,
+                onPickGeneral: pickSuggestedGeneral,
+              }
+            : undefined
+        }
         index={index}
         build={build}
         summary={summary}
@@ -1205,7 +1248,8 @@ export function Builder({
           swap={generalSwap}
           combatCap={combatCap}
           combatGensUsed={combatGensUsed}
-          onPick={applyGeneralSwap}
+          onPick={(key) => applyGeneralSwap(key)}
+          rates={PICK_RATES_ENABLED ? chooserRates : null}
           onClose={() => setSwapInstanceId(null)}
         />
       )}

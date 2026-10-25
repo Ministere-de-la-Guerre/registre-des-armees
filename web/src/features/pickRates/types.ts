@@ -49,6 +49,15 @@ export interface CorpsRecord {
   units?: Record<string, UnitRecord>;
   /** Keyed by baseUnitKey (capGroupKey). */
   regiments?: Record<string, RegimentRecord>;
+  /** Every recorded build, as indices into `keys` (copies repeated, staff slot
+   *  excluded). Schema v3+; absent in older files. */
+  builds?: { keys: string[]; b: number[][] };
+}
+
+/** A corps' recorded builds, normalised: `builds[i]` lists indices into `keys`. */
+export interface CorpsBuilds {
+  keys: string[];
+  builds: number[][];
 }
 
 export interface PickRateSeason {
@@ -78,6 +87,8 @@ export type CorpsPickRates =
       corpsName: string;
       units: Record<string, UnitRecord>;
       regiments: Record<string, RegimentRecord>;
+      /** Null when the season file carries no build lists. */
+      builds: CorpsBuilds | null;
     };
 
 export type UnitPickRate =

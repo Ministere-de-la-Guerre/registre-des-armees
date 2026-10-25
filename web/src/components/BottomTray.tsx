@@ -2,10 +2,26 @@ import { useState } from "react";
 import type { UnitCard } from "../domain/types";
 import { MAX_TOTAL_UNIT_CARDS } from "../rules/rules";
 import type { BuildState, BuildSummary as Summary, RosterIndex } from "../state/build";
+import { PICK_RATES_ENABLED } from "../features/pickRates/flag";
+import { SuggestInline, SuggestPanel, type SuggestResult } from "../features/pickRates/SuggestPanel";
+import type { GeneralSuggestion, UnitSuggestion } from "../features/pickRates/suggest";
 import { Medallion } from "./Medallion";
 import { useCoarsePointer } from "./useCoarsePointer";
 
+/** Everything the "Suggest units" sheet needs. Only passed (and only rendered) when
+ *  PICK_RATES_ENABLED; the open flag lives in the builder, which computes the
+ *  suggestions only while it is on. */
+export interface TraySuggest {
+  open: boolean;
+  onToggle: () => void;
+  result: SuggestResult;
+  seasonLabel: string;
+  onPickUnit: (s: UnitSuggestion) => void;
+  onPickGeneral: (g: GeneralSuggestion) => void;
+}
+
 interface TrayProps {
+  suggest?: TraySuggest;
   index: RosterIndex;
   build: BuildState;
   summary: Summary;
@@ -73,6 +89,7 @@ function DesktopTray({
   locating,
   onToggleLocate,
   onLocate,
+  suggest,
 }: TrayProps) {
   const { totalCards } = summary;
   const staffCard = build.staffSlotUnitKey ? index.byKey.get(build.staffSlotUnitKey) : undefined;
@@ -99,7 +116,7 @@ function DesktopTray({
   const activate = (card: UnitCard) => (locating ? onLocate(card) : onDetails(card));
   const activateLabel = locating ? "find it in the grid" : "show details";
 
-  return (
+  const tray = (
     <div className={`tray${locating ? " locating" : ""}`}>
       {/* The commander rides in the same flex row as the unit slots so its portrait
           is always exactly one slot wide, at any resolution. The label and the
@@ -150,6 +167,16 @@ function DesktopTray({
       </div>
 
       <div className="totals">
+        {PICK_RATES_ENABLED && suggest && (
+          <button
+            className="btn small suggest-units"
+            aria-pressed={suggest.open}
+            onClick={suggest.onToggle}
+            title="What the recorded builds closest to yours also took"
+          >
+            <span>✦ Suggest units</span>
+          </button>
+        )}
         <button
           className={`btn small locate-unit${locating ? " gold" : ""}`}
           aria-pressed={locating}
@@ -194,6 +221,24 @@ function DesktopTray({
       </div>
     </div>
   );
+
+  // The sheet is a sibling of the tray inside a zero-impact wrapper (the tray keeps its
+  // fixed --tray-h, and the tray's own medallion rules don't leak into the sheet).
+  if (!PICK_RATES_ENABLED || !suggest) return tray;
+  return (
+    <div className="tray-wrap">
+      {suggest.open && (
+        <SuggestPanel
+          result={suggest.result}
+          seasonLabel={suggest.seasonLabel}
+          onPickUnit={suggest.onPickUnit}
+          onPickGeneral={suggest.onPickGeneral}
+          onClose={suggest.onToggle}
+        />
+      )}
+      {tray}
+    </div>
+  );
 }
 
 /** Phone/tablet tray: a slim summary strip that expands into a scrollable bottom
@@ -221,6 +266,7 @@ function TouchTray({
   locating,
   onToggleLocate,
   onLocate,
+  suggest,
 }: TrayProps) {
   const [expanded, setExpanded] = useState(false);
   const { totalCards } = summary;
@@ -282,6 +328,14 @@ function TouchTray({
                 <span className="tray-strip-grip" aria-hidden />
               </button>
             </div>
+            {PICK_RATES_ENABLED && suggest?.open && (
+              <SuggestInline
+                result={suggest.result}
+                seasonLabel={suggest.seasonLabel}
+                onPickUnit={suggest.onPickUnit}
+                onPickGeneral={suggest.onPickGeneral}
+              />
+            )}
             <div className="tray-sheet-grid" aria-label="Selected units">
               <div className="tray-sheet-staff">
                 <span className="slot-label">Commander</span>
@@ -323,6 +377,15 @@ function TouchTray({
             </div>
             {locating && <p className="tray-sheet-empty">Tap a unit to find it in the grid.</p>}
             <div className="tray-sheet-actions">
+              {PICK_RATES_ENABLED && suggest && (
+                <button
+                  className="btn suggest-units"
+                  aria-pressed={suggest.open}
+                  onClick={suggest.onToggle}
+                >
+                  {suggest.open ? "Suggest units: on" : "Suggest units"}
+                </button>
+              )}
               <button
                 className={`btn locate-unit${locating ? " gold" : ""}`}
                 aria-pressed={locating}
