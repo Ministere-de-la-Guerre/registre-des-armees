@@ -1,6 +1,6 @@
 """Turn the replay-corpus CSVs into the app-facing pick-rate dataset.
 
-Reads reports/replay_stats/*.csv (written by the local replay-corpus analyzer) plus the
+Reads reports/replay_stats/*.csv (written by tools/analyze_replays.py) plus the
 app's own corps index and data-version stamp, and writes a season index + one file per
 season to data/pick_rates/ (committed), then publishes a copy into
 web/public/data/pick-rates/ for the app to fetch.
@@ -9,7 +9,10 @@ Multi-season by construction: each run produces (or replaces) one season file an
 re-writes the index, so building the next patch's dataset is another run with a
 different --season-id. Nothing else changes.
 
-    python3 tools/build_pick_rates.py --season-id season-10 --label "Season 10"
+    python3 tools/analyze_replays.py --replays data/clan_games_replays/season_10 \\
+        --out reports/replay_stats/season-10
+    python3 tools/build_pick_rates.py --stats reports/replay_stats/season-10 \\
+        --season-id season-10 --label "Season 10"
 
 See docs/PICK_RATES.md for the schema and the absence states this file has to keep
 distinguishable.
@@ -51,8 +54,8 @@ ARMY_ID_COLUMN = "army_index"
 PLAYER_COLUMN = "player"
 
 
-def load(name: str) -> list[dict]:
-    path = STATS / name
+def load(name: str, stats: Path = STATS) -> list[dict]:
+    path = stats / name
     if not path.exists() or not path.stat().st_size:
         return []
     with path.open(newline="", encoding="utf-8-sig") as handle:
@@ -98,11 +101,11 @@ def patch_label(battles: list[dict]) -> str:
     return f"NTW3 {m.group(1)} (Build {m.group(2)})" if m else "unknown"
 
 
-def build_season(season_id: str, label: str, recorded: str) -> dict:
-    battles = load("battles.csv")
-    armies = load("armies.csv")
-    players = load("players.csv")
-    popularity = load("corps_popularity.csv")
+def build_season(season_id: str, label: str, recorded: str, stats: Path = STATS) -> dict:
+    battles = load("battles.csv", stats)
+    armies = load("armies.csv", stats)
+    players = load("players.csv", stats)
+    popularity = load("corps_popularity.csv", stats)
     names = all_corps()
 
     # appearances per corps, from the corpus
@@ -137,7 +140,7 @@ def build_season(season_id: str, label: str, recorded: str) -> dict:
     reg_copies: dict[str, Counter[str]] = defaultdict(Counter)
     reg_officer_builds: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
 
-    army_units = load("army_units.csv")
+    army_units = load("army_units.csv", stats)
     if army_units and ARMY_ID_COLUMN not in army_units[0]:
         print(f"warning: army_units.csv has no {ARMY_ID_COLUMN!r} column; a corps fielded "
               "twice in one battle counts as one build there")
@@ -243,6 +246,8 @@ def main() -> None:
     ap.add_argument("--season-id", default="season-10", help="stable id, e.g. season-10")
     ap.add_argument("--label", default="Season 10", help="display label")
     ap.add_argument("--recorded", default="2026-08", help="when the replays were collected")
+    ap.add_argument("--stats", default=str(STATS),
+                    help="folder of analyzer CSVs for this season (default reports/replay_stats)")
     ap.add_argument("--out", default=str(OUT_DIR))
     ap.add_argument("--no-publish", dest="publish", action="store_false",
                     help="write only the committed source copy, not web/public")
@@ -251,7 +256,7 @@ def main() -> None:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    season = build_season(args.season_id, args.label, args.recorded)
+    season = build_season(args.season_id, args.label, args.recorded, Path(args.stats))
     skipped = season.pop("_skippedOutOfScope")
     path = out_dir / f"{args.season_id}.json"
     path.write_text(json.dumps(season, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
