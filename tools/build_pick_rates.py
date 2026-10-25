@@ -167,6 +167,13 @@ def build_season(season_id: str, label: str, recorded: str, stats: Path = STATS)
         unit_key, base = row["unit_key"], row["base_unit_key"]
         builds_with[key][unit_key].add(army)
         copies[key][unit_key] += 1
+        if is_staff and unit_key != base:
+            # A combat general in the command slot is not fielding that regiment in the
+            # line, so it must not count toward the regiment rollup (its `b` would grow
+            # with no matching `c`, reading as "no general"). Staff generals' own rows
+            # (unit_key == base) still count: the grid reads their rate from `regiments`.
+            # The exact card still gets a rate in `units` above.
+            continue
         reg_builds[key][base].add(army)
         reg_copies[key][base] += 1
         if row["is_commander"] == "True":

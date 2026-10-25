@@ -147,6 +147,16 @@ class MultiFolderTests(unittest.TestCase):
             self.assertEqual([(e["battle_id"], e["reason"]) for e in res["excluded"]],
                              [("season_b/same.replay", "duplicate")])
 
+    def test_same_folder_name_in_two_places_fails_early(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for parent in ("x", "y"):
+                (root / parent / "s8").mkdir(parents=True)
+                (root / parent / "s8" / "g.replay").write_bytes(b"x")
+            with self.assertRaisesRegex(ValueError, "distinct names.*s8"):
+                analyze([root / "x" / "s8", root / "y" / "s8"], root / "out", rosters(),
+                        lambda b: battle(army(["ntw3_inf_line_001"])))
+
     def test_single_folder_keeps_bare_file_names(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

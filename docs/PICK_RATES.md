@@ -93,7 +93,7 @@ Booleans are the literal strings `True`/`False`. `battle_id` is the replay file 
 - `thresholds`: `minSampleForPercent` 5, `autoInclude` 85, `contested` 25, `rare` 5
 - `corps[factionKey]`: `name`, `n` (army appearances = builds), `players?`, and when `n > 0`:
   - `units[unitKey]`: `b` builds containing >= 1 copy of that exact card, `t` total copies
-  - `regiments[baseUnitKey]`: `b`, `t` rolled up over the plain unit and all commander variants, `c` builds led by a commander variant
+  - `regiments[baseUnitKey]`: `b`, `t` rolled up over the plain unit and all commander variants, `c` builds led by a commander variant. A combat general in the command slot (`is_staff_slot` and a commander variant) is excluded from this rollup, since it is not fielding that regiment in the line; it still counts in `units`. Staff generals' own rows still count here
   - `builds`: `{"keys": [unitKey, ...], "b": [[idx, ...], ...]}` (schema v3). One inner array per recorded build
     (the same battle_id + army_index builds `n` counts, in army_units.csv appearance order, so `len(b) == n`). Each
     lists indices into `keys` for that build's unit cards, copies repeated, staff slot excluded (`is_staff_slot`),

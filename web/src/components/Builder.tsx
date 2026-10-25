@@ -40,7 +40,7 @@ import { DetailsPanel } from "./DetailsPanel";
 import { PICK_RATES_ENABLED } from "../features/pickRates/flag";
 import { PickRateBar, PickRateChip, PickRateNotice } from "../features/pickRates/PickRateBar";
 import { usePickRates } from "../features/pickRates/usePickRates";
-import { chooserRatesFor, suggestFor, type GeneralSuggestion, type UnitSuggestion } from "../features/pickRates/suggest";
+import { chooserRatesFor, suggestedGeneralAction, suggestFor, type GeneralSuggestion, type UnitSuggestion } from "../features/pickRates/suggest";
 import { FilterPanel } from "./FilterPanel";
 import { Medallion } from "./Medallion";
 import { combatPool, offeredCombatKeys, offeredStaffKeys, rotationApplies, staffPool } from "../state/rotation";
@@ -591,8 +591,12 @@ export function Builder({
   }, [suggestions, swapInstanceId, build, index, pickRates.corps, pickRates.season]);
   // Same paths as the grid / the chooser: an add is a grid click, a swap is onPick.
   const pickSuggestedUnit = (s: UnitSuggestion) => tryAdd(s.card);
-  const pickSuggestedGeneral = (g: GeneralSuggestion) =>
-    g.status === "swap" && g.swapInstanceId ? applyGeneralSwap(g.card.unitKey, g.swapInstanceId) : tryAdd(g.card);
+  const pickSuggestedGeneral = (g: GeneralSuggestion) => {
+    const action = suggestedGeneralAction(g);
+    if (action.kind === "blocked") setMessage(action.reason);
+    else if (action.kind === "swap") applyGeneralSwap(g.card.unitKey, action.instanceId);
+    else tryAdd(g.card);
+  };
 
   // Export the build as a stretched-out single-line image (like the desktop unit
   // bar): copied to the clipboard on desktop, saved/shared to the device on touch.
@@ -1150,6 +1154,7 @@ export function Builder({
             ? {
                 open: suggestOpen,
                 onToggle: () => setSuggestOpen((o) => !o),
+                suspendEscape: modalOpen,
                 result: suggestions ?? { kind: "off" },
                 seasonLabel: pickRates.season?.label ?? "",
                 onPickUnit: pickSuggestedUnit,

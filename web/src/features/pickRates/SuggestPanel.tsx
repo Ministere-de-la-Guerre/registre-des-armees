@@ -45,15 +45,26 @@ export function basisLine(s: Suggestions, seasonLabel: string): string {
     : `The ${s.K} recorded builds of this corps closest to yours share ${s.sharedPct}% of your regiments · ${seasonLabel}`;
 }
 
-function KBar({ k, K }: { k: number; K: number }) {
+/** 2 -> "2nd", 3 -> "3rd", 4 -> "4th", 11 -> "11th". */
+export function ordinal(n: number): string {
+  const v = n % 100;
+  const suffix = v >= 11 && v <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th";
+  return `${n}${suffix}`;
+}
+
+function KBar({ k, K, copy = 1 }: { k: number; K: number; copy?: number }) {
   const pct = K > 0 ? Math.min(100, (100 * k) / K) : 0;
   return (
-    <div className="sg-kbar" title={`${k} of the ${K} closest builds took this`}>
+    <div className="sg-kbar" title={
+        copy >= 2
+          ? `${k} of the ${K} closest builds took ${copy} or more copies`
+          : `${k} of the ${K} closest builds took this`
+      }>
       <div className="sg-track">
         <div className="sg-fill" style={{ width: `${pct.toFixed(1)}%` }} />
       </div>
       <div className="sg-ktext">
-        {k} of {K} builds
+        {copy >= 2 ? `${k} of ${K} builds took ${copy}+` : `${k} of ${K} builds`}
       </div>
     </div>
   );
@@ -78,10 +89,11 @@ function UnitCardView({ s, K, onPick }: { s: UnitSuggestion; K: number; onPick: 
         blocked={blocked}
         overBudget={!blocked && s.overBudget}
         onClick={() => onPick(s)}
-        activateLabel="add it to your build"
+        activateLabel={s.copy >= 2 ? `add a ${ordinal(s.copy)} copy to your build` : "add it to your build"}
         pickRate={
           <>
-            <KBar k={s.k} K={K} />
+            {s.copy >= 2 && <div className="sg-copy">{ordinal(s.copy)} copy</div>}
+            <KBar k={s.k} K={K} copy={s.copy} />
             {blocked ? (
               <div className="sg-status bad">{s.blockedReason}</div>
             ) : (

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { UnitCard } from "../domain/types";
 import { MAX_TOTAL_UNIT_CARDS } from "../rules/rules";
 import type { BuildState, BuildSummary as Summary, RosterIndex } from "../state/build";
@@ -14,6 +14,8 @@ import { useCoarsePointer } from "./useCoarsePointer";
 export interface TraySuggest {
   open: boolean;
   onToggle: () => void;
+  /** A modal is open on top of the sheet; Escape belongs to it, not to the sheet. */
+  suspendEscape?: boolean;
   result: SuggestResult;
   seasonLabel: string;
   onPickUnit: (s: UnitSuggestion) => void;
@@ -92,6 +94,25 @@ function DesktopTray({
   suggest,
 }: TrayProps) {
   const { totalCards } = summary;
+  const suggestBtnRef = useRef<HTMLButtonElement>(null);
+  const suggestOpen = PICK_RATES_ENABLED && !!suggest?.open;
+  const suggestSuspended = !!suggest?.suspendEscape;
+  const suggestToggle = suggest?.onToggle;
+  // Close the sheet and hand focus back to the tab that opened it.
+  const closeSuggest = () => {
+    suggestToggle?.();
+    suggestBtnRef.current?.focus();
+  };
+  useEffect(() => {
+    if (!suggestOpen || suggestSuspended) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      suggestToggle?.();
+      suggestBtnRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [suggestOpen, suggestSuspended, suggestToggle]);
   const staffCard = build.staffSlotUnitKey ? index.byKey.get(build.staffSlotUnitKey) : undefined;
 
   const instances = build.instances
@@ -169,6 +190,7 @@ function DesktopTray({
       <div className="totals">
         {PICK_RATES_ENABLED && suggest && (
           <button
+            ref={suggestBtnRef}
             className="btn small suggest-units"
             aria-pressed={suggest.open}
             onClick={suggest.onToggle}
@@ -233,7 +255,7 @@ function DesktopTray({
           seasonLabel={suggest.seasonLabel}
           onPickUnit={suggest.onPickUnit}
           onPickGeneral={suggest.onPickGeneral}
-          onClose={suggest.onToggle}
+          onClose={closeSuggest}
         />
       )}
       {tray}

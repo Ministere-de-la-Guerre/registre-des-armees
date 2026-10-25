@@ -28,7 +28,7 @@ export function normalizeCorpsBuilds(raw: unknown): CorpsRecord["builds"] {
   return { keys, b };
 }
 
-function normalizeCorps(raw: Record<string, unknown>): PickRateSeason["corps"] {
+export function normalizeCorps(raw: Record<string, unknown>): PickRateSeason["corps"] {
   const out: Record<string, CorpsRecord> = {};
   for (const [key, entry] of Object.entries(raw)) {
     if (!isObj(entry)) continue;

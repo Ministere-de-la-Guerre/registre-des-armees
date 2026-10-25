@@ -8,6 +8,7 @@ import {
   type Suggestions,
   chooserRatesFor,
   suggestFor,
+  suggestedGeneralAction,
 } from "./suggest";
 import type { CorpsPickRates, PickRateSeason } from "./types";
 
@@ -252,6 +253,64 @@ describe("units row", () => {
   });
 });
 
+describe("units row: extra copies", () => {
+  // Cap-3 roster: x is a plain regiment (cap 3) with a combat general x_com; y is cap 3 too.
+  const mk = (unitKey: string, rosterIndex: number, over = {}) =>
+    makeUnit({
+      unitKey, factionKey: FK, cost: 100, cap: 3, groupCap: 3, capGroupKey: unitKey, baseUnitKey: unitKey,
+      placement: { division: 1, brigade: rosterIndex + 1 }, rosterIndex, ...over,
+    });
+  const idx3 = indexRoster(
+    makeRoster(
+      [
+        mk("a", 0), mk("c", 1),
+        mk("a_com", 2, { capGroupKey: "a", baseUnitKey: "a", isGeneral: true, isCommanderVariant: true, generalKind: "combat", unitClass: "general" }),
+      ],
+      FK,
+    ),
+  );
+  const run3 = (builds: string[][], build: BuildState) => {
+    const corps: CorpsPickRates = {
+      kind: "data", n: builds.length, players: 5, corpsName: "T", units: {}, regiments: { a: { b: 15, t: 40, c: 0 }, c: { b: 15, t: 15, c: 0 } },
+      builds: { keys: ["a", "c", "a_com"], builds: builds.map((b) => b.map((n) => ["a", "c", "a_com"].indexOf(n))) },
+    };
+    return suggestFor({ corps, rosterMatches: true, index: idx3, build, combatCap: 1 }) as Suggestions;
+  };
+
+  it("suggests a 2nd copy when enough neighbours took two or more", () => {
+    const builds = [...rep(["a", "a", "c"], 3), ...rep(["a", "c"], 12)];
+    const s = run3(builds, bs(["a"]));
+    const a = s.units.find((u) => u.card.unitKey === "a")!;
+    expect(a.copy).toBe(2);
+    expect(a.k).toBe(3);
+    expect(s.units.find((u) => u.card.unitKey === "c")!.copy).toBe(1);
+  });
+
+  it("skips a regiment entirely at its unit cap", () => {
+    const builds = rep(["a", "a", "a", "c"], 15);
+    expect(run3(builds, bs(["a", "a"])).units.find((u) => u.card.unitKey === "a")?.copy).toBe(3);
+    expect(run3(builds, bs(["a", "a", "a"])).units.map((u) => u.card.unitKey)).not.toContain("a");
+  });
+
+  it("counts a combat-general copy for both the build and the neighbours", () => {
+    const builds = rep(["a", "a_com", "c"], 15);
+    // Neighbours hold 2 copies each (plain + general); the user holds one via the general.
+    const a = run3(builds, bs(["a_com"])).units.find((u) => u.card.unitKey === "a")!;
+    expect(a.copy).toBe(2);
+    expect(a.k).toBe(15);
+  });
+
+  it("ranks a new regiment ahead of an extra copy at equal k", () => {
+    const builds = rep(["a", "a", "c"], 15);
+    const s = run3(builds, bs(["a"]));
+    expect(s.units.map((u) => [u.card.unitKey, u.copy])).toEqual([["c", 1], ["a", 2]]);
+    // ...but a higher k still wins over a lower copy number.
+    const mixed = [...rep(["a", "a"], 10), ...rep(["a", "c"], 5)];
+    const m = run3(mixed, bs(["a"]));
+    expect(m.units.map((u) => u.card.unitKey)).toEqual(["a", "c"]);
+  });
+});
+
 describe("combat generals row", () => {
   it("marks a held general as have, and not actionable", () => {
     const s = ok(run(corpsOf(MAIN), bs(["a", "c", "f_com"]), 2));
@@ -389,5 +448,22 @@ describe("builds normalisation", () => {
     } as unknown as PickRateSeason;
     expect(corpsPickRates(season, "c")).toMatchObject({ builds: { keys: ["a"], builds: [[0], [0, 0]] } });
     expect(corpsPickRates(season, "d")).toMatchObject({ builds: null });
+  });
+});
+
+describe("suggestedGeneralAction", () => {
+  const base = {
+    card: makeUnit({ unitKey: "g" }), k: 1, status: "swap" as const, regiment: makeUnit({ unitKey: "r" }),
+    swapInstanceId: "i1", costDelta: 0, finalCost: 0, overBudget: false, blockedReason: null,
+  };
+  it("never swaps or adds a blocked general", () => {
+    expect(suggestedGeneralAction({ ...base, blockedReason: "Combat-general limit (4) reached." })).toEqual({
+      kind: "blocked", reason: "Combat-general limit (4) reached.",
+    });
+  });
+  it("swaps when allowed, adds otherwise", () => {
+    expect(suggestedGeneralAction(base)).toEqual({ kind: "swap", instanceId: "i1" });
+    expect(suggestedGeneralAction({ ...base, swapInstanceId: null })).toEqual({ kind: "add" });
+    expect(suggestedGeneralAction({ ...base, status: "add" })).toEqual({ kind: "add" });
   });
 });

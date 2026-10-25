@@ -10,7 +10,7 @@ afterEach(cleanup);
 const plain = makeUnit({ unitKey: "a", capGroupKey: "a", name: "¤ 52e de ligne 'Les Vaillants' [L3]" });
 const general = makeUnit({ unitKey: "a_g", capGroupKey: "a", name: "Général X", isGeneral: true, generalKind: "combat" });
 const unit = (over: Partial<UnitSuggestion> = {}): UnitSuggestion => ({
-  card: plain, k: 9, costDelta: 600, finalCost: 5000, overBudget: false, blockedReason: null, completesDiscount: false, ...over,
+  card: plain, k: 9, copy: 1, costDelta: 600, finalCost: 5000, overBudget: false, blockedReason: null, completesDiscount: false, ...over,
 });
 const gen = (over: Partial<GeneralSuggestion> = {}): GeneralSuggestion => ({
   card: general, k: 7, status: "swap", regiment: plain, swapInstanceId: "i1",
@@ -46,6 +46,20 @@ describe("SuggestPanel", () => {
     expect(onPickGeneral).toHaveBeenCalledTimes(1);
   });
 
+  it("tags an extra copy and words the k line for it", () => {
+    render(
+      <SuggestPanel
+        result={ok({ units: [unit({ copy: 2, k: 6 }), unit({ copy: 3, k: 4, card: { ...plain, unitKey: "c" } })] })}
+        seasonLabel="S" onPickUnit={() => {}} onPickGeneral={() => {}} onClose={() => {}}
+      />,
+    );
+    expect(screen.getByText("2nd copy")).toBeTruthy();
+    expect(screen.getByText("3rd copy")).toBeTruthy();
+    expect(screen.getByText("6 of 15 builds took 2+")).toBeTruthy();
+    expect(screen.getByText("4 of 15 builds took 3+")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /add a 2nd copy to your build/ }).length).toBe(1);
+  });
+
   it("shows have / blocked / empty states", () => {
     render(
       <SuggestPanel
@@ -63,5 +77,17 @@ describe("SuggestPanel", () => {
     render(<SuggestPanel result={{ kind: "thin", n: 7 }} seasonLabel="S" onPickUnit={() => {}} onPickGeneral={() => {}} onClose={() => {}} />);
     expect(screen.getByText("Only 7 recorded builds — suggestions need 15.")).toBeTruthy();
     expect(screen.queryByText("Units")).toBeNull();
+  });
+
+  it("keeps a blocked general clickable so the reason can be shown", () => {
+    const onPickGeneral = vi.fn();
+    render(
+      <SuggestPanel
+        result={ok({ units: [], generals: [gen({ blockedReason: "Limit reached" })] })}
+        seasonLabel="S" onPickUnit={() => {}} onPickGeneral={onPickGeneral} onClose={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /put it in charge/ }));
+    expect(onPickGeneral).toHaveBeenCalledTimes(1);
   });
 });

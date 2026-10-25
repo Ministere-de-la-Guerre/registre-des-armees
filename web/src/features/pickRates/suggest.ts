@@ -7,7 +7,8 @@
  *
  *  Tie-breaking, in one place:
  *   - Neighbours: Jaccard similarity desc, ties by ORIGINAL BUILD ORDER (file order).
- *   - Units: k desc, then corps-wide regiment build count desc, then roster order.
+ *   - Units: k desc, then copy number asc (a new regiment beats an extra copy at equal k),
+ *     then corps-wide regiment build count desc, then roster order.
  *   - Generals: actionable (not have, not blocked) first, then `have`, then blocked;
  *     inside each tier k desc, then roster order.
  */
@@ -18,7 +19,9 @@ import {
   type RosterIndex,
   combatGeneralsAgainstCap,
   evaluateAdd,
+  effectiveCap,
   generalSwapFor,
+  groupQtyOf,
   priceBuild,
 } from "../../state/build";
 import type { CorpsPickRates } from "./types";
@@ -40,6 +43,8 @@ export type SuggestUnavailable =
 export interface UnitSuggestion {
   card: UnitCard;
   k: number;
+  /** Which copy of the regiment this add would be: 1 = new regiment, 2 = a second copy. */
+  copy: number;
   costDelta: number;
   finalCost: number;
   overBudget: boolean;
@@ -62,6 +67,19 @@ export interface GeneralSuggestion {
   finalCost: number;
   overBudget: boolean;
   blockedReason: string | null;
+}
+
+/** What clicking a suggested general does. A blocked card is never applied: the
+ *  builder shows the reason instead (same feedback as a blocked add in the grid). */
+export type GeneralAction =
+  | { kind: "blocked"; reason: string }
+  | { kind: "swap"; instanceId: string }
+  | { kind: "add" };
+
+export function suggestedGeneralAction(g: GeneralSuggestion): GeneralAction {
+  if (g.blockedReason) return { kind: "blocked", reason: g.blockedReason };
+  if (g.status === "swap" && g.swapInstanceId) return { kind: "swap", instanceId: g.swapInstanceId };
+  return { kind: "add" };
 }
 
 export interface Suggestions {
@@ -106,16 +124,21 @@ export function suggestFor(args: {
   // ignored (the roster check above makes that rare, but a key can still be missing).
   const regimentSets: Set<string>[] = [];
   const cardSets: Set<string>[] = [];
+  // Copies per regiment in each build (plain and combat-general variants alike).
+  const copyCounts: Map<string, number>[] = [];
   for (const b of builds) {
     const regs = new Set<string>();
     const cards = new Set<string>();
+    const counts = new Map<string, number>();
     for (const i of b) {
       const card = index.byKey.get(keys[i]);
       if (!card) continue;
       regs.add(card.capGroupKey);
+      counts.set(card.capGroupKey, (counts.get(card.capGroupKey) ?? 0) + 1);
       cards.add(card.unitKey);
     }
     regimentSets.push(regs);
+    copyCounts.push(counts);
     cardSets.push(cards);
   }
 
@@ -172,15 +195,22 @@ export function suggestFor(args: {
 
   // --- Units row -----------------------------------------------------------------
   const units: UnitSuggestion[] = [];
-  for (const [regiment, k] of regK) {
-    if (k < MIN_NEIGHBOURS_WITH || user.has(regiment)) continue;
+  for (const regiment of regK.keys()) {
     const card = index.byKey.get(regiment);
     if (!card || card.unitKey !== card.capGroupKey || isStaffGeneral(card)) continue;
+    const owned = groupQtyOf(index, build, regiment);
+    const cap = effectiveCap(index, card);
+    if (cap > 0 && owned >= cap) continue; // at the unit cap: nothing to suggest
+    const copy = owned + 1;
+    let k = 0;
+    for (const i of chosen) if ((copyCounts[i].get(regiment) ?? 0) >= copy) k++;
+    if (k < MIN_NEIGHBOURS_WITH) continue;
     const block = evaluateAdd(index, build, card, combatCap);
     const p = priced(withAdded(card));
     units.push({
       card,
       k,
+      copy,
       ...p,
       blockedReason: block?.reason ?? null,
       completesDiscount: p.costDelta < 0,
@@ -189,6 +219,7 @@ export function suggestFor(args: {
   units.sort(
     (a, b) =>
       b.k - a.k ||
+      a.copy - b.copy ||
       regimentB(b.card.capGroupKey) - regimentB(a.card.capGroupKey) ||
       a.card.rosterIndex - b.card.rosterIndex,
   );

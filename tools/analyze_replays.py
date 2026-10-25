@@ -221,6 +221,11 @@ def analyze(replays: Sequence[Path], out: Path, rosters: Rosters, parse_fn=parse
     One folder: battle_id is the file name. Several: `<folder>/<file>`, since the same file
     name can recur across seasons. Duplicate detection spans all folders in the run, so a
     game uploaded in two seasons counts once. Folders in the order given, files sorted."""
+    names = [f.name for f in replays]
+    dupes = sorted({n for n in names if names.count(n) > 1})
+    if dupes:
+        raise ValueError(f"--replays folders must have distinct names (battle ids are "
+                         f"<folder>/<file>); duplicated: {', '.join(dupes)}")
     files: list[Path] = []
     for folder in replays:
         files += sorted(folder.glob("*.replay"), key=lambda p: p.name)

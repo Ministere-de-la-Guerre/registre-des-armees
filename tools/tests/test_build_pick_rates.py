@@ -75,6 +75,17 @@ class BuildsFieldTests(unittest.TestCase):
         self.assertNotIn("builds", season["corps"][OTHER])
         self.assertIn("builds", season["corps"][CORPS])
 
+    def test_command_slot_combat_general_skips_regiment_rollup_but_staff_general_stays(self) -> None:
+        staff_com = "ntw3_gen_x_com_1"
+        rows = unit_rows("a", 0, CORPS, ["u_a"])  # plain staff general STAFF in slot 0
+        rows += unit_rows("b", 0, CORPS, ["u_a_com_1"])
+        rows.append(["c", 0, CORPS, 0, staff_com, "ntw3_gen_x", "True", "True", "True"])
+        corps = self.build(rows, popularity={CORPS: 3})["corps"][CORPS]
+        self.assertEqual(corps["units"][staff_com], {"b": 1, "t": 1})
+        self.assertNotIn("ntw3_gen_x", corps["regiments"])
+        self.assertEqual(corps["regiments"][STAFF], {"b": 2, "t": 2, "c": 0})
+        self.assertEqual(corps["regiments"]["u_a"], {"b": 2, "t": 2, "c": 1})
+
     def test_missing_staff_column_warns_and_falls_back_to_slot(self) -> None:
         header = [c for c in FIELDS if c != "is_staff_slot"]
         rows = [[r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[8]]
