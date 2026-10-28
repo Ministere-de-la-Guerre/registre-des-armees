@@ -70,13 +70,47 @@ export function hasPrivacySignal(): boolean {
   return typeof navigator !== "undefined" && (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl === true;
 }
 
+/** The code and channel to count this launch under, or null when it is not counted. */
+function countedAs(): { code: string; channel: Channel } | null {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return null;
+  const code = siteCode();
+  const channel = detectChannel(window.location);
+  if (!code || !channel || isOptedOut() || hasPrivacySignal() || navigator.webdriver) return null;
+  return { code, channel };
+}
+
+const NOTICE_KEY = "registre.analytics.notice"; // "seen" once the first-launch notice is acknowledged
+
+/** Whether to show the one-time notice that visits are counted. It informs rather
+ *  than asks, and only appears where counting actually happens. With storage
+ *  blocked it shows every launch, since the acknowledgement cannot be kept. */
+export function shouldShowNotice(): boolean {
+  // Dev servers are never counted, so the notice can't appear there on its own;
+  // `?preview-usage-notice` shows it for a look. Compiled out of production builds.
+  if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("preview-usage-notice")) return true;
+  if (!countedAs()) return false;
+  try {
+    return localStorage.getItem(NOTICE_KEY) !== "seen";
+  } catch {
+    return true;
+  }
+}
+
+export function markNoticeSeen(): void {
+  try {
+    localStorage.setItem(NOTICE_KEY, "seen");
+  } catch {
+    /* storage blocked: the notice returns next launch */
+  }
+}
+
 /** Count this launch. Fire-and-forget: offline, blocked or failed requests are
  *  dropped silently and never affect the app. */
 export function countLaunch(): void {
-  if (typeof window === "undefined" || typeof fetch === "undefined") return;
-  const code = siteCode();
-  const channel = detectChannel(window.location);
-  if (!code || !channel || isOptedOut() || hasPrivacySignal() || navigator.webdriver) return;
+  if (typeof fetch === "undefined") return;
+  const counted = countedAs();
+  if (!counted) return;
+  const { code, channel } = counted;
   fetch(countUrl(code, channel), {
     mode: "no-cors",
     credentials: "omit",

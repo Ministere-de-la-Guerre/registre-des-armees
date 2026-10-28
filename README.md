@@ -117,8 +117,9 @@ record browser, operating-system or location statistics from them, and uses them
 only to tell visitors apart, holding them in memory for up to 8 hours and never
 writing them to disk ([how GoatCounter counts](https://www.goatcounter.com/help/sessions)).
 
-You can turn this off under **Settings → Usage statistics**; the choice applies
-from the next launch. If your browser sends a Global Privacy Control signal,
+The first time you open the app, a short notice says so. You can turn counting
+off under **Settings → Usage statistics**; the choice applies from the next
+launch. If your browser sends a Global Privacy Control signal,
 nothing is sent at all.
 
 ---

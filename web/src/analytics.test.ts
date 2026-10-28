@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { countLaunch, countUrl, detectChannel, isOptedOut, setOptedOut, siteCode } from "./analytics";
+import {
+  countLaunch,
+  countUrl,
+  detectChannel,
+  isOptedOut,
+  markNoticeSeen,
+  setOptedOut,
+  shouldShowNotice,
+  siteCode,
+} from "./analytics";
 
 const loc = (url: string) => {
   const u = new URL(url);
@@ -175,5 +184,53 @@ describe("countLaunch", () => {
     fetchMock.mockImplementation(() => Promise.reject(new TypeError("Failed to fetch")));
     expect(() => countLaunch()).not.toThrow();
     await Promise.resolve();
+  });
+});
+
+describe("first-launch notice", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  const site = "https://ministere-de-la-guerre.github.io/registre-des-armees/";
+
+  function stage(url: string, nav: Partial<Navigator> = {}) {
+    vi.stubGlobal("window", { location: loc(url) });
+    vi.stubGlobal("navigator", { webdriver: false, ...nav });
+    vi.stubGlobal("localStorage", memoryStorage());
+  }
+
+  it("shows once on a counted launch, then stays dismissed", () => {
+    vi.stubEnv("VITE_GOATCOUNTER_CODE", "registre");
+    stage(site);
+    expect(shouldShowNotice()).toBe(true);
+    markNoticeSeen();
+    expect(shouldShowNotice()).toBe(false);
+  });
+
+  it("never shows where nothing is counted", () => {
+    vi.stubEnv("VITE_GOATCOUNTER_CODE", "");
+    stage(site);
+    expect(shouldShowNotice()).toBe(false);
+
+    vi.stubEnv("VITE_GOATCOUNTER_CODE", "registre");
+    stage("app://bundle/index.html"); // unpackaged desktop run
+    expect(shouldShowNotice()).toBe(false);
+
+    stage(site);
+    setOptedOut(true);
+    expect(shouldShowNotice()).toBe(false);
+
+    stage(site, { globalPrivacyControl: true } as Partial<Navigator>);
+    expect(shouldShowNotice()).toBe(false);
+  });
+
+  it("previews on a dev server only when asked", () => {
+    vi.stubEnv("VITE_GOATCOUNTER_CODE", "registre");
+    stage("http://127.0.0.1:5173/");
+    expect(shouldShowNotice()).toBe(false);
+    stage("http://127.0.0.1:5173/?preview-usage-notice");
+    expect(shouldShowNotice()).toBe(true);
   });
 });

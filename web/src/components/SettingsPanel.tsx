@@ -3,6 +3,9 @@ import { useState } from "react";
 import { hasPrivacySignal, isOptedOut, setOptedOut, siteCode } from "../analytics";
 import { THEMES, loadTheme, saveTheme, type ThemeId } from "../state/theme";
 
+/** README "Privacy" — opens in the browser (Electron hands it to shell.openExternal). */
+const PRIVACY_URL = "https://github.com/Ministere-de-la-Guerre/registre-des-armees#privacy";
+
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [theme, setTheme] = useState<ThemeId>(loadTheme);
   const [counting, setCounting] = useState(() => !isOptedOut());
@@ -69,7 +72,10 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                   ? "Your browser sends a Global Privacy Control signal, so nothing is counted."
                   : countingUnsaved
                     ? "This browser is blocking storage, so your choice could not be saved — it will reset the next time the app opens."
-                    : "When the app opens it sends one anonymous ping to GoatCounter, so we can see roughly how many people use it. No cookies, no ID, nothing about your builds. Your choice is saved on this device and applies from the next launch."}
+                    : "When the app opens it sends one anonymous ping to GoatCounter, so we can see roughly how many people use it. No cookies, no ID, nothing about your builds. Your choice is saved on this device and applies from the next launch."}{" "}
+                <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer">
+                  Privacy details
+                </a>
               </p>
             </>
           )}

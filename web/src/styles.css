@@ -1313,3 +1313,11 @@ input::placeholder { color: var(--muted); }
 .theme-swatch { display: flex; gap: 4px; height: 44px; padding: 5px; border-radius: 6px; border: 1px solid var(--line); }
 .theme-swatch span { flex: 1; border-radius: 4px; }
 .theme-name { font-size: 13px; font-weight: 600; text-align: center; }
+
+/* One-time usage-counting notice (components/UsageNotice.tsx): the update toast's
+   look, kept inside a phone-width viewport so the text wraps rather than clipping. */
+.usage-notice { max-width: calc(100vw - 32px); }
+.usage-notice span { flex: 1; min-width: 0; }
+/* Links inside a settings note (the "Privacy details" link): the gold accent,
+   since browser-default blue is unreadable on the dark panels. */
+.rot-note a { color: var(--gold-bright); }

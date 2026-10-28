@@ -8,7 +8,9 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { PlannerScreen } from "./components/PlannerScreen";
 import { ReplayScreen } from "./components/ReplayScreen";
 import { UpdateToast } from "./components/UpdateToast";
+import { UsageNotice } from "./components/UsageNotice";
 import { usePlanRosters } from "./components/usePlanRosters";
+import { markNoticeSeen, shouldShowNotice } from "./analytics";
 import { loadCorpsIndex, loadFaction } from "./data/load";
 import { applyUpdate, isWebTarget, registerPwa } from "./pwa";
 import { isCoarsePointer, isTabletTouch, useCoarsePointer } from "./components/useCoarsePointer";
@@ -59,7 +61,14 @@ function AppBody() {
   const [pendingUpdate, setPendingUpdate] = useState<"waiting" | "elsewhere" | null>(null);
   const [showOffline, setShowOffline] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showUsageNotice, setShowUsageNotice] = useState(shouldShowNotice);
   const web = isWebTarget();
+
+  const acknowledgeUsageNotice = (openSettings: boolean) => {
+    markNoticeSeen();
+    setShowUsageNotice(false);
+    if (openSettings) setShowSettings(true);
+  };
 
   // Touch-only collapsible chrome: a chevron tab hides the top bars (brand +
   // faction controls) so the unit grid can own the viewport, then re-expands them.
@@ -321,6 +330,10 @@ function AppBody() {
           onReload={applyUpdate}
           onDismiss={() => setPendingUpdate(null)}
         />
+      )}
+      {/* Same corner as the update toast, so it waits until that one is gone. */}
+      {showUsageNotice && !pendingUpdate && (
+        <UsageNotice onOk={() => acknowledgeUsageNotice(false)} onSettings={() => acknowledgeUsageNotice(true)} />
       )}
     </div>
   );
