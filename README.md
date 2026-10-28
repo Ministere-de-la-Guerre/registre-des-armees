@@ -102,6 +102,27 @@ you can plan around who you actually want.
 
 ---
 
+## Privacy
+
+Your builds, saves, and settings stay on your device; the app has no accounts and
+no server of its own.
+
+To see roughly how many people use it, the app sends **one anonymous ping each
+time it opens** to [GoatCounter](https://www.goatcounter.com), a privacy-focused
+counter. The ping names only which version you're running — web or desktop,
+stable or beta. It carries no cookie, no ID, and nothing about your builds, and
+nothing is stored on your device for it. Like any web request it reaches
+GoatCounter with your IP address and browser details: GoatCounter is set not to
+record browser, operating-system or location statistics from them, and uses them
+only to tell visitors apart, holding them in memory for up to 8 hours and never
+writing them to disk ([how GoatCounter counts](https://www.goatcounter.com/help/sessions)).
+
+You can turn this off under **Settings → Usage statistics**; the choice applies
+from the next launch. If your browser sends a Global Privacy Control signal,
+nothing is sent at all.
+
+---
+
 ## For developers
 
 This repository also contains the data-build pipeline (Python tools that turn the

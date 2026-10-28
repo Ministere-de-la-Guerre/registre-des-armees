@@ -113,7 +113,15 @@ function createWindow() {
   if (DEV_SERVER_URL) {
     win.loadURL(DEV_SERVER_URL);
   } else {
-    win.loadURL("app://bundle/index.html");
+    // The query names the channel for usage counting (src/analytics.ts), and only an
+    // installed/portable build gets one — `npm run electron` and SMOKE_TEST runs
+    // load without it and are never counted. The beta build's runtime name is
+    // "registre-des-armees-beta" (electron-builder.beta.cjs extraMetadata); the
+    // protocol handler below serves by pathname, so the query never affects which
+    // file loads.
+    const counted = app.isPackaged && !process.env.SMOKE_TEST;
+    const channel = app.getName().endsWith("-beta") ? "desktop-beta" : "desktop";
+    win.loadURL(counted ? `app://bundle/index.html?channel=${channel}` : "app://bundle/index.html");
   }
 
   // Headless self-check (SMOKE_TEST=1): confirm the SPA mounts and can fetch its
