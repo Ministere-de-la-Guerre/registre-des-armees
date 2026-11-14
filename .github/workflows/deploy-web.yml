@@ -58,8 +58,8 @@ jobs:
       - name: Verify (typecheck + lint + tests)
         run: npm run typecheck && npm run lint && npm test
         working-directory: web
-      - name: Build PWA
-        run: npm run build
+      - name: Build PWA (pick rates on)
+        run: npm run build:pickrates
         working-directory: web
 
       - uses: actions/configure-pages@v6
