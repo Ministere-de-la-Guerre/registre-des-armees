@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { countLaunch } from "./analytics";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { applyTheme, loadTheme } from "./state/theme";
 import "./styles.css";
@@ -30,3 +31,5 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </ErrorBoundary>
   </React.StrictMode>,
 );
+
+countLaunch();
