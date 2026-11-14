@@ -33,7 +33,7 @@ export function PickRatesMenu({ pickRates }: { pickRates: PickRatesApi }) {
             : "Show how often real players field each unit, from recorded battle replays"
         }
       >
-        Pick rates <span className="tag beta">Beta</span>
+        Pick rates
         <span className="caret" aria-hidden>
           ▾
         </span>
