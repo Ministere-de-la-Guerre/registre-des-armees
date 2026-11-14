@@ -60,6 +60,10 @@ describe("detectChannel", () => {
       "https://someone-else.github.io/registre-des-armees/",
       "https://mirror.example.com/registre-des-armees/",
       "http://ministere-de-la-guerre.github.io/registre-des-armees/",
+      "https://ministere-de-la-guerre.github.io/",
+      "https://ministere-de-la-guerre.github.io/other-project/",
+      "https://ministere-de-la-guerre.github.io/registre-des-armees-old/",
+      "https://ministere-de-la-guerre.github.io/other/registre-des-armees/",
       "file:///C:/dist/index.html",
     ]) {
       expect(detectChannel(loc(url)), url).toBeNull();
@@ -180,10 +184,34 @@ describe("countLaunch", () => {
 
   it("swallows a failed request", async () => {
     vi.stubEnv("VITE_GOATCOUNTER_CODE", "registre");
+    stage("https://ministere-de-la-guerre.github.io/registre-des-armees/");
+    // A plain function, not vi.fn(): a vi.fn() attaches its own handlers to a returned
+    // promise (to record settled results), which would mask a missing .catch.
+    let calls = 0;
+    vi.stubGlobal("fetch", () => {
+      calls++;
+      return Promise.reject(new TypeError("Failed to fetch"));
+    });
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      expect(() => countLaunch()).not.toThrow();
+      expect(calls).toBe(1);
+      // Node reports unhandled rejections after the microtask queue drains, so wait a macrotask.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
+  });
+
+  it("swallows a request that throws synchronously", () => {
+    vi.stubEnv("VITE_GOATCOUNTER_CODE", "registre");
     const fetchMock = stage("https://ministere-de-la-guerre.github.io/registre-des-armees/");
-    fetchMock.mockImplementation(() => Promise.reject(new TypeError("Failed to fetch")));
+    fetchMock.mockImplementation(() => {
+      throw new TypeError("Invalid request");
+    });
     expect(() => countLaunch()).not.toThrow();
-    await Promise.resolve();
   });
 });
 

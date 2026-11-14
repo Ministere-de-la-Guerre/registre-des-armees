@@ -143,8 +143,9 @@ no server of its own.
 To see roughly how many people use it, the app sends **one anonymous ping each
 time it opens** to [GoatCounter](https://www.goatcounter.com), a privacy-focused
 counter. The ping names only which version you're running — web or desktop,
-stable or beta. It carries no cookie, no ID, and nothing about your builds, and
-nothing is stored on your device for it. Like any web request it reaches
+stable or beta. It carries no cookie, no ID, and nothing about your builds. The
+only things kept on your device for it are your opt-out choice and whether you
+have seen the notice below. Like any web request it reaches
 GoatCounter with your IP address and browser details: GoatCounter is set not to
 record browser, operating-system or location statistics from them, and uses them
 only to tell visitors apart, holding them in memory for up to 8 hours and never

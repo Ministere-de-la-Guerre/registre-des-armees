@@ -5,7 +5,8 @@
 // "/desktop", "/desktop-beta") — no referrer, screen size, query string, cookie or
 // identifier. GoatCounter keys an in-memory session on IP + User-Agent (never
 // written to its disk, dropped after 8 hours) to count unique visitors. The only
-// thing stored on the device is the user's opt-out choice. See README "Privacy".
+// things stored on the device are the opt-out choice and whether the first-launch
+// notice was seen. See README "Privacy".
 //
 // Only the official builds are counted: the published GitHub Pages site, and the
 // packaged desktop app (main.cjs names its channel in `?channel=`). Dev servers,
@@ -37,7 +38,10 @@ export function detectChannel(loc: { protocol: string; hostname: string; pathnam
     return channel === "desktop" || channel === "desktop-beta" ? channel : null;
   }
   if (loc.protocol !== "https:" || loc.hostname !== WEB_HOST) return null;
-  return /\/registre-des-armees-beta(\/|$)/.test(loc.pathname) ? "web-beta" : "web";
+  // Other Pages projects share this host, so only this project's two paths count.
+  const site = /^\/registre-des-armees(-beta)?(\/|$)/.exec(loc.pathname);
+  if (!site) return null;
+  return site[1] ? "web-beta" : "web";
 }
 
 /** GoatCounter's documented tracking-pixel endpoint (goatcounter.com/help/pixel). */
@@ -111,13 +115,17 @@ export function countLaunch(): void {
   const counted = countedAs();
   if (!counted) return;
   const { code, channel } = counted;
-  fetch(countUrl(code, channel), {
-    mode: "no-cors",
-    credentials: "omit",
-    referrerPolicy: "no-referrer",
-    cache: "no-store",
-    keepalive: true,
-  }).catch(() => {
-    /* offline or blocked — not counted */
-  });
+  try {
+    fetch(countUrl(code, channel), {
+      mode: "no-cors",
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+      cache: "no-store",
+      keepalive: true,
+    }).catch(() => {
+      /* offline or blocked — not counted */
+    });
+  } catch {
+    /* fetch threw synchronously (e.g. a rejected request init) — not counted */
+  }
 }
